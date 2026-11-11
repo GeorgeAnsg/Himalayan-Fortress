@@ -1,0 +1,10 @@
+node_modules
+datos
+*.db
+*.db-wal
+*.db-shm
+vapid.json
+.git
+.DS_Store
+pruebas
+*.md

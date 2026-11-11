@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "madrigueras",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["plataforma/servidor.mjs"],
+      "port": 3000
+    }
+  ]
+}

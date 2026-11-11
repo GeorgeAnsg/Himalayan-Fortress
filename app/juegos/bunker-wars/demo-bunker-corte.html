@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="cache-control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="pragma" content="no-cache">
+<title>Bunker Wars · el corte del búnker</title>
+<style>
+  :root{
+    --tinta:#050b0a;
+    --suelo:#1d2c24;
+    --losa:#2c3d34;
+    --borde:rgba(232,222,200,.14);
+    --laton:#b9c3cc;
+    --texto:#eae3d3;
+    --apagado:rgba(234,227,211,.55);
+    --azul:#4a90d9;
+    --rojo:#e0533f;
+    --morado:#9b59b6;
+
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  html{background:var(--tinta); overflow-x:hidden}
+  body{
+    min-height:100dvh;
+    color:var(--texto);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+    overflow-x:hidden;
+  }
+
+  /* ── Fondo lejano: el horizonte que queda al otro lado del claro ── */
+  .cielo{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    /* De arriba abajo: el brillo frío del cielo, el velo, la selva de alrededor
+       (que sigue el mundo por los lados cuando el plano se inclina) y el
+       degradado base. El horizonte va aparte, en el ::after, porque necesita
+       que su pie se difumine sin tapar la selva. */
+    background:
+      radial-gradient(60% 30% at 50% 6%, rgba(140,180,200,.10), transparent 70%),
+      linear-gradient(180deg, rgba(5,11,10,.10) 0%, rgba(3,7,7,.34) 55%, rgba(4,9,8,.72) 100%),
+      url('img/fondo/selva-marco.webp') center top / 100% auto repeat,
+      radial-gradient(90% 50% at 50% 0%, #10201a 0%, #081210 55%, #040908 100%);
+  }
+  /* La selva lejana: anclada arriba y a todo el ancho, sin recortar, para que su
+     línea de árboles caiga detrás del borde lejano del campo. El pie se difumina
+     para que se funda con la selva de alrededor en vez de acabar en un negro
+     plano que la tapaba. */
+  /* La pared de árboles del fondo: cuelga del borde de atrás del claro y se
+     contrarrota con la cámara, así que se queda de pie mirando a cámara mientras
+     el suelo gira. Su base cae clavada en el final del plano y su copa se sale
+     por arriba, que es como se ve un bosque desde abajo. */
+  .lejania{ display:none }
+
+  /* ── HUD fijo: no se inclina nunca ─────────────────────────────── */
+  .hud{
+    position:fixed; z-index:20; top:0; left:0; right:0;
+    display:flex; gap:6px; align-items:center; justify-content:space-between;
+    padding:10px 12px; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    pointer-events:none;
+  }
+  .chip{
+    display:inline-flex; gap:6px; align-items:center;
+    padding:5px 9px; border-radius:999px;
+    background:rgba(6,13,11,.72); border:1px solid var(--borde);
+    backdrop-filter:blur(6px);
+  }
+  .chip.roja{border-color:rgba(224,83,63,.45); color:#ffb3a6}
+  .chip b{font-variant-numeric:tabular-nums; letter-spacing:0}
+
+  /* ── La escena ──────────────────────────────────────────────────── */
+  .escena{
+    position:relative; z-index:1;
+  }
+
+  /* ── El claro: plano vertical, llena la pantalla ───────────────── */
+  .mundo{
+    position:relative;
+    width:100%;
+    container-type:inline-size;
+    --u:1cqw;
+  }
+  .selva-plano{ display:none }
+
+  .suelo{
+    position:relative; width:100%; overflow:hidden;
+    background:var(--mapa-url, url('img/mapas/mapa-selva.webp')) top center / 100% auto no-repeat;
+  }
+  /* Mapa himalaya: 4 capas estáticas (parallax desactivado) */
+  .capa-himalaya{ display:none; position:absolute; left:0; right:0; background-size:cover; background-repeat:no-repeat; }
+  body.mapa-himalaya .suelo{ background:none; }
+  body.mapa-himalaya .suelo::after{ display:none; }
+  body.mapa-himalaya .capa-himalaya{ display:block; }
+  /* bg-clouds: fondo completo, detrás de todo */
+  .capa-bg-clouds{
+    position:absolute; top:0; left:0; right:0;
+    height:calc(430px + 46.74vw);
+    background-image:url('img/mapas/nieve/bg-clouds.jpg');
+    background-size:cover;
+    background-position:top center;
+    transform:translateY(var(--py-clouds, 0px));
+    will-change:transform;
+  }
+  /* bloque único: fortress encima de stairs, mismo div, proporción natural */
+  .bloque-mapa{
+    position:relative;
+    margin-top:180px;
+    width:100%; height:auto;
+    display:none;
+  }
+  body.mapa-himalaya .bloque-mapa{ display:block; }
+  .bloque-mapa .img-fortress{
+    display:block;
+    width:96%; margin:0 auto;
+    position:relative; z-index:1;
+  }
+  .bloque-mapa .img-stairs{
+    display:block;
+    width:100%;
+    margin-top:-293px;
+  }
+  /* cloud: nubes sutiles encima del bg-clouds, screen blends el negro */
+  .capa-cloud{
+    position:absolute; top:0; left:0; right:0;
+    height:calc(430px + 46.74vw);
+    background-image:url('img/mapas/nieve/cloud.png');
+    background-size:cover;
+    background-position:top center;
+    mix-blend-mode:screen;
+    z-index:5;
+    transform:translateY(var(--py-cloud, 0px));
+    will-change:transform;
+  }
+  /* flags: banderines tibetanos izquierda — se abren hacia la izquierda al bajar */
+  .capa-flags{
+    position:absolute; left:calc(-5% - 50px); right:calc(-5% + 50px); width:110%;
+    top:0;
+    height:calc(70vw);
+    background-image:url('img/mapas/nieve/flags.png');
+    background-size:60% auto;
+    background-position:left -90px;
+    background-repeat:no-repeat;
+    z-index:3;
+    transform:translateX(var(--px-flags, 0px)) translateY(var(--py-flags, 0px));
+    will-change:transform;
+  }
+  /* flags derecha: imagen b2 ya simétrica, sin flip ni rotate */
+  .capa-flags-r{
+    position:absolute; left:-5%; right:-5%; width:110%;
+    top:0;
+    height:calc(70vw);
+    background-image:url('img/mapas/nieve/flags-r.png');
+    background-size:60% auto;
+    background-position:right -80px;
+    background-repeat:no-repeat;
+    z-index:3;
+    transform:translateX(calc(-1 * var(--px-flags, 0px))) translateY(var(--py-flags, 0px));
+    will-change:transform;
+  }
+  /* nubes pequeñas: max 300px, a los lados para no tapar la fortaleza */
+  .capa-cloud-l{
+    position:absolute; top:100px; left:-200px; width:300px; height:300px;
+    background-image:url('img/mapas/nieve/cloud.png');
+    background-size:contain;
+    background-repeat:no-repeat;
+    background-position:top right;
+    mix-blend-mode:screen;
+    z-index:5;
+    transform:translateY(var(--py-cloud-sm, 0px));
+    will-change:transform;
+  }
+  .capa-cloud-r{
+    position:absolute; top:calc(300px + 5vw); left:calc(100% - 100px); width:300px; height:300px;
+    background-image:url('img/mapas/nieve/cloud.png');
+    background-size:contain;
+    background-repeat:no-repeat;
+    background-position:top left;
+    mix-blend-mode:screen;
+    z-index:5;
+    transform:translateY(var(--py-cloud-sm, 0px));
+    will-change:transform;
+  }
+  /* bottom-fog: niebla encima de todo, posición absoluta al pie del suelo */
+  .capa-bottom-fog{
+    position:absolute; bottom:0; left:0; right:0; height:40%;
+    background-image:url('img/mapas/nieve/bottom-fog.png');
+    background-size:cover;
+    background-position:center bottom;
+    z-index:2;
+    transform:translateY(var(--py-fog, 0px));
+    will-change:transform;
+  }
+  .suelo::after{
+    content:""; position:absolute; inset:0;
+    /* Dos capas: el negro del comienzo del mapa (arriba, entrando hacia dentro
+       del plano) y el viñeteado del resto. El negro va con su propio alto, para
+       que llegue a cero a los 12u del borde y no se coma el mapa. */
+    background:
+      linear-gradient(180deg, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%) top / 100% calc(12 * var(--u)) no-repeat,
+      linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 30%, transparent 70%, rgba(0,0,0,.35) 100%);
+  }
+
+  .caminos{
+    position:absolute; left:0; right:0; bottom:0;
+    top:calc(93.47vw - 113px);
+    width:100%; height:auto; z-index:1; overflow:visible;
+    -webkit-mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
+    mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
+  }
+  /* Todo lo que se juega vive en la superficie del claro */
+  .tablero{
+    position:absolute; left:0; right:0; bottom:0;
+    top:calc(93.47vw - 113px);
+    height:auto; z-index:2;
+  }
+  .caminos .lecho{ fill:none; stroke:transparent; stroke-width:calc(14 * var(--u)); vector-effect:non-scaling-stroke }
+  .caminos .pista{ fill:none; stroke:#4a6251; stroke-width:calc(.41 * var(--u)); stroke-dasharray:calc(1.03 * var(--u)) calc(1.86 * var(--u)); vector-effect:non-scaling-stroke; opacity:.55 }
+
+  /* Cada capa mantiene su profundidad; el contenido se coloca en % del claro */
+  .capa{ position:absolute; inset:0; pointer-events:none }
+  .capa > *{ pointer-events:auto }
+
+  .losa{
+    position:absolute; width:calc(11.2 * var(--u)); aspect-ratio:2/1;
+    margin:calc(-2.8 * var(--u)) 0 0 calc(-5.6 * var(--u));
+    border-radius:50%;
+    border:2px dashed rgba(255,255,255,.75);
+    background:rgba(255,255,255,.12);
+    z-index:2;
+  }
+  .losa.base-torre{ border:none }
+
+  .ficha{
+    position:absolute; width:calc(7 * var(--u)); aspect-ratio:1;
+    margin:calc(-3.5 * var(--u)) 0 0 calc(-3.5 * var(--u));
+    border-radius:50%; border:calc(.41 * var(--u)) solid rgba(0,0,0,.45);
+    display:grid; place-items:center; cursor:pointer;
+    font-weight:700; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:calc(2.7 * var(--u)); line-height:1; color:#fff;
+    z-index:5;
+    box-shadow:0 6px 10px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .ficha::after{
+    content:""; position:absolute; left:50%; top:132%;
+    width:calc(7 * var(--u)); height:calc(2.5 * var(--u));
+    transform:translate(-50%,-50%);
+    border-radius:50%; z-index:-1;
+    background:radial-gradient(closest-side, rgba(0,0,0,.5), transparent);
+  }
+  .ficha.mia{ background:radial-gradient(circle at 35% 30%, #7fb4ea, var(--azul) 62%, #2a5c92) }
+  .ficha.atacante{ background:radial-gradient(circle at 35% 30%, #f0836f, var(--rojo) 62%, #8e2b1e) }
+  .ficha.ajena{
+    background:radial-gradient(circle at 35% 30%, #c08ad6, var(--morado) 62%, #5c2a72);
+    border-style:dashed; border-color:rgba(255,255,255,.55);
+  }
+  .ficha:active{ filter:brightness(1.15) }
+
+  /* Torres: de planta cenital a alzado de pie, según la cámara */
+  .torre{
+    position:absolute; width:calc(9.5 * var(--u)); aspect-ratio:1;
+    margin:calc(-9.5 * var(--u)) 0 0 calc(-4.75 * var(--u));
+    z-index:3;
+  }
+  .torre .planta{
+    position:absolute; inset:0;
+    background:url('img/torres/torre-planta-nv1.png') no-repeat center / contain;
+    z-index:1;
+    opacity:0;
+  }
+  .torre .planta::before{ content:none }
+  .torre.nv2 .planta{ background-image:url('img/torres/torre-planta-nv2.png') }
+  .torre.nv3 .planta{ background-image:url('img/torres/torre-planta-nv3.png') }
+  .torre .alzado{
+    position:absolute; left:50%; bottom:0;
+    width:calc(16.5 * var(--u)); height:calc(16.5 * var(--u));
+    margin-left:calc(-8.25 * var(--u)); transform-origin:50% 100%;
+    background:url('img/torres/torre-alzado-nv1.png') no-repeat center bottom / contain;
+    opacity:1;
+  }
+  .torre .alzado::before{ content:none }
+  .torre .alzado::after{ content:none }
+  .torre.nv2 .alzado{ background-image:url('img/torres/torre-alzado-nv2.png') }
+  .torre.nv3 .alzado{ background-image:url('img/torres/torre-alzado-nv3.png') }
+  .torre .nivel{
+    position:absolute; bottom:calc(-2.2 * var(--u)); left:50%;
+    transform:translateX(-50%);
+    display:flex; gap:calc(.55 * var(--u)); align-items:center; z-index:4;
+    background:rgba(0,0,0,.7); border-radius:999px;
+    padding:calc(.4 * var(--u)) calc(.8 * var(--u));
+  }
+  .torre .nivel i{
+    display:block; width:calc(1.4 * var(--u)); height:calc(1.4 * var(--u));
+    border-radius:50%; border:1.5px solid rgba(255,255,255,.7);
+    background:transparent;
+  }
+  .torre.nv1 .nivel i:nth-child(1),
+  .torre.nv2 .nivel i:nth-child(-n+2),
+  .torre.nv3 .nivel i{ background:rgba(255,255,255,.9); }
+  /* Barra de nivel: 3 slots verticales a la derecha de la torre */
+  .torre .anillo{
+    position:absolute; left:100%; top:50%;
+    transform:translateY(-50%); z-index:4;
+    margin-left:calc(1.03 * var(--u));
+    display:flex; flex-direction:column; gap:calc(.62 * var(--u));
+    width:calc(1.65 * var(--u));
+  }
+  .torre .anillo::before,
+  .torre .anillo::after,
+  .torre .anillo span{
+    content:""; display:block; width:calc(1.65 * var(--u)); height:calc(1.65 * var(--u));
+    border-radius:calc(.41 * var(--u));
+    background:rgba(185,195,204,.2);
+    border:1px solid rgba(185,195,204,.35);
+  }
+  /* nv1: slot inferior relleno */
+  .torre.nv1 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
+  /* nv2: dos slots rellenos */
+  .torre.nv2 .anillo span{ background:#b9c3cc; border-color:#b9c3cc }
+  .torre.nv2 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
+  /* nv3: los tres rellenos */
+  .torre.nv3 .anillo::before{ background:#b9c3cc; border-color:#b9c3cc }
+  .torre.nv3 .anillo span{ background:#b9c3cc; border-color:#b9c3cc }
+  .torre.nv3 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
+  .hueco{
+    position:absolute; width:calc(9.5 * var(--u)); aspect-ratio:1;
+    margin:calc(-4.75 * var(--u)) 0 0 calc(-4.75 * var(--u));
+    border-radius:50%; border:calc(.41 * var(--u)) dashed rgba(195,204,212,.35);
+    color:rgba(195,204,212,.6); display:grid; place-items:center;
+    font-weight:700; font-family:ui-monospace,monospace;
+    font-size:calc(3.7 * var(--u)); line-height:1;
+    z-index:3;
+  }
+
+  /* Lanzaderas: igual que .losa, elipse achatada */
+  .lanzadera{
+    position:absolute; width:calc(11.2 * var(--u)); aspect-ratio:2/1;
+    margin:calc(-2.8 * var(--u)) 0 0 calc(-5.6 * var(--u));
+    border-radius:50%;
+    border:2px dashed rgba(255,255,255,.75);
+    background:rgba(255,255,255,.12);
+    z-index:2;
+  }
+  .lanzadera::before{ content:none }
+  .lanzadera::after{ content:none }
+
+  /* Número de calle en la cabecera */
+  .num-calle{
+    position:absolute; margin:calc(-2.07 * var(--u)) 0 0 calc(-2.07 * var(--u));
+    width:calc(4.13 * var(--u)); aspect-ratio:1; border-radius:50%;
+    background:rgba(0,0,0,.45); border:calc(.2 * var(--u)) solid rgba(195,204,212,.2);
+    display:grid; place-items:center;
+    font-weight:700; font-family:ui-monospace,monospace;
+    font-size:calc(1.86 * var(--u)); line-height:1; color:rgba(195,204,212,.7);
+    z-index:3;
+  }
+
+  .escotilla{
+    position:absolute; left:50%; bottom:calc(-.41 * var(--u));
+    width:calc(19 * var(--u)); height:calc(12.4 * var(--u));
+    margin-left:calc(-9.5 * var(--u));
+    border-radius:calc(29 * var(--u)) calc(29 * var(--u)) 0 0;
+    background:linear-gradient(180deg,#1a2620,#0a100e);
+    border:2px solid rgba(195,204,212,.28);
+    z-index:2;
+    box-shadow:inset 0 16px 24px rgba(0,0,0,.75);
+  }
+  .escotilla::after{
+    content:""; position:absolute; left:calc(2.9 * var(--u)); right:calc(2.9 * var(--u));
+    top:calc(2.9 * var(--u)); height:calc(.41 * var(--u));
+    background:repeating-linear-gradient(90deg, rgba(195,204,212,.4) 0 8px, transparent 8px 16px);
+  }
+
+  /* ── El búnker: se revela bajo la línea de corte ─────────────────
+     Tres plantas, de arriba abajo: los dos criaderos (dos monstruos cada
+     box), las salas que se mejoran (armería, laboratorio y ciencia) y, al
+     final, baterías y acciones. Las torres no tienen planta: se mejoran
+     tocando la torre en el campo, y la mano va fija debajo. */
+
+  .pozo{ display:none }
+  .pozo .filo{
+    position:absolute; left:0; right:0; top:-1px; height:3px;
+    background:linear-gradient(90deg, transparent, rgba(206,214,222,.5), transparent);
+  }
+  .pozo .corte{
+    position:absolute; inset:0;
+    /* Hormigón de verdad detrás de las plantas, oscurecido para que las torres y
+       los rótulos se sigan leyendo. */
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 34px),
+      radial-gradient(120% 60% at 50% 0%, rgba(9,12,14,.22) 0%, rgba(9,12,14,.42) 45%, rgba(6,9,10,.72) 100%),
+      url('img/fondo/hormigon.webp') center top / 260px auto repeat,
+      linear-gradient(180deg,#232a2e,#0b0f11);
+  }
+  .pozo .hormigon{
+    position:absolute; left:0; right:0; top:0; height:16px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,.5) 0 1px, transparent 1px 46px),
+      linear-gradient(180deg,#4a5157,#2c3236);
+    box-shadow:0 6px 16px rgba(0,0,0,.6);
+  }
+
+  .galleria{
+    position:absolute; left:8px; right:8px; top:22px; bottom:88px;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .piso{
+    position:relative;
+    padding:15px 8px 7px;
+    border:1px solid rgba(233,239,244,.09); border-radius:7px;
+    background:linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+  }
+  .rotulo{
+    position:absolute; left:8px; top:5px;
+    font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.14em; color:rgba(233,239,244,.48);
+  }
+  .nombre{
+    font:600 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.1em; color:rgba(233,239,244,.45);
+  }
+  .piso{ flex:1 1 0; min-height:0 }
+  /* Sin planta de aspilleras: las torres se mejoran tocando la torre en el campo. */
+  .piso.criaderos{ flex:1.1 1 0 }
+  .piso.salas{ flex:1 1 0 }
+  .piso.acumula{ flex:.9 1 0 }
+
+  /* Los dos criaderos: dos huecos cada uno, y el box 1 lanza a C1 y C2 */
+  .dos-boxes{ display:flex; gap:8px; height:100% }
+  .box{
+    flex:1; display:flex; flex-direction:column; gap:4px; min-width:0;
+    padding:4px; border-radius:5px;
+    border:1px solid rgba(233,239,244,.07); background:rgba(0,0,0,.16);
+  }
+  .huecos{ display:flex; gap:5px; flex:1 }
+  .huecos i{
+    flex:1; display:grid; place-items:center; border-radius:5px;
+    border:1px dashed rgba(233,239,244,.16); background:rgba(0,0,0,.22);
+    font:700 9px/1 ui-monospace,monospace; font-style:normal;
+    color:rgba(233,239,244,.35);
+  }
+  .huecos i.lleno{
+    border-style:solid; border-color:rgba(74,144,217,.7); color:#e2edf8;
+    background:radial-gradient(circle at 50% 35%, rgba(74,144,217,.5), rgba(18,34,50,.75));
+  }
+
+  /* Armería, laboratorio, baterías y ciencia */
+  .dos-salas{ display:flex; gap:8px; height:100% }
+  .sala{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0 }
+  .sala + .sala{ border-left:1px solid rgba(233,239,244,.08); padding-left:8px }
+  .niveles{ display:flex; gap:3px }
+  .niveles i{ flex:0 0 16px; height:4px; border-radius:99px; background:rgba(233,239,244,.14) }
+  .niveles i.on{ background:linear-gradient(90deg,#e4eaef,#9fabb5) }
+  .nota{
+    font:500 8.5px/1.2 ui-sans-serif,system-ui,sans-serif;
+    color:rgba(233,239,244,.45);
+  }
+
+  .baterias{ display:flex; gap:4px; height:18px }
+  .baterias i{
+    position:relative; flex:0 0 22px; border-radius:3px; overflow:hidden;
+    border:1px solid rgba(233,239,244,.2); background:rgba(0,0,0,.3);
+  }
+  .baterias i::before{
+    content:""; position:absolute; left:0; bottom:0; width:0; height:100%;
+    background:linear-gradient(180deg,#eef4f8,#b6c2cc);
+  }
+  .baterias i.n1::before{ width:33% }
+  .baterias i.n2::before{ width:66% }
+  .baterias i.n3::before{ width:100% }
+
+  .ciencia{ display:flex; gap:4px }
+  .ciencia i{
+    flex:0 0 22px; display:grid; place-items:center; height:18px; border-radius:3px;
+    border:1px solid rgba(233,239,244,.16); background:rgba(0,0,0,.25);
+    font:600 8px/1 ui-monospace,monospace; font-style:normal;
+    color:rgba(233,239,244,.4);
+  }
+  .ciencia i.fija{
+    color:#12161a; background:linear-gradient(180deg,#eef4f8,#c0cad3); border-color:transparent;
+  }
+
+  /* Acciones: huecos todavía por definir, mismo lenguaje que el resto. */
+  .acciones{ display:flex; gap:4px }
+  .acciones i{
+    flex:0 0 22px; height:18px; border-radius:3px;
+    border:1px dashed rgba(233,239,244,.16); background:rgba(0,0,0,.25);
+  }
+
+  /* La mano, pegada al fondo del corte */
+  .horizonte{ display:none }
+
+  /* La mano no vive en el corte: es fija abajo y se ve siempre, también en plano */
+  .bandeja{
+    position:fixed; z-index:23; left:8px; right:8px;
+    bottom:calc(24px + env(safe-area-inset-bottom, 0px));
+    pointer-events:none;
+  }
+  .mano{ display:flex; gap:5px }
+  .mano .carta{
+    flex:1; min-width:0; height:56px; padding:5px 6px; border-radius:6px;
+    /* La bandeja no recibe clics (deja pasar el arrastre de la cámara),
+       así que las cartas se los devuelven una a una. */
+    pointer-events:auto; cursor:pointer;
+    display:flex; flex-direction:column; justify-content:space-between;
+    background:linear-gradient(180deg,#f2f6f9,#dfe6eb); color:#12161a;
+    box-shadow:0 6px 14px rgba(0,0,0,.5);
+    font:700 10px/1.1 ui-sans-serif,system-ui,sans-serif;
+  }
+  .mano .carta .coste{
+    align-self:flex-start; padding:1px 4px; border-radius:99px;
+    background:rgba(18,22,26,.14);
+    font:700 8px/1.4 ui-monospace,monospace;
+  }
+  .mano .carta small{
+    font:600 7.5px/1.1 ui-monospace,monospace; color:#4a555f;
+  }
+
+  /* ── Pista y mandos ────────────────────────────────────────────── */
+  .pista{ display:none }
+  .pista span{ font-size:16px; animation:flota 1.6s ease-in-out infinite }
+  @keyframes flota{ 0%,100%{ transform:translateY(0); opacity:.55 } 50%{ transform:translateY(5px); opacity:1 } }
+
+  .mandos{ display:none }
+
+  /* Selector de mapa: escondido de momento, pero el marcado y el script se
+     quedan (sigue funcionando con ?mapa=). Tapaba las cartas con su z-index 200. */
+  #selector-mapa{ display:none }
+  #selector-mapa button{
+    padding:4px 9px; border-radius:20px; font:600 10px/1 ui-monospace,monospace;
+    letter-spacing:.05em; text-transform:uppercase; cursor:pointer;
+    background:rgba(10,18,14,.65); color:rgba(234,227,211,.75);
+    border:1px solid rgba(234,227,211,.18); backdrop-filter:blur(6px);
+    transition:background .15s, color .15s;
+  }
+  #selector-mapa button.activo{
+    background:rgba(185,195,204,.22); color:#eae3d3;
+    border-color:rgba(185,195,204,.45);
+  }
+
+  /* ── MODO PLANOS (para ajustar) ──────────────────────────────────
+     Activo por defecto: fuera imágenes y cada superficie en su color con borde,
+     para ver dónde empieza y acaba cada plano. Con ?arte en la URL vuelve todo
+     el arte: este bloque no toca nada más.
+       rojo    = pared de árboles
+       amarillo= selva de alrededor (los laterales)
+       verde   = mapa del claro
+       morado  = corte del búnker
+     El cielo ya no se pinta: queda negro, para no confundirlo con un plano del
+     suelo cuando los laterales no lo tapan. */
+  body.planos .cielo{ background:#000 }
+  body.planos .lejania{ background:#dc2626 }
+  /* Ojo: oculta, no display:none. La pared saca su alto de la imagen, así que
+     quitándola del flujo el plano rojo se quedaba a cero. */
+  body.planos .lejania img{ opacity:0 }
+  body.planos .selva-plano{
+    background:
+      linear-gradient(180deg, #000 0%, transparent 100%) top / 100% calc(12 * var(--u)) no-repeat,
+      #facc15;
+  }
+  body.planos:not(.mapa-himalaya) .suelo{ background:#16a34a }
+  /* En color se mantiene el negro del comienzo del mapa, sin el viñeteado. */
+  body.planos:not(.mapa-himalaya) .suelo::after{
+    background:linear-gradient(180deg, #000 0%, transparent 100%) top / 100% calc(12 * var(--u)) no-repeat;
+  }
+  /* La niebla azulada del fondo, fuera: aquí solo estorba para ver los planos. */
+  body.planos .horizonte{ display:none }
+  body.planos .pozo .corte{ background:#7c3aed }
+  body.planos .lejania,
+  body.planos .selva-plano,
+  body.planos .suelo,
+  body.planos .pozo .corte{
+    outline:2px solid rgba(255,255,255,.9); outline-offset:-2px;
+  }
+
+  /* ── SOLO PLANO + HORIZONTE (?solo) ──────────────────────────────
+     Únicamente el mapa con su arte y la pared de árboles con su niebla.
+     Fuera la selva de los laterales y el cielo: así se ve el plano contra el
+     horizonte, sin nada más alrededor. */
+  body.solo .cielo{ background:#000 }
+  body.solo .selva-plano{ display:none }
+
+  /* Marca de versión, solo para depurar: si el móvil la enseña, tiene el archivo
+     nuevo y no está sirviendo una copia. Se quita cuando acabemos. */
+  .version{
+    position:fixed; z-index:300; right:8px;
+    bottom:calc(6px + env(safe-area-inset-bottom, 0px));
+    font:600 9px/1 ui-monospace,monospace; letter-spacing:.12em;
+    color:#8d9a92; opacity:.7; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<div class="cielo"></div>
+
+<!-- Fuera de .escena: dentro, la perspective convierte el fixed en relativo. -->
+<div class="version">V10</div>
+
+<div class="hud">
+  <span class="chip">🌙 Ronda <b>5</b> / 25</span>
+  <span class="chip">Búnker <b>7</b> / 20</span>
+  <span class="chip roja">Bot 1 · <b>12</b>/20</span>
+</div>
+
+<section class="escena" id="escena">
+
+  <!-- El claro: este plano es el que gira -->
+  <div class="mundo" id="mundo">
+    <div class="lejania"><img src="img/fondo/bosque-fondo.webp" alt=""></div>
+    <div class="selva-plano"></div>
+    <div class="suelo">
+      <div class="capa-himalaya capa-bg-clouds"></div>
+      <div class="capa-himalaya capa-cloud-l"></div>
+      <div class="capa-himalaya capa-cloud-r"></div>
+      <div class="capa-himalaya capa-flags"></div>
+      <div class="capa-himalaya capa-flags-r"></div>
+      <div class="capa-himalaya bloque-mapa">
+        <img src="img/mapas/nieve/fortress.png" class="img-fortress" alt="">
+        <img src="img/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
+      </div>
+      <div class="capa-himalaya capa-bottom-fog"></div>
+    </div>
+
+    <svg class="caminos" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path class="lecho" d="M24.5 100 L24.5 0"/>
+      <path class="lecho" d="M49.2 100 L49.2 0"/>
+      <path class="lecho" d="M73.2 100 L73.2 0"/>
+    </svg>
+
+    <div class="tablero">
+
+    <div class="capa">
+      <div class="num-calle" style="left:24.5%;top:83%">1</div>
+      <div class="num-calle" style="left:49.2%;top:83%">2</div>
+      <div class="num-calle" style="left:73.2%;top:83%">3</div>
+    </div>
+
+    <div class="capa">
+      <div class="lanzadera" style="left:37.1%;top:77.7%"></div>
+      <div class="lanzadera" style="left:63.3%;top:77.9%"></div>
+    </div>
+
+    <div class="capa">
+      <!-- C1 -->
+      <div class="losa" style="left:24.09%;top:77.4%"></div>
+      <div class="losa" style="left:24.25%;top:64.6%"></div>
+      <div class="losa" style="left:24.5%;top:52.9%"></div>
+      <div class="losa" style="left:25.16%;top:41.5%"></div>
+      <div class="losa base-torre" style="left:25.78%;top:33.66%"></div>
+      <!-- C2 -->
+      <div class="losa" style="left:50.02%;top:77.4%"></div>
+      <div class="losa" style="left:49.61%;top:64.6%"></div>
+      <div class="losa" style="left:49.2%;top:52.9%"></div>
+      <div class="losa" style="left:49.2%;top:41.5%"></div>
+      <div class="losa base-torre" style="left:49.26%;top:33.66%"></div>
+      <!-- C3 -->
+      <div class="losa" style="left:78.15%;top:77.4%"></div>
+      <div class="losa" style="left:76.09%;top:64.6%"></div>
+      <div class="losa" style="left:75.67%;top:52.9%"></div>
+      <div class="losa" style="left:73.2%;top:41.5%"></div>
+      <div class="losa base-torre" style="left:74.13%;top:33.66%"></div>
+    </div>
+
+    <div class="capa">
+      <div class="torre nv3" style="left:25.78%;top:32.28%">
+        <div class="anillo"><span></span></div>
+        <div class="planta"></div>
+        <div class="alzado"></div>
+        <div class="nivel"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="torre nv1" style="left:49.92%;top:32.28%">
+        <div class="anillo"><span></span></div>
+        <div class="planta"></div>
+        <div class="alzado"></div>
+        <div class="nivel"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="hueco" style="left:74.13%;top:33.66%">+</div>
+    </div>
+
+    <div class="capa">
+      <div class="ficha atacante" style="left:24.09%;top:77.4%">3</div>
+      <div class="ficha atacante" style="left:24.5%;top:52.9%">1</div>
+      <div class="ficha mia" style="left:49.61%;top:64.6%">2</div>
+      <div class="ficha atacante" style="left:49.2%;top:41.5%">1</div>
+      <div class="ficha ajena" style="left:78.15%;top:77.4%">1</div>
+      <div class="ficha atacante" style="left:75.67%;top:52.9%">1</div>
+    </div>
+
+    </div>
+  </div>
+
+  <!-- El búnker, en corte, bajo la línea del suelo -->
+  <div class="pozo">
+    <div class="filo"></div>
+    <div class="corte"></div>
+    <div class="hormigon"></div>
+
+    <div class="galleria">
+
+      <!-- 1 · Los dos criaderos: dos monstruos como mucho en cada box -->
+      <div class="piso criaderos">
+        <span class="rotulo">CRIADEROS</span>
+        <div class="dos-boxes">
+          <div class="box">
+            <span class="nombre">BOX 1</span>
+            <div class="huecos"><i class="lleno">2▲</i><i></i></div>
+          </div>
+          <div class="box">
+            <span class="nombre">BOX 2</span>
+            <div class="huecos"><i class="lleno">1▼</i><i></i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 · Las salas que se mejoran -->
+      <div class="piso salas">
+        <div class="dos-salas">
+          <div class="sala">
+            <span class="nombre">ARMERÍA</span>
+            <div class="niveles"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+            <span class="nota">torre nv 3</span>
+          </div>
+          <div class="sala">
+            <span class="nombre">LABORATORIO</span>
+            <div class="niveles"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+            <span class="nota">monstruo nv 2</span>
+          </div>
+          <div class="sala">
+            <span class="nombre">CIENCIA</span>
+            <div class="ciencia"><i class="fija">◆</i><i class="fija">◆</i><i>◇</i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 · Abajo: lo que se acumula y lo que se puede hacer -->
+      <div class="piso acumula">
+        <div class="dos-salas">
+          <div class="sala">
+            <span class="nombre">BATERÍAS</span>
+            <div class="baterias"><i class="n3"></i><i class="n2"></i><i></i><i></i></div>
+          </div>
+          <div class="sala">
+            <span class="nombre">ACCIONES</span>
+            <div class="acciones"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="horizonte"></div>
+
+  <div class="pista" id="pista"><span>⌄</span>Desliza para bajar</div>
+  <div class="mandos">
+    <button type="button" data-cam="0">Plano</button>
+    <button type="button" data-cam="1">3D</button>
+  </div>
+
+</section>
+
+  <!-- La mano, fuera de la escena: la escena tiene perspective y eso convierte
+       cualquier position:fixed de dentro en algo que se mueve con ella. -->
+  <div class="bandeja" style="display:none">
+    <div class="mano">
+      <div class="carta"><span class="coste">3</span>Monstruo nv 2<small>al box 1</small></div>
+      <div class="carta"><span class="coste">2</span>Torre nv 2<small>en C3</small></div>
+      <div class="carta"><span class="coste">1</span>Avanzar<small>+1 casilla</small></div>
+      <div class="carta"><span class="coste">2</span>Recursos<small>batería nv 1</small></div>
+    </div>
+  </div>
+
+<div id="selector-mapa">
+  <button data-mapa="selva">🌿 Selva</button>
+  <button data-mapa="nieve">❄️ Nieve</button>
+  <button data-mapa="pantano">🌊 Pantano</button>
+  <button data-mapa="magia">✨ Magia</button>
+  <button data-mapa="desierto">🏜️ Desierto</button>
+  <button data-mapa="himalaya">🏔️ Himalaya</button>
+</div>
+
+<script src="demo-bunker-corte.js"></script>
+</body>
+</html>

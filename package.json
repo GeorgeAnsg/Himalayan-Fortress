@@ -1,0 +1,17 @@
+{
+  "name": "madrigueras",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Plataforma de partidas por turnos: cuentas, vestíbulo, mesas y final. El juego se enchufa.",
+  "scripts": {
+    "start": "node plataforma/servidor.mjs",
+    "dev": "node plataforma/servidor.mjs",
+    "pruebas": "node --test pruebas/*.test.mjs"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5",
+    "web-push": "^3.6.7"
+  },
+  "packageManager": "pnpm@11.5.1"
+}
