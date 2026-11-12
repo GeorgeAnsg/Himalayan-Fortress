@@ -20,9 +20,9 @@ import * as almacen from "./almacen.mjs";
 import { juego as buscarJuego } from "../juego/registro.mjs";
 
 export const TTL = {
-  vestibulo: 2 * 60 * 60 * 1000,
-  final: 2 * 60 * 60 * 1000,
-  jugando: 7 * 24 * 60 * 60 * 1000,
+  vestibulo: 24 * 60 * 60 * 1000,   /* 24h: tiempo para que todos entren al vestíbulo */
+  final: 24 * 60 * 60 * 1000,       /* 24h: hasta que todos salgan de la pantalla final */
+  jugando: 7 * 24 * 60 * 60 * 1000, /* 7 días: nunca cae una partida activa */
 };
 
 const ESPERA_ANFITRION = 20 * 1000;
@@ -523,6 +523,8 @@ export class Mesas {
 
   purgar(ahora = Date.now()) {
     for (const sala of [...this.salas.values()]) {
+      /* Nunca borrar una sala con alguien conectado en este momento */
+      if (this.conectados(sala).length > 0) continue;
       const edad = ahora - sala.actualizado;
       if (edad > (TTL[sala.fase] ?? TTL.vestibulo)) {
         console.log(`[mesas] ${sala.codigo} caducada (${sala.fase})`);

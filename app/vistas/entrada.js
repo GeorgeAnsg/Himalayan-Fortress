@@ -11,7 +11,7 @@ export function pintar(raiz, { alEnviar, codigo = null, error = null }) {
   const nodo = h(`
     <section class="entrada">
       <p class="subtitulo">Juego por turnos</p>
-      <h1 class="entrada-titulo">Madrigueras</h1>
+      <h1 class="entrada-titulo">Himalayan Fortress</h1>
       <p class="entrada-lema">Abre una madriguera, pasa el código y jugad desde el móvil. Cada uno en el suyo.</p>
 
       ${codigo ? `<div class="panel" style="border-color:rgba(227,164,85,.3);background:rgba(227,164,85,.07);margin-bottom:16px">

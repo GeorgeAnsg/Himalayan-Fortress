@@ -1,7 +1,7 @@
 {
-  "name": "Madrigueras",
-  "short_name": "Madrigueras",
-  "description": "Juego por turnos: abre una madriguera, pasa el código y jugad cada uno desde su móvil.",
+  "name": "Himalayan Fortress",
+  "short_name": "Himalayan",
+  "description": "Defiende tu fortaleza 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
@@ -11,16 +11,22 @@
   "theme_color": "#12100e",
   "icons": [
     {
+      "src": "arte/icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "arte/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
       "src": "arte/icono.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
-    },
-    {
-      "src": "arte/icono-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
     }
   ]
 }

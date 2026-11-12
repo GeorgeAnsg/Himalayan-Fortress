@@ -48,4 +48,32 @@
     if (!raf) { raf = true; requestAnimationFrame(parallax); }
   }, { passive: true });
   parallax();
+
+  // ── Mano de cartas ────────────────────────────────────────────────
+  const overlay  = document.getElementById('carta-overlay');
+  const caCoste  = document.getElementById('ca-coste');
+  const caNombre = document.getElementById('ca-nombre');
+  const caImg    = document.getElementById('ca-img');
+  const caDesc   = document.getElementById('ca-desc');
+
+  function abrirCarta(el) {
+    caCoste.textContent  = el.querySelector('.coste').textContent;
+    caNombre.textContent = el.querySelector('.carta-nombre').textContent;
+    caDesc.textContent   = el.dataset.desc || '';
+    const srcImg = el.querySelector('.carta-img img');
+    caImg.src = srcImg ? srcImg.src : '';
+    overlay.classList.add('activo');
+  }
+  function cerrarCarta() {
+    overlay.classList.remove('activo');
+  }
+
+  document.querySelectorAll('.mano .carta').forEach(c => {
+    c.addEventListener('click', () => abrirCarta(c));
+  });
+  overlay.addEventListener('click', cerrarCarta);
+  document.getElementById('carta-ampliada').addEventListener('click', e => e.stopPropagation());
+  document.querySelector('.carta-wrap').addEventListener('click', e => e.stopPropagation());
+  document.getElementById('btn-usar-carta').addEventListener('click', cerrarCarta);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarCarta(); });
 })();

@@ -178,7 +178,7 @@ function pintarSinServidor() {
   $barra().hidden = true;
   $pantalla().innerHTML = `
     <section class="entrada centrado">
-      <h1 class="entrada-titulo">Madrigueras</h1>
+      <h1 class="entrada-titulo">Himalayan Fortress</h1>
       <p class="entrada-lema" style="margin:14px auto 22px">No se pudo hablar con el servidor. Puede que esté arrancando o que no haya red.</p>
       <button class="boton" id="reintentar" type="button">Reintentar</button>
     </section>`;

@@ -126,7 +126,7 @@ const PLANTILLAS_BUNKER = [
      atajo. */
   { tipo:"ciencia_i",   efecto:"subir_armeria",      coste:3, titulo: "Subir armería", descripcion: "Aumenta un nivel la armería." },
   { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir laboratorio", descripcion: "Aumenta un nivel el laboratorio." },
-  { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Aumenta un nivel los recursos de tu búnker." },
+  { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Suma 1 moneda y 1 monje por turno a tu búnker." },
   { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Laboratorio o armería", descripcion: "Aumenta un nivel el laboratorio o la armería." },
 ];
 
@@ -192,13 +192,13 @@ function robarBunker(j, e) {
 
 // ── Helpers de búnker ─────────────────────────────────────────────────────
 function energiaTotal(j) {
-  return 3 + j.bunker.recursos.reduce((s, c) => {
+  return 3 + (j.bunker.extra?.monedas ?? 0) + j.bunker.recursos.reduce((s, c) => {
     return s + (c.nivel >= 4 ? 4 : c.nivel >= 3 ? 3 : c.nivel >= 2 ? 2 : 1);
   }, 0);
 }
 
 function accionesTotal(j) {
-  return 2 + j.bunker.recursos.reduce((s, c) => {
+  return 2 + (j.bunker.extra?.monjes ?? 0) + j.bunker.recursos.reduce((s, c) => {
     return s + (c.nivel >= 4 ? 2 : c.nivel >= 2 ? 1 : 0);
   }, 0);
 }
@@ -378,7 +378,8 @@ function costeDisparo(j, senderoId, daño) {
 
 // ── Inicialización de jugador ─────────────────────────────────────────────
 function jugadorInicial(info, e) {
-  const bunker = { armeria: 1, laboratorio: 1, recursos: [], ciencia: [], torres: [null, null, null] };
+  const bunker = { armeria: 1, laboratorio: 1, recursos: [], ciencia: [], torres: [null, null, null],
+    extra: { monedas: 0, monjes: 0 } };
   const mazo = crearMazoBunker(e, { bunker });
   const mano = mazo.splice(0, 4);
   return {
@@ -405,7 +406,7 @@ function jugadorInicial(info, e) {
 // ── Contrato ──────────────────────────────────────────────────────────────
 const bunkerWars = {
   id: "bunker-wars",
-  nombre: "Bunker Wars",
+  nombre: "Himalayan Fortress",
   min: 2,
   max: 8,
   resumen: "Defiende tu búnker 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
@@ -1306,8 +1307,9 @@ function puedeJugarCarta(j, carta) {
     if (carta.efecto === "subir_laboratorio") {
       return (j.bunker.laboratorio ?? 0) < TOPE_LABORATORIO;
     }
+    /* Subir recursos siempre vale: suma una moneda y un monje, sin tope. */
     if (carta.efecto === "subir_recursos") {
-      return (j.bunker.recursos ?? []).some(c => (c.nivel ?? 1) < TOPE_RECURSOS);
+      return true;
     }
     if (carta.efecto === "subir_lab_o_arm") {
       return (j.bunker.laboratorio ?? 0) < TOPE_LABORATORIO
@@ -1461,18 +1463,13 @@ function subirEdificio(j, cual, evs) {
 
 /* Recursos: cada carta del búnker es una mejora con su nivel. Se sube la más
    floja, que es la que más gana, y nunca por encima de RECURSOS 4. */
+/* Subir recursos: +1 moneda y +1 monje por turno. No toca las cuatro cartas de
+   recursos ni ocupa hueco: la prima va aparte, en `bunker.extra`. */
 function subirRecursos(j, evs) {
-  let floja = null;
-  for (const c of j.bunker.recursos ?? []) {
-    const n = c.nivel ?? 1;
-    if (n >= TOPE_RECURSOS) continue;
-    if (!floja || n < (floja.nivel ?? 1)) floja = c;
-  }
-  if (!floja) return false;
-  floja.nivel = (floja.nivel ?? 1) + 1;
-  const p = TEXTO_CARTA.get(`recursos|${floja.nivel}|`);
-  if (p) { floja.titulo = p.titulo; floja.descripcion = p.descripcion; }
-  evs.push({ tipo: "mejora", texto: `${j.nombre} sube unos recursos a RECURSOS ${floja.nivel}.` });
+  j.bunker.extra = { monedas: 0, monjes: 0, ...(j.bunker.extra ?? {}) };
+  j.bunker.extra.monedas += 1;
+  j.bunker.extra.monjes  += 1;
+  evs.push({ tipo: "mejora", texto: `${j.nombre} sube unos recursos: +1 moneda y +1 monje por turno.` });
   return true;
 }
 
