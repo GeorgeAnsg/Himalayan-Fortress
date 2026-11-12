@@ -1849,7 +1849,7 @@ function cssAdicional() {
     body.bw-himalaya .turno-aviso {
       position: fixed !important;
       /* Debajo del marco: 33 px del alto + el marco completo */
-      top: calc(env(safe-area-inset-top, 0px) + 39px + min(45.4vw, 243px)) !important;
+      top: calc(env(safe-area-inset-top, 0px) + 59px + min(45.4vw, 243px)) !important;
       left: 50% !important; right: auto !important; bottom: auto !important;
       transform: translateX(-50%) !important;
       margin: 0 !important; width: auto !important; max-width: 86vw !important;
@@ -1915,7 +1915,8 @@ function cssAdicional() {
          (no fijo): así sube y baja con el castillo al hacer scroll. */
       position: absolute; left: 50%; transform: translateX(-50%);
       width: min(90%, 520px);
-      top: 6px;
+      /* 20 px más abajo que el borde de la escena (antes 6). */
+      top: 26px;
       z-index: 16; box-sizing: border-box; pointer-events: none;
       /* El marco nuevo: 2172 × 1014, con más pergamino para meter más datos.
          El pequeño (marco.png) sigue siendo el del aviso de versión nueva. */
@@ -2095,7 +2096,7 @@ function cssAdicional() {
          (de 788 a 1014 de alto: 36,5 px a 390 de ancho). Con él bajan el
          castillo, la escalera, los caminos y el tablero, que cuelgan de este
          número. */
-      --margen-castillo: 246px;
+      --margen-castillo: 276px;
       /* Solape de la escalera sobre la fortaleza: 253 px cuando el mundo mide
          390 px, o sea el 64,9 % del ancho (bajada de 40 px sobre los 293
          originales). En proporción para que las dos imágenes se hagan
@@ -2130,7 +2131,9 @@ function cssAdicional() {
     .capa-bg-clouds {
       position:absolute; top:0; left:0; right:0;
       pointer-events:none;
-      height:calc(430px + 46.74vw);
+      /* 300 px más alta que antes (430 + 46,74vw): baja hasta tapar el negro
+         que asomaba detrás de la fortaleza al hacer scroll. */
+      height:calc(730px + 46.74vw);
       background-image:url('${BASE_IMG}/mapas/nieve/bg-clouds.jpg');
       background-size:cover;
       background-position:top center;
@@ -2273,7 +2276,8 @@ function cssAdicional() {
       position:absolute; left:calc(-5% - 50px); right:calc(-5% + 50px); width:110%;
       pointer-events:none;
       /* 20 px más abajo que el borde del marco: -34 → -14. */
-      top:calc(-14px + min(42vw, 243px));
+      /* El alto del marco nuevo y 25 px de subida sobre el borde (−14 + 20 − 25). */
+      top:calc(-19px + min(42vw, 243px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags.png');
       background-size:60% auto;
@@ -2289,7 +2293,8 @@ function cssAdicional() {
       position:absolute; left:calc(-5% + 23px); right:-5%; width:110%;
       pointer-events:none;
       /* 20 px más abajo que el borde del marco: -34 → -14. */
-      top:calc(-14px + min(42vw, 243px));
+      /* El alto del marco nuevo y 25 px de subida sobre el borde (−14 + 20 − 25). */
+      top:calc(-19px + min(42vw, 243px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags-r.png');
       background-size:60% auto;
@@ -2300,9 +2305,10 @@ function cssAdicional() {
       will-change:transform;
     }
 
-    /* niebla inferior */
+    /* niebla inferior: 100 px más alta que su 40 % del suelo (crece hacia
+       arriba, porque va anclada por abajo). */
     .capa-bottom-fog {
-      position:absolute; bottom:0; left:0; right:0; height:40%;
+      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 100px);
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
       background-position:center bottom;
