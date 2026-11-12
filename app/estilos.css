@@ -744,7 +744,8 @@ input::placeholder { color: var(--tinta-tenue); }
 /* El texto va dentro del marco, que ocupa el 80 % del ancho de la pantalla. */
 .modal.modal-version p {
   width: 80vw; max-width: 620px;
-  aspect-ratio: 2172 / 788;
+  /* El aviso de versión sigue con el marco pequeño (marco.png, 3:1). */
+  aspect-ratio: 2172 / 724;
   box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
   /* Al centrar por flex, 20 px de padding arriba bajan el texto 10 px. */

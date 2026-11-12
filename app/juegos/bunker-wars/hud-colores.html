@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capas del HUD · Fortaleza</title>
+<link rel="stylesheet" href="./hud-colores.css">
+</head>
+<body>
+<header>Capas del HUD. Cada color es una caja: dime cuál tiene que bajar, subir, ensancharse o separarse.</header>
+
+<div class="lienzo">
+  <div class="escena"><div class="bw-hud" id="hud"></div></div>
+</div>
+
+<ul class="leyenda">
+  <li><i style="border-color:#3b82f6"></i>marco (big-marco.png)</li>
+  <li><i style="border-color:#22c55e"></i>hueco interior del pergamino (.bw-hud-caja)</li>
+  <li><i style="border-color:#facc15"></i>rejilla de las dos filas (.bw-hud-cuerpo)</li>
+  <li><i style="border-color:#f97316"></i>hueco 1 · monedas y decretos</li>
+  <li><i style="border-color:#e879f9"></i>hueco 2 · vida</li>
+  <li><i style="border-color:#22d3ee"></i>hueco 3 · armería y criadero</li>
+  <li><i style="border-color:#ef4444"></i>fila entera de abajo (.bw-hud-pie)</li>
+  <li><i style="border-color:#c4b5fd"></i>franja de turnos (.bw-hud-turnos)</li>
+</ul>
+
+<div class="medidas" id="medidas">midiendo…</div>
+
+<script type="module" src="./hud-colores.js"></script>
+</body>
+</html>
