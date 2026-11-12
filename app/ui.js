@@ -52,6 +52,15 @@ export function avatarSVG(indice, { tam = 40 } = {}) {
   </svg>`;
 }
 
+/* Un icono de usuario de trazo, para la barra: sin círculo ni fondo. */
+export function iconoUsuario(tam = 20) {
+  return `<svg viewBox="0 0 24 24" width="${tam}" height="${tam}" fill="none" stroke="currentColor"
+    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Tu cuenta">
+    <circle cx="12" cy="8" r="3.5" />
+    <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+  </svg>`;
+}
+
 /* ── Avisos en pantalla ────────────────────────────────────────────────── */
 
 const cajaAvisos = () => document.getElementById("avisos");
@@ -72,11 +81,11 @@ let abierto = null;
 
 /* Un modal con botones. Devuelve una promesa con el `valor` del botón pulsado.
    `obligatorio` quita la X y el clic fuera: se usa para la versión nueva. */
-export function modal({ titulo, texto = "", botones = [], obligatorio = false, html = "" }) {
+export function modal({ titulo, texto = "", botones = [], obligatorio = false, html = "", clase = "" }) {
   cerrarModal();
   const capa = document.getElementById("capa");
   const caja = h(`
-    <div class="modal${obligatorio ? " obligatorio" : ""}" role="dialog" aria-modal="true">
+    <div class="modal${obligatorio ? " obligatorio" : ""}${clase ? " " + clase : ""}" role="dialog" aria-modal="true">
       ${obligatorio ? "" : `<button class="cerrar" type="button" aria-label="Cerrar">×</button>`}
       <h2>${esc(titulo)}</h2>
       ${texto ? `<p>${esc(texto)}</p>` : ""}

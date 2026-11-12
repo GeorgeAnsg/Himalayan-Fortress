@@ -402,7 +402,7 @@ function abrirDescarte() {
           <div class="bw-carta-grande-img"><img src="${esc(imgCarta(c.tipo, c.nivel))}" alt=""></div>
           <div class="bw-carta-grande-texto">
             <div class="bw-carta-grande-titulo">${esc(t.label)}</div>
-            <p class="bw-carta-grande-desc">${esc(c.descripcion ?? "")}</p>
+            <p class="bw-carta-grande-desc">${conNegritas(c.descripcion)}</p>
           </div>
         </div>
       </button>`;
@@ -656,11 +656,13 @@ function pintarMiBunker(j, priv, fase) {
 
   /* Posiciones exactas del demo (% del tablero) */
   const LOSAS = [
-    [{l:"24.09",t:"77.4"},{l:"24.25",t:"64.6"},{l:"24.5",t:"52.9"},{l:"25.16",t:"41.5"},{l:"25.78",t:"33.66",base:true}],
+    [{l:"24.09",t:"77.4"},{l:"24.25",t:"64.6"},{l:"24.5",t:"52.9"},{l:"25.16",t:"41.5"},{l:"26.55",t:"33.66",base:true}],
     [{l:"50.02",t:"77.4"},{l:"49.61",t:"64.6"},{l:"49.2",t:"52.9"},{l:"49.2",t:"41.5"},{l:"49.26",t:"33.66",base:true}],
     [{l:"78.15",t:"77.4"},{l:"76.09",t:"64.6"},{l:"75.67",t:"52.9"},{l:"73.2",t:"41.5"},{l:"74.13",t:"33.66",base:true}],
   ];
-  const TORRES_POS = [{l:"25.78",t:"32.28"},{l:"49.92",t:"32.28"},{l:"74.13",t:"32.28"}];
+  /* La torre de la izquierda, 3 px a la derecha (0,77 % del ancho del tablero a
+     390 px): la peana de su casilla se mueve con ella. */
+  const TORRES_POS = [{l:"26.55",t:"32.28"},{l:"49.92",t:"32.28"},{l:"74.13",t:"32.28"}];
 
   /* Fichas reales */
   const fichasHtml = [0,1,2].flatMap(i =>
@@ -961,7 +963,7 @@ function textoDestino(d) {
     case "matar_mayor":     return "El monstruo de más rango que trepa tu fortaleza muere. Quítalo de la escalera";
     case "avanzar_extra":   return "Todos los atacantes de tus escaleras suben un peldaño más";
     case "miedo":           return "Todos los atacantes de la mesa retroceden una casilla";
-    case "convertir_aliado":return "Convierte un monstruo atacante en un monstruo tuyo. Gíralo";
+    case "convertir_aliado":return "Convierte un monstruo atacante en un monstruo tuyo";
     case "subir_monstruos": return "Tus monstruos de nivel 5 o inferior suben un rango";
     case "bajar_monstruos": return "Tus monstruos de nivel 2 o superior bajan un rango";
     case "colocar_monstruos": return `Coloca ${d.cantidad ?? 3} monstruos de nivel ${n} saliendo de tu búnker`;
@@ -1115,6 +1117,13 @@ function pintarCarta(c, priv, fase, bunker) {
   `;
 }
 
+/* El texto de las cartas puede traer **negritas** para nombrar monstruos o
+   edificios. Se escapa primero y después se convierten los pares de asteriscos
+   en <b>: nunca se inyecta HTML que venga de fuera. */
+function conNegritas(t) {
+  return esc(t ?? "").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+
 function abrirCarta(el) {
   cerrarCarta();
   const d = el.dataset;
@@ -1129,6 +1138,8 @@ function abrirCarta(el) {
   const CON_OBJETIVO = ["subir_rango", "avanzar_rival_1", "convertir_aliado", "bajar_nivel_enemigo",
     "evolucionar_torreta", "vuelo_seguro", "torreta2_gratis", "monstruo3_gratis", "subir_lab_o_arm"];
   const sinObjetivo = jugable && CON_OBJETIVO.includes(d.efecto) && opciones.length === 0;
+  /* Si el pie dice que no hay objetivo, el botón no puede quedarse activo. */
+  const puedeUsar = jugable && !sinObjetivo;
   const motivo = jugable
     ? reemplazos
       ? "Tu búnker tiene dos ciencias. Al instalar esta sale una de las dos: elige cuál."
@@ -1160,7 +1171,7 @@ function abrirCarta(el) {
         <div class="bw-carta-grande-img"><img src="${esc(d.img ?? "")}" alt=""></div>
         <div class="bw-carta-grande-texto">
           <div class="bw-carta-grande-titulo">${esc(tituloCarta(d, d.titulo))}</div>
-          <p class="bw-carta-grande-desc">${esc(d.descripcion)}</p>
+          <p class="bw-carta-grande-desc">${conNegritas(d.descripcion)}</p>
         </div>
       </div>
       <div class="bw-modal-acciones">
@@ -1168,7 +1179,7 @@ function abrirCarta(el) {
           ? reemplazos.map(c => `<button type="button" class="bw-modal-usar" data-reemplazo="${esc(c.efecto ?? "")}"${jugable ? "" : " disabled"}>Quitar ${esc(NOMBRES_EFECTO[c.efecto] ?? c.titulo ?? c.efecto ?? "?")}</button>`).join("")
           : elecciones
             ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable ? "" : " disabled"}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir laboratorio") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
-            : `<button type="button" class="bw-modal-usar"${jugable ? "" : " disabled"}${opciones.length === 1 ? ` data-accion="${accionesMesa.indexOf(opciones[0])}"` : ""}>Usar carta</button>`}
+            : `<button type="button" class="bw-modal-usar"${puedeUsar ? "" : " disabled"}${opciones.length === 1 ? ` data-accion="${accionesMesa.indexOf(opciones[0])}"` : ""}>Usar carta</button>`}
       </div>
       ${motivo ? `<p class="bw-modal-nota">${esc(motivo)}</p>` : ""}
     </div>
@@ -1599,7 +1610,7 @@ function css() {
        4 px más abajo para que respire respecto a la raya. Dos puntos de letra
        menos: iba enorme. */
     .bw-destino-grande .bw-carta-grande-titulo {
-      color:#2c4d7d;
+      color:#1a3560;
       /* 11 px = los 4 de antes más 7 que lo baja */
       margin-top:11px;
       font-size:calc(8.5cqw - 3px);
@@ -1729,7 +1740,9 @@ function css() {
       position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%);
       margin:0; padding:9px 12px; border-radius:10px;
       background:rgba(18,16,14,.92); border:1px solid rgba(244,236,221,.12);
-      font-size:12.5px; line-height:1.4; text-align:center; max-width:230px;
+      font-size:12.5px; line-height:1.4; text-align:center;
+      /* 60 % del ancho de la pantalla: con el tope de 230 px salía estrecho. */
+      width:60vw; max-width:none; box-sizing:border-box;
       color:#b7a992;
     }
 
@@ -1804,7 +1817,7 @@ function cssAdicional() {
     body.bw-himalaya .turno-aviso {
       position: fixed !important;
       /* Debajo del marco: 33 px del alto + el marco completo */
-      top: calc(env(safe-area-inset-top, 0px) + 39px + min(33.34vw, 173px)) !important;
+      top: calc(env(safe-area-inset-top, 0px) + 39px + min(36vw, 189px)) !important;
       left: 50% !important; right: auto !important; bottom: auto !important;
       transform: translateX(-50%) !important;
       margin: 0 !important; width: auto !important; max-width: 86vw !important;
@@ -1872,14 +1885,18 @@ function cssAdicional() {
       width: min(90%, 520px);
       top: 6px;
       z-index: 16; box-sizing: border-box; pointer-events: none;
-      aspect-ratio: 2172 / 724;
+      /* El arte nuevo mide 2172 × 788 (antes 724 de alto). */
+      aspect-ratio: 2172 / 788;
       background: url('${BASE_IMG}/marco.png') center / 100% 100% no-repeat;
     }
     /* Hueco interior del marco, en % del propio marco: deja fuera tejado,
        banderines, columnas y peana. */
     .bw-hud-caja {
       position: absolute;
-      left: 11.5%; right: 11%; top: 37%; bottom: 17.5%;
+      /* 268 px por arriba y 127 px por abajo sobre los 788 del arte nuevo
+         (antes 37 % y 17,5 % de 724): el hueco del pergamino crece lo que
+         crece la imagen. Si el marco definitivo mueve el hueco, se retoca. */
+      left: 11.5%; right: 11%; top: 34%; bottom: 16.1%;
       display: flex; flex-direction: column;
       justify-content: center; gap: 4px;
       padding: 1px 6px; overflow: hidden;
@@ -1977,7 +1994,19 @@ function cssAdicional() {
       /* Único mando del aire entre el marco y el castillo. Lo usan el bloque
          del mapa y el tablero (fichas, lanzaderas, torres): así los círculos
          de las escaleras se mueven siempre con la imagen. */
-      --margen-castillo: 180px;
+      /* 190 px: 10 más que antes, el alto que gana el marco al pasar de 724 a
+         788, para que el templo y todo lo de abajo bajen con él. */
+      --margen-castillo: 190px;
+      /* Solape de la escalera sobre la fortaleza: 253 px cuando el mundo mide
+         390 px, o sea el 64,9 % del ancho (bajada de 40 px sobre los 293
+         originales). En proporción para que las dos imágenes se hagan
+         pequeñas y grandes juntas: con 293 px fijos, al encoger la pantalla la
+         escalera subía sola respecto a la fortaleza. */
+      --solape-escalera: calc(66.7 * var(--u));
+      /* Dónde empieza la imagen de las escaleras (y por tanto el tablero),
+         medido en --u (1 % del ancho del mundo) y no en vw: así cuelga de la
+         imagen y no del viewport. */
+      --tope-castillo: calc(var(--margen-castillo) + 93.47 * var(--u) - var(--solape-escalera));
     }
     /* --u = 1% del ancho del mundo (1cqw): fallback con vw si container-query no disponible */
     @supports (container-type:inline-size) {
@@ -1989,7 +2018,7 @@ function cssAdicional() {
 
     .suelo {
       position:relative; width:100%; overflow:hidden;
-      min-height:calc(93.47vw + 100px); /* garantía de altura mínima */
+      min-height:calc(93.47 * var(--u) + 100px); /* garantía de altura mínima */
       background:var(--mapa-url, url('${BASE_IMG}/mapas/mapa-selva.webp')) top center / 100% auto no-repeat;
     }
     .capa-himalaya { display:none; position:absolute; left:0; right:0; background-size:cover; background-repeat:no-repeat; }
@@ -2027,7 +2056,9 @@ function cssAdicional() {
     .bloque-mapa .img-stairs {
       display:block;
       width:100%;
-      margin-top:-293px;
+      /* El solape va en % del ancho (ver --solape-escalera en .mundo): fijo en
+         px, la escalera se despegaba de la fortaleza al cambiar el tamaño. */
+      margin-top:calc(-1 * var(--solape-escalera));
     }
 
     /* fort-ui */
@@ -2142,7 +2173,7 @@ function cssAdicional() {
     .capa-flags {
       position:absolute; left:calc(-5% - 50px); right:calc(-5% + 50px); width:110%;
       pointer-events:none;
-      top:calc(-34px + min(30vw, 173px));
+      top:calc(-34px + min(32.66vw, 189px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags.png');
       background-size:60% auto;
@@ -2157,7 +2188,7 @@ function cssAdicional() {
          width:110% el right queda ignorado. */
       position:absolute; left:calc(-5% + 23px); right:-5%; width:110%;
       pointer-events:none;
-      top:calc(-34px + min(30vw, 173px));
+      top:calc(-34px + min(32.66vw, 189px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags-r.png');
       background-size:60% auto;
@@ -2189,16 +2220,16 @@ function cssAdicional() {
     /* ── Caminos ── */
     .caminos {
       position:absolute; left:0; right:0; bottom:0;
-      top:calc(93.47vw - 113px);
+      top:var(--tope-castillo);
       width:100%; height:auto; z-index:1; overflow:visible;
       -webkit-mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
       mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
     }
     .tablero {
       position:absolute; left:0; right:0; bottom:0;
-      /* 293px = los 180 de margen de antes + los 113 que ya llevaba el cálculo:
-         así el tablero arranca siempre en el mismo punto de la imagen. */
-      top:calc(var(--margen-castillo) + 93.47vw - 293px);
+      /* Mismo ancla que los caminos: el alto de la escalera, salga el ancho que
+         salga. bottom:0 hace que la caja acabe justo en el borde de la imagen. */
+      top:var(--tope-castillo);
       height:auto; z-index:2;
     }
     .caminos .lecho { fill:none; stroke:transparent; stroke-width:calc(14 * var(--u)); vector-effect:non-scaling-stroke }

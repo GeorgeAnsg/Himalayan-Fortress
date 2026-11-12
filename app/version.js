@@ -54,10 +54,9 @@ export function avisarNueva(versionServidor) {
   yaAvisado = true;
 
   modal({
-    titulo: "Hay una versión nueva",
-    texto:
-      "La app ha cambiado mientras la tenías abierta. Actualiza para seguir jugando: " +
-      "si no, la mesa rechazará tus jugadas.",
+    titulo: "",
+    texto: "Hay una nueva versión de la app",
+    clase: "modal-version",
     obligatorio: true,
     botones: [{ texto: "Actualizar ahora", estilo: "boton", valor: "actualizar" }],
   }).then((r) => {

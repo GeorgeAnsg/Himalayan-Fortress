@@ -13,7 +13,7 @@ import * as sesion from "./sesion.js";
 import * as avisos from "./avisos.js";
 import * as versionMod from "./version.js";
 import { Conexion } from "./socket.js";
-import { aviso, modal, avatarSVG } from "./ui.js";
+import { aviso, modal, avatarSVG, iconoUsuario } from "./ui.js";
 import * as vistaEntrada from "./vistas/entrada.js";
 import * as vistaInicio from "./vistas/inicio.js";
 import * as vistaVestibulo from "./vistas/vestibulo.js";
@@ -319,7 +319,7 @@ function actualizarBarra() {
   barra.hidden = !estado.usuario;
   if (!estado.usuario) return;
   const cuenta = document.getElementById("cuenta");
-  if (cuenta) cuenta.innerHTML = avatarSVG(estado.usuario.avatar, { tam: 34 });
+  if (cuenta) cuenta.innerHTML = iconoUsuario(20);
   const campana = document.getElementById("campana");
   if (campana) {
     campana.classList.toggle("on", avisos.estadoCampana());

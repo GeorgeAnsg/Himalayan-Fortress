@@ -13,15 +13,16 @@ export function pintar(raiz, { mesa, alAccion, alSalir }) {
   const ronda = mesa.publica?.ronda;
   const maxRondas = mesa.publica?.maxRondas;
 
+  /* Cuando te toca no se dice nada: el turno ya se avisa en otro sitio. Solo
+     queda el aviso de a quién se espera. El comentario va fuera de la
+     plantilla, que si no se pinta como texto. */
   const nodo = h(`
     <section>
-      <div class="turno-aviso ${mesa.esMiTurno ? "" : "espera"}" id="turno">
-        ${mesa.esMiTurno
-          ? "<strong>Te toca.</strong> Elige una jugada."
-          : turno
+      ${mesa.esMiTurno
+        ? ""
+        : `<div class="turno-aviso espera" id="turno">${turno
             ? `Esperando a <strong>${esc(turno.nombre)}</strong>…`
-            : "La mesa está abierta."}
-      </div>
+            : "La mesa está abierta."}</div>`}
 
       <div id="tablero"></div>
     </section>
