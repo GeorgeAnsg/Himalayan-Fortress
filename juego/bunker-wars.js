@@ -60,7 +60,6 @@ const PLANTILLAS_DESTINO = [
   { id:"d25", tipo:"amenaza_rival",  nivel:2, prio:[2,3,1] },
   // Eventos beneficiosos
   { id:"d21", tipo:"calma" },
-  { id:"d22", tipo:"buscar_bunker" },
   { id:"d31", tipo:"colocar_monstruos",    nivel:3, cantidad:3 },
   { id:"d32", tipo:"colocar_monstruos",    nivel:2, cantidad:3 },
   // Eventos de limpieza
@@ -83,7 +82,7 @@ const DIST_DESTINO = {
   d09:2, d10:2, d11:2, d12:1,
   d13:1, d14:1, d15:1, d16:2,
   d17:1, d18:1, d19:1,
-  d20:2, d21:3, d22:2, d23:1,
+  d20:2, d21:3, d23:1,
   d24:1, d25:2, d26:1, d27:2,
   d28:1, d29:1, d30:1, d31:1, d32:1,
 };
@@ -105,20 +104,20 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 acciones extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
-  { tipo:"laboratorio", nivel:2, coste:2, titulo: "LABORATORIO 2", descripcion: "Te permite crear monstruos de hasta nivel 2 en el box." },
-  { tipo:"laboratorio", nivel:3, coste:2, titulo: "LABORATORIO 3", descripcion: "Te permite crear monstruos de hasta nivel 3 en el box." },
-  { tipo:"laboratorio", nivel:4, coste:2, titulo: "LABORATORIO 4", descripcion: "Te permite crear monstruos de hasta nivel 5 en el box." },
+  { tipo:"laboratorio", nivel:2, coste:2, titulo: "LABORATORIO 2", descripcion: "Te permite crear rastreadores y carroñeros en el box." },
+  { tipo:"laboratorio", nivel:3, coste:2, titulo: "LABORATORIO 3", descripcion: "Te permite crear rastreadores, carroñeros y yetis en el box." },
+  { tipo:"laboratorio", nivel:4, coste:2, titulo: "LABORATORIO 4", descripcion: "Te permite crear rastreadores, carroñeros, yetis y colosos de hielo en el box." },
   /* Textos copiados de las cartas físicas: no inventar efectos ni redacciones. */
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
-  { tipo:"ciencia",     efecto:"torreta_universal", coste:8, titulo: "Torres universales", descripcion: "Tus torres hacen el daño correspondiente a su nivel en cualquier calle." },
-  { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de las casillas 3 y 4 de tus caminos, tanto los tuyos como los atacantes." },
-  { tipo:"ciencia_i",   efecto:"avanzar_rival_1",   coste:2, titulo: "Avanza al rival", descripcion: "Avanza 1 casilla a un monstruo de nivel 3 o inferior que esté atacando a un rival. Permite entrada en búnker." },
+  { tipo:"ciencia",     efecto:"torreta_universal", coste:8, titulo: "Torres universales", descripcion: "Tus torres hacen el daño correspondiente a su nivel en cualquier escalera." },
+  { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los peldaños 3 y 4 de tus escaleras, tanto los tuyos como los atacantes." },
+  { tipo:"ciencia_i",   efecto:"avanzar_rival_1",   coste:2, titulo: "Avanza al rival", descripcion: "Avanza 1 peldaño a un monstruo de nivel 3 o inferior que esté atacando a un rival. Permite entrada en búnker." },
   { tipo:"ciencia_i",   efecto:"subir_rango",       coste:2, titulo: "Subir rango", descripcion: "Sube un rango el nivel de un monstruo hasta nivel 5 como máximo que esté defendiendo tu búnker o atacando a un rival." },
   { tipo:"ciencia_i",   efecto:"convertir_aliado",  coste:2, titulo: "Convertir aliado", descripcion: "Convierte un monstruo de nivel 5 como máximo que esté atacando tu búnker en un aliado. Gíralo." },
   { tipo:"ciencia_i",   efecto:"bajar_nivel_enemigo",coste:2, titulo: "Bajar rango", descripcion: "Baja un rango el nivel de un monstruo enemigo que esté atacando tu búnker." },
   { tipo:"ciencia_i",   efecto:"evolucionar_torreta",coste:2, titulo: "Evolucionar torre", descripcion: "Evoluciona una torre al siguiente nivel." },
-  { tipo:"ciencia_i",   efecto:"vuelo_seguro",       coste:2, titulo: "Vuelo seguro", descripcion: "Manda un monstruo de nivel 3 o inferior a la entrada de una calle rival." },
+  { tipo:"ciencia_i",   efecto:"vuelo_seguro",       coste:2, titulo: "Vuelo seguro", descripcion: "Manda un monstruo de nivel 3 o inferior a la entrada de una escalera rival." },
   { tipo:"ciencia_i",   efecto:"torreta2_gratis",    coste:3, titulo: "Torre de nivel 2", descripcion: "Construye una torre de nivel 2 en tu búnker sin necesidad de tener ARMERÍA 3." },
   { tipo:"ciencia_i",   efecto:"monstruo3_gratis",   coste:3, titulo: "Monstruo de nivel 3", descripcion: "Crea un monstruo de nivel 3 en un box sin necesidad de tener LABORATORIO 3." },
   /* Estas cuatro suben el nivel al momento: no se busca ninguna carta en el
@@ -585,10 +584,10 @@ function faseAvance(e, jugadorId, evs) {
       if (f.nivel >= defensor.nivel) {
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel} destruye al monstruo ${defensor.nivel} de ${j.nombre} en la casilla ${pos + 1} del camino ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel} destruye al monstruo ${defensor.nivel} de ${j.nombre} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
       } else {
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en la casilla ${pos + 1} del camino ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
       }
     }
   }
@@ -609,7 +608,7 @@ function faseLanzar(e, jugadorId, accion, evs) {
     const s = rival?.senderos.find(s => s.id === accion.sendero);
     if (mon && s && !s.posiciones[0] && rival.vivo) {
       s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId };
-      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) al camino ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
+      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
       j.lanzaderas[i] = null;
     }
     /* Con dos lanzaderas la fase sigue abierta mientras quede otra ficha y
@@ -647,12 +646,12 @@ function avanzarMonstruosPropios(j, evs) {
       if (delante.tipo !== "atacante") continue;
       if (!resolverCombate(f, delante).monstruoSobrevive) {
         s.posiciones[pos + 1] = null;
-        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en la casilla ${pos + 1} del camino ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
         continue;
       }
       s.posiciones[pos + 1] = null;
       s.posiciones[pos] = f;
-      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en la casilla ${pos + 1} del camino ${s.id}.` });
+      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
     }
     // Al llegar a la casilla 1 pasa a la lanzadera que tiene al lado
     if (s.posiciones[0]?.tipo === "monstruo") {
@@ -816,7 +815,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.energia--;
       j.accionesRestantes--;
       j.bunker.torres[pos - 1] = { id: uid("t"), nivel: 1, sendero: pos, inhabilitada: false };
-      evs.push({ tipo: "torre", texto: `${j.nombre} construye torre nivel 1 en la posición ${pos} del búnker (calle del camino ${pos}).`, a: jugadorId });
+      evs.push({ tipo: "torre", texto: `${j.nombre} construye torre nivel 1 en la posición ${pos} del búnker (escalera ${pos}).`, a: jugadorId });
       break;
     }
 
@@ -870,13 +869,13 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.box[boxIdx] = null;
       if (!ocupante) {
         s.posiciones[POS_DESPLIEGUE] = { ...m };
-        evs.push({ tipo: "mover_monstruo", texto: `${j.nombre} lanza monstruo ${m.nivel} a la casilla 4 del camino ${accion.sendero}.`, a: jugadorId });
+        evs.push({ tipo: "mover_monstruo", texto: `${j.nombre} lanza monstruo ${m.nivel} al peldaño 4 de la escalera ${accion.sendero}.`, a: jugadorId });
       } else {
         const { enemigoMuere, monstruoSobrevive } = resolverCombate(m, ocupante);
         s.posiciones[POS_DESPLIEGUE] = monstruoSobrevive ? { ...m } : ocupante;
         evs.push(enemigoMuere
-          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado al camino ${accion.sendero} destruye al atacante ${ocupante.nivel}.`, a: jugadorId }
-          : { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado al camino ${accion.sendero} muere contra el atacante ${ocupante.nivel}.`, a: jugadorId });
+          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado a la escalera ${accion.sendero} destruye al atacante ${ocupante.nivel}.`, a: jugadorId }
+          : { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado a la escalera ${accion.sendero} muere contra el atacante ${ocupante.nivel}.`, a: jugadorId });
       }
       break;
     }
@@ -899,8 +898,8 @@ function faseAcciones(e, jugadorId, accion, evs) {
         s.posiciones[posOrigen] = null;
         s.posiciones[posDest] = monstruoSobrevive ? { ...mMon } : null;
         evs.push(enemigoMuere
-          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye atacante ${ocupante.nivel} en el camino ${accion.sendero}.`, a: jugadorId }
-          : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en el camino ${accion.sendero}.`, a: jugadorId });
+          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId }
+          : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
         // Si el monstruo llega a pos 0, pasa a la lanzadera de al lado
         if (posDest === 0 && monstruoSobrevive) {
           const i = lanzaderaDeSendero(j, s.id);
@@ -915,7 +914,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
         j.accionesRestantes--;
         s.posiciones[posDest] = { ...mMon };
         s.posiciones[posOrigen] = null;
-        evs.push({ tipo: "avance_monstruo", texto: `${j.nombre} avanza el monstruo ${mMon.nivel} en el camino ${accion.sendero}.`, a: jugadorId });
+        evs.push({ tipo: "avance_monstruo", texto: `${j.nombre} avanza el monstruo ${mMon.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
         if (posDest === 0) {
           const i = lanzaderaDeSendero(j, s.id);
           if (i !== null) {
@@ -940,7 +939,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.energia -= costeTorr;
       j.accionesRestantes--;
       s.posiciones[accion.posicion] = null;
-      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye atacante ${f.nivel} con torretas en el camino ${accion.sendero}.`, a: jugadorId });
+      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye atacante ${f.nivel} con torretas en la escalera ${accion.sendero}.`, a: jugadorId });
       break;
     }
   }
@@ -952,18 +951,12 @@ function faseAcciones(e, jugadorId, accion, evs) {
 // ── Fase DESCARTAR ────────────────────────────────────────────────────────
 function faseDescartar(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
-  /* Si has usado cartas puedes descartar hasta 2 (o ninguna); si no has usado
-     ninguna, el descarte de 1 es obligatorio. */
-  const usoCartas = j.cartasJugadasEsteTurno > 0;
-  const maxDesc = usoCartas ? 2 : 1;
-  const ids = (accion.cartaIds ?? []).slice(0, maxDesc);
+  /* Descartar es opcional: hasta 2 cartas por turno, o ninguna. */
+  const ids = (accion.cartaIds ?? []).slice(0, 2);
 
   for (const uid of ids) {
     const idx = j.mano.findIndex(c => c.uid === uid);
     if (idx >= 0) j.descarteBunker.push(j.mano.splice(idx, 1)[0]);
-  }
-  if (!usoCartas && ids.length === 0 && j.mano.length > 0) {
-    j.descarteBunker.push(j.mano.shift());
   }
 
   // Robar hasta 4
@@ -1003,7 +996,7 @@ function legalesLanzar(e, jugadorId) {
       for (const { m, i } of cargadas) {
         acc.push({
           tipo: "lanzar", lanzadera: i, rivalId, sendero: s.id,
-          texto: `Lanzar monstruo ${m.nivel} (L${i + 1}) al camino ${s.id} de ${rival.nombre}`,
+          texto: `Lanzar monstruo ${m.nivel} (L${i + 1}) a la escalera ${s.id} de ${rival.nombre}`,
         });
       }
     }
@@ -1035,8 +1028,8 @@ function legalesAcciones(e, jugadorId) {
         acc.push({
           tipo: "mejorar_bunker", cartaId: carta.uid,
           objetivo: { jugadorId: t.jugadorId, sendero: t.sendero, posicion: t.posicion },
-          etiqueta: `M${t.nivel}→${t.nuevo} en C${t.sendero} casilla ${t.posicion + 1}`,
-          texto: `Subir rango: monstruo ${t.nivel} → ${t.nuevo} en C${t.sendero} casilla ${t.posicion + 1} (${t.donde})`,
+          etiqueta: `M${t.nivel}→${t.nuevo} en E${t.sendero} peldaño ${t.posicion + 1}`,
+          texto: `Subir rango: monstruo ${t.nivel} → ${t.nuevo} en E${t.sendero} peldaño ${t.posicion + 1} (${t.donde})`,
         });
       }
     } else if (carta.efecto === "bajar_nivel_enemigo") {
@@ -1048,8 +1041,8 @@ function legalesAcciones(e, jugadorId) {
           acc.push({
             tipo: "mejorar_bunker", cartaId: carta.uid,
             objetivo: { sendero: s.id, posicion },
-            etiqueta: `M${f.nivel}→${nuevo} en C${s.id} casilla ${posicion + 1}`,
-            texto: `Bajar rango: atacante ${f.nivel} → ${nuevo} en C${s.id} casilla ${posicion + 1}`,
+            etiqueta: `M${f.nivel}→${nuevo} en E${s.id} peldaño ${posicion + 1}`,
+            texto: `Bajar rango: atacante ${f.nivel} → ${nuevo} en E${s.id} peldaño ${posicion + 1}`,
           });
         });
       }
@@ -1060,8 +1053,8 @@ function legalesAcciones(e, jugadorId) {
           acc.push({
             tipo: "mejorar_bunker", cartaId: carta.uid,
             objetivo: { sendero: s.id, posicion },
-            etiqueta: `Convertir M${f.nivel} en C${s.id} casilla ${posicion + 1}`,
-            texto: `Convertir aliado: atacante ${f.nivel} en C${s.id} casilla ${posicion + 1}`,
+            etiqueta: `Convertir M${f.nivel} en E${s.id} peldaño ${posicion + 1}`,
+            texto: `Convertir aliado: atacante ${f.nivel} en E${s.id} peldaño ${posicion + 1}`,
           });
         });
       }
@@ -1080,10 +1073,10 @@ function legalesAcciones(e, jugadorId) {
               tipo: "mejorar_bunker", cartaId: carta.uid, objetivo,
               etiqueta: posicion === 3
                 ? `Entrar en búnker de ${otro.nombre} (C${s.id})`
-                : `M${f.nivel} avanza en C${s.id} de ${otro.nombre}`,
+                : `M${f.nivel} avanza en E${s.id} de ${otro.nombre}`,
               texto: posicion === 3
                 ? `Avanza al rival: monstruo ${f.nivel} entra en el búnker de ${otro.nombre}`
-                : `Avanza al rival: monstruo ${f.nivel} → casilla ${posicion + 2} de C${s.id} (${otro.nombre})`,
+                : `Avanza al rival: monstruo ${f.nivel} → peldaño ${posicion + 2} de C${s.id} (${otro.nombre})`,
             });
           });
         }
@@ -1121,7 +1114,7 @@ function legalesAcciones(e, jugadorId) {
               tipo: "mejorar_bunker", cartaId: carta.uid,
               monstruoId: m.id, rivalId: otro.id, sendero: s.id,
               etiqueta: `M${m.nivel} (box ${boxDeIndice(i) + 1}) → C${s.id} de ${otro.nombre}`,
-              texto: `Vuelo seguro: monstruo ${m.nivel} a la entrada del camino ${s.id} de ${otro.nombre}`,
+              texto: `Vuelo seguro: monstruo ${m.nivel} a la entrada de la escalera ${s.id} de ${otro.nombre}`,
             });
           }
         }
@@ -1170,7 +1163,7 @@ function legalesAcciones(e, jugadorId) {
   j.bunker.torres.forEach((t, i) => {
     const pos = i + 1;
     if (!t && j.energia >= 1) {
-      acc.push({ tipo: "construir_torreta", posicion: pos, texto: `Torre en posición ${pos} (calle camino ${pos})` });
+      acc.push({ tipo: "construir_torreta", posicion: pos, texto: `Torre en posición ${pos} (escalera ${pos})` });
     }
     if (t && t.nivel < 3 && t.nivel + 1 <= j.bunker.armeria && j.energia >= 1) {
       acc.push({ tipo: "evolucionar_torreta", posicion: pos, texto: `Evolucionar torre ${pos} a nivel ${t.nivel + 1}` });
@@ -1183,7 +1176,7 @@ function legalesAcciones(e, jugadorId) {
       if (f?.tipo !== "atacante") return;
       const coste = costeDisparo(j, s.id, f.nivel);
       if (coste >= 0 && j.energia >= coste) {
-        acc.push({ tipo: "atacar_monstruo", sendero: s.id, posicion: i, texto: `Disparar a atacante ${f.nivel} (camino ${s.id}, casilla ${i + 1}) · ${coste}e` });
+        acc.push({ tipo: "atacar_monstruo", sendero: s.id, posicion: i, texto: `Disparar a atacante ${f.nivel} (escalera ${s.id}, peldaño ${i + 1}) · ${coste}e` });
       }
     });
   }
@@ -1229,8 +1222,8 @@ function legalesAcciones(e, jugadorId) {
           acc.push({
             tipo: "avanzar_monstruo", monstruoId: m.id, sendero: s.id, posicion: destino,
             texto: f
-              ? `Monstruo ${m.nivel} ataca atacante ${f.nivel} en C${s.id} casilla ${destino + 1} (1e)`
-              : `Monstruo ${m.nivel} avanza a C${s.id} casilla ${destino + 1} (1e)`,
+              ? `Monstruo ${m.nivel} ataca atacante ${f.nivel} en E${s.id} peldaño ${destino + 1} (1e)`
+              : `Monstruo ${m.nivel} avanza a C${s.id} peldaño ${destino + 1} (1e)`,
           });
         }
       });
@@ -1248,7 +1241,7 @@ function nombreCarta(c) {
 
 function legalesDescartar(e, jugadorId) {
   const j = e.jugadores[jugadorId];
-  const max = j.cartasJugadasEsteTurno > 0 ? 2 : 1;
+  const max = 2;
   /* Si hay cartas repetidas, se numeran, para que dos botones iguales no
      lleven a descartar la que no era. */
   const repes = new Map();
@@ -1274,11 +1267,7 @@ function legalesDescartar(e, jugadorId) {
       }
     }
   }
-  if (max === 2) {
-    acc.push({ tipo: "descartar", cartaIds: [], texto: "No descartar" });
-  } else {
-    acc.push({ tipo: "descartar", cartaIds: [], texto: `Descartar la primera (${j.mano.length ? etiqueta(j.mano[0]) : "mano vacía"})` });
-  }
+  acc.push({ tipo: "descartar", cartaIds: [], texto: "No descartar" });
   return acc;
 }
 
@@ -1331,7 +1320,7 @@ function aplicarPurga(j, evs) {
       if (s.posiciones[p]) { s.posiciones[p] = null; n++; }
     }
   }
-  evs.push({ tipo: "aniquilar", texto: `Purga: ${n} monstruo(s) aniquilados en las casillas 3 y 4 de los caminos de ${j.nombre}.` });
+  evs.push({ tipo: "aniquilar", texto: `Purga: ${n} monstruo(s) aniquilados en los peldaños 3 y 4 de las escaleras de ${j.nombre}.` });
 }
 
 /* Escalera de rangos: 1 → 2 → 3 → 5 → 7. Subir y bajar rango saltan de 3 a 5,
@@ -1553,7 +1542,7 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
     case "vuelo_seguro": {
       o.sendero.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: o.monstruo.nivel, dueno: j.id };
       j.box[o.boxIdx] = null;
-      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} manda en vuelo seguro un monstruo ${o.monstruo.nivel} a la entrada del camino ${o.sendero.id} de ${o.rival.nombre}.` });
+      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} manda en vuelo seguro un monstruo ${o.monstruo.nivel} a la entrada de la escalera ${o.sendero.id} de ${o.rival.nombre}.` });
       return true;
     }
     case "monstruo3_gratis": {
@@ -1672,7 +1661,7 @@ function resolverDestino(e, jugadorId, carta) {
       const sid = priorizarSendero(j.senderos, carta.prio);
       if (sid !== null) {
         colocarAtacante(j.senderos, sid, nv);
-        evs.push({ tipo: "amenaza", texto: `Destino: monstruo ${nv} en el camino ${sid} de ${j.nombre}.` });
+        evs.push({ tipo: "amenaza", texto: `Destino: monstruo ${nv} en la escalera ${sid} de ${j.nombre}.` });
       }
       break;
     }
@@ -1683,7 +1672,7 @@ function resolverDestino(e, jugadorId, carta) {
           s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: nv };
         }
       }
-      evs.push({ tipo: "amenaza", texto: `Destino: 3 monstruos ${nv} en los caminos de ${j.nombre}.` });
+      evs.push({ tipo: "amenaza", texto: `Destino: 3 monstruos ${nv} en las escaleras de ${j.nombre}.` });
       break;
     }
     case "amenaza_doble": {
@@ -1693,7 +1682,7 @@ function resolverDestino(e, jugadorId, carta) {
         if (n >= 2) break;
         if (colocarAtacante(j.senderos, id, nv)) n++;
       }
-      evs.push({ tipo: "amenaza", texto: `Destino: 2 monstruos ${nv} en caminos de ${j.nombre}.` });
+      evs.push({ tipo: "amenaza", texto: `Destino: 2 monstruos ${nv} en las escaleras de ${j.nombre}.` });
       break;
     }
     case "amenaza_rival": {
@@ -1705,7 +1694,7 @@ function resolverDestino(e, jugadorId, carta) {
         const sid = priorizarSendero(rival.senderos, carta.prio);
         if (sid !== null) {
           colocarAtacante(rival.senderos, sid, nv);
-          evs.push({ tipo: "amenaza", texto: `Destino: monstruo ${nv} en el camino ${sid} de ${rival.nombre}.`, a: rivalId });
+          evs.push({ tipo: "amenaza", texto: `Destino: monstruo ${nv} en la escalera ${sid} de ${rival.nombre}.`, a: rivalId });
         }
       }
       break;
@@ -1720,7 +1709,7 @@ function resolverDestino(e, jugadorId, carta) {
     case "aniquilar_entrada":
       for (const s of j.senderos) {
         if (s.posiciones[0]) {
-          evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo en la entrada del camino ${s.id} de ${j.nombre}.` });
+          evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo en la entrada de la escalera ${s.id} de ${j.nombre}.` });
           s.posiciones[0] = null;
         }
       }
@@ -1730,7 +1719,7 @@ function resolverDestino(e, jugadorId, carta) {
         for (let p = 0; p < 4; p++) {
           const f = s.posiciones[p];
           if (f?.tipo === "atacante" && f.nivel <= carta.nivelMax) {
-            evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo ${f.nivel} en el camino ${s.id} de ${j.nombre}.` });
+            evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo ${f.nivel} en la escalera ${s.id} de ${j.nombre}.` });
             s.posiciones[p] = null;
           }
         }
@@ -1795,10 +1784,10 @@ function resolverDestino(e, jugadorId, carta) {
               s.posiciones[p - 1] = f;
               s.posiciones[p] = null;
               movidos++;
-              evs.push({ tipo: "combate", texto: `¡Miedo! El atacante ${f.nivel} destruye al monstruo ${detras.nivel} de ${otro.nombre} en el camino ${s.id}.` });
+              evs.push({ tipo: "combate", texto: `¡Miedo! El atacante ${f.nivel} destruye al monstruo ${detras.nivel} de ${otro.nombre} en la escalera ${s.id}.` });
             } else {
               s.posiciones[p] = null;
-              evs.push({ tipo: "combate", texto: `¡Miedo! El monstruo ${detras.nivel} de ${otro.nombre} destruye al atacante ${f.nivel} en el camino ${s.id}.` });
+              evs.push({ tipo: "combate", texto: `¡Miedo! El monstruo ${detras.nivel} de ${otro.nombre} destruye al atacante ${f.nivel} en la escalera ${s.id}.` });
             }
           }
         }
@@ -1816,7 +1805,7 @@ function resolverDestino(e, jugadorId, carta) {
         if (f?.tipo === "atacante" && f.nivel <= 5) {
           f.tipo = "monstruo";
           f.dueno = j.id;
-          evs.push({ tipo: "convertir", texto: `Atacante ${f.nivel} en el camino ${s.id} de ${j.nombre} se convierte en aliado.` });
+          evs.push({ tipo: "convertir", texto: `Atacante ${f.nivel} en la escalera ${s.id} de ${j.nombre} se convierte en aliado.` });
           break;
         }
       }
