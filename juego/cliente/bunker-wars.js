@@ -2175,7 +2175,10 @@ function cssAdicional() {
       top: 16.5%; height: 10.3%;
       display: flex; flex-direction: column;
       align-items: center; justify-content: flex-end;
-      gap: .7cqw; padding-bottom: .5cqw; pointer-events: none;
+      gap: .7cqw; pointer-events: none;
+      /* Aire dentro de la franja amarilla del turno: 0,3 % arriba y abajo y
+         1 % a los lados del propio marco. */
+      padding: 0.3% 1%;
     }
     .bw-hud-aviso-texto {
       font: 700 2.6cqw/1 ui-serif, Georgia, "Times New Roman", serif;
@@ -2201,22 +2204,30 @@ function cssAdicional() {
       left: 11.5%; right: 11%; top: 40.9%; bottom: 20.5%;
       display: flex; flex-direction: column;
       justify-content: center; gap: .4cqw;
-      padding: 1.7cqw 2cqw; overflow: hidden;
+      padding: 2%; overflow: hidden;
     }
 
     /* ── La fortaleza de un vistazo ──
        Dos filas: arriba tres huecos iguales —producción, vida y edificios— y
        debajo una entera con la luna y la franja de turnos. */
     .bw-hud-cuerpo {
-      display: flex; flex-direction: column; justify-content: center;
+      display: flex; flex-direction: column; justify-content: flex-start;
       gap: 1.5cqw; min-width: 0;
+      /* Ocupa todo el hueco del pergamino: así la fila del escudo puede crecer
+         y los slots quedan pegados al padding de abajo. */
+      flex: 1 1 auto;
     }
     .bw-hud-caja img { display: block; object-fit: contain; }
 
     /* Fila de arriba: monedas a la izquierda, vida en el centro y decretos a
        la derecha. */
     .bw-hud-fila { display: grid; align-items: center; min-width: 0; }
-    .bw-hud-fila.arriba { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .bw-hud-fila.arriba {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      /* Crece hasta el padding de arriba y empuja armería/ciencia/criadero
+         contra el de abajo. */
+      flex: 1 1 auto;
+    }
     .bw-hud-fila.arriba > .bw-hud-celda.izq  { grid-column: 1; }
     .bw-hud-fila.arriba > .bw-hud-vida       { grid-column: 2 / 4; }
     .bw-hud-fila.arriba > .bw-hud-celda.der  { grid-column: 4; }
