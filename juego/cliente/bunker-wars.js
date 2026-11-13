@@ -179,8 +179,13 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     sueloEl?.style.setProperty("--py-clouds",   `${sy * 0.3}px`);
     sueloEl?.style.setProperty("--py-cloud",    `${sy * 0.2}px`);
     sueloEl?.style.setProperty("--py-cloud-sm", `${sy * -0.4}px`);
-    sueloEl?.style.setProperty("--py-flags",    `${sy * 0.15}px`);
-    sueloEl?.style.setProperty("--px-flags",    `${sy * -0.42}px`);
+        /* Banderines en vertical: al hacer scroll se quedan un poco atrás (suben
+       respecto del marco). Un 5 % más de esa subida es bajar el arrastre de
+       0,15 a 0,1425. */
+    sueloEl?.style.setProperty("--py-flags",   `${sy * 0.1425}px`);
+        /* Banderines: se abren al hacer scroll (uno hacia cada lado). A −0,42 se
+       separaban demasiado rápido; un 20 % menos lento es −0,336. */
+    sueloEl?.style.setProperty("--px-flags",   `${sy * -0.336}px`);
     sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40 + 50}px`);
   }
   (pantalla ?? window).addEventListener("scroll", () => {
@@ -901,31 +906,30 @@ function pintarMiBunker(j, priv, fase) {
             <img src="${BASE_IMG}/mapas/nieve/fortress.png" class="img-fortress" alt="">
             <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
             <div class="fort-ui">
-              <div class="fort-plat energia" style="left:30.3%;top:31.8%">
+              <div class="fort-plat energia" style="left:20.5%;top:25.5%">
                 <div class="fort-cifra">${quedan.monedas}</div>
                 <div class="fort-pila-caja coins">
                   <img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt="">
-                  <div class="fort-nombre">Monedas</div>
                 </div>
               </div>
-              <div class="fort-plat vida" style="left:69.3%;top:31.8%">
+              <div class="fort-plat vida" style="left:80.5%;top:25.4%">
                 <div class="fort-cifra">${quedan.decretos}</div>
                 <div class="fort-pila-caja decrees">
                   <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">
-                  <div class="fort-nombre">Decretos</div>
                 </div>
               </div>
-              <div class="fort-circulo" style="left:31.4%;top:52.1%">
-                <div class="fort-label">Criadero · ${lab}</div>
+              <div class="fort-circulo fort-circulo-edif" style="left:24.2%;top:42.47%">
                 <div class="fort-nivel">${dots(lab,4)}</div>
+                ${lab > 0 ? `<img src="${BASE_IMG}/edificios/criadero${lab}.png" class="fort-edif-img" alt="">` : ""}
               </div>
-              <div class="fort-circulo" style="left:49.8%;top:52.5%">
+              <div class="fort-circulo" style="left:50.3%;top:47.9%">
+                ${cien > 0 ? `<img src="${BASE_IMG}/edificios/laboratorio.png" class="fort-edif-img" alt="">` : ""}
                 <div class="fort-label">Ciencia · ${cien}</div>
                 <div class="fort-nivel">${dots(cien, 2)}</div>
               </div>
-              <div class="fort-circulo" style="left:69.4%;top:52.2%">
-                <div class="fort-label">Armería · ${arm}</div>
+              <div class="fort-circulo fort-circulo-edif" style="left:76.3%;top:44.9%">
                 <div class="fort-nivel">${dots(arm,3)}</div>
+                ${arm > 0 ? `<img src="${BASE_IMG}/edificios/armeria${arm}.png" class="fort-edif-img" alt="">` : ""}
               </div>
               ${slotsHtml}
             </div>
@@ -982,8 +986,7 @@ function pintarHud(j, priv) {
   const recurso = (icono, nombre, turno, quedan) => `
         <div class="bw-rec" title="${nombre}: ${turno} por ciclo. Te quedan ${quedan}.">
           <img src="${ICONO(icono)}" alt="">
-          <b>${turno}</b>
-          <em>por ciclo</em>
+          <b>${turno}<em>/ciclo</em></b>
         </div>`;
   /* Un hueco de la fila de abajo: icono, nombre y, o los puntos de nivel, o
      un valor de texto (los huecos libres del box). */
@@ -1006,6 +1009,10 @@ function pintarHud(j, priv) {
      cuatro huecos de la fortaleza; abajo la franja de turnos. */
   return `
     <div class="bw-hud">
+      <div class="bw-hud-aviso" title="Turno en curso">
+        <span class="bw-hud-aviso-texto">${tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}</span>
+        <div class="bw-hud-turnos aviso" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
+      </div>
       <div class="bw-hud-caja" title="Fortaleza: producción, vida y edificios">
         <div class="bw-hud-cuerpo">
           <div class="bw-hud-fila arriba">
@@ -1024,9 +1031,6 @@ function pintarHud(j, priv) {
               <span class="bw-edif-puntos">${puntos(ciencia, SLOTS_CIENCIA)}</span>
             </button>
             ${edificio(null, "Criadero", criadero, 4)}
-          </div>
-          <div class="bw-hud-pie">
-            <div class="bw-hud-turnos" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
           </div>
         </div>
       </div>
@@ -2159,7 +2163,33 @@ function cssAdicional() {
          sigue siendo el del aviso de versión nueva. */
       aspect-ratio: 2172 / 1477;
       background: url('${BASE_IMG}/marco-new.png') center / 100% 100% no-repeat;
+      /* Contenedor propio: lo de dentro se mide en cqw (1 % del ancho del
+         marco), que es el único ancho honesto aquí — el marco es min(90%,
+         520px) y con vw se descuadraría en escritorio al salir la barra. */
+      container-type: inline-size;
     }
+    /* Banda de papel de arriba del marco (del 16,4 % al 27 % del alto): el
+       aviso de turno y, justo debajo, los cuadraditos de la barrita. */
+    .bw-hud-aviso {
+      position: absolute; left: 23.5cqw; right: 23.3cqw;
+      top: 16.5%; height: 10.3%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-end;
+      gap: .7cqw; padding-bottom: .5cqw; pointer-events: none;
+    }
+    .bw-hud-aviso-texto {
+      font: 700 2.6cqw/1 ui-serif, Georgia, "Times New Roman", serif;
+      color: #7a1010; letter-spacing: .02em; white-space: nowrap;
+      margin-bottom: .4cqw;
+    }
+    /* Los cuadraditos del turno, dentro del aviso: más cortos que la franja del
+       fondo del pergamino y con el ancho del marco como unidad. */
+    .bw-hud-aviso .bw-hud-turnos { width: 100%; height: 1.3cqw; gap: .6cqw; }
+    .bw-hud-aviso .bw-turno {
+      height: 100%; border-radius: 1cqw; border-width: .45cqw;
+    }
+    .bw-hud-aviso .bw-turno:not(.activo) { border-width: 1px; }
+
     /* Hueco interior del marco, en % del propio marco: deja fuera tejado,
        banderines, columnas y peana. */
     .bw-hud-caja {
@@ -2168,80 +2198,76 @@ function cssAdicional() {
          papel va del 11,4 % al 88,6 % de ancho y del 40,9 % al 79,4 % de
          alto. La caja se queda dentro: 11,5 % / 11 % de ancho y 40,9 % /
          23,3 % de alto (acaba 2,6 puntos antes del filo de abajo). */
-      left: 11.5%; right: 11%; top: 40.9%; bottom: 23.3%;
+      left: 11.5%; right: 11%; top: 40.9%; bottom: 20.5%;
       display: flex; flex-direction: column;
-      /* 10 px de aire por los cuatro lados dentro del papel. */
-      justify-content: center; gap: 2px;
-      /* 6 px arriba y abajo: las tres filas con el escudo al doble ya no caben
-         con los 10 de antes. */
-      padding: 6px 10px; overflow: hidden;
+      justify-content: center; gap: .4cqw;
+      padding: 1.7cqw 2cqw; overflow: hidden;
     }
 
     /* ── La fortaleza de un vistazo ──
        Dos filas: arriba tres huecos iguales —producción, vida y edificios— y
        debajo una entera con la luna y la franja de turnos. */
     .bw-hud-cuerpo {
-      /* Tres filas apiladas: arriba, medio y la franja de turnos. */
-      display: flex; flex-direction: column; justify-content: space-between;
-      gap: 0; min-width: 0;
-      height: 100%;
+      display: flex; flex-direction: column; justify-content: center;
+      gap: 1.5cqw; min-width: 0;
     }
     .bw-hud-caja img { display: block; object-fit: contain; }
 
     /* Fila de arriba: monedas a la izquierda, vida en el centro y decretos a
        la derecha. */
     .bw-hud-fila { display: grid; align-items: center; min-width: 0; }
-    .bw-hud-fila.arriba { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .bw-hud-fila.arriba { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .bw-hud-fila.arriba > .bw-hud-celda.izq  { grid-column: 1; }
+    .bw-hud-fila.arriba > .bw-hud-vida       { grid-column: 2 / 4; }
+    .bw-hud-fila.arriba > .bw-hud-celda.der  { grid-column: 4; }
     .bw-hud-celda { display: flex; justify-content: center; min-width: 0; }
     /* Fila del medio: cuatro columnas. Armería en la primera, la ciencia
        ocupando las dos del centro y el criadero en la última. */
-    .bw-hud-fila.medio { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+    .bw-hud-fila.medio { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6cqw; }
     .bw-hud-fila.medio > .bw-edif:nth-child(1) { grid-column: 1; }
     .bw-hud-fila.medio > .bw-edif-ciencia    { grid-column: 2 / 4; }
     .bw-hud-fila.medio > .bw-edif:nth-child(3) { grid-column: 4; }
 
     /* producción: icono y «6 por luna nueva» */
-    .bw-hud-prod { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .bw-hud-prod { display: flex; flex-direction: column; gap: .6cqw; min-width: 0; }
     /* El recurso va en columna y centrado: icono, la cifra y, debajo, «por
        ciclo» (antes decía «por luna nueva»). */
     .bw-hud-celda .bw-rec {
-      flex-direction: column; align-items: center; gap: 1px; min-width: 0;
+      flex-direction: column; align-items: center; gap: .2cqw; min-width: 0;
       margin-inline: auto;
     }
-    .bw-rec { display: flex; align-items: center; gap: 4px; min-width: 0; }
-    .bw-rec img { width: 15px; height: 15px; flex: 0 0 auto; }
+    .bw-hud-celda .bw-rec b { display: flex; align-items: baseline; gap: .2cqw; }
+    .bw-rec { display: flex; align-items: center; gap: .8cqw; min-width: 0; }
+    .bw-rec img { width: 3.5cqw; height: 3.5cqw; flex: 0 0 auto; object-fit: contain; }
     /* Todo el texto del resumen va en el rojo de los puntos y en la serif de
        las cartas. */
     .bw-rec b {
-      font: 700 13px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 700 3cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010;
     }
-    /* «por ciclo» con la misma serif de siempre, pero más grande (7 → 10 px):
-       a 7 no se leía. */
     .bw-rec em {
       font-style: normal; color: rgba(122, 16, 16, .85); white-space: nowrap;
-      font: 400 10px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 600 2.4cqw/1 ui-serif, Georgia, "Times New Roman", serif;
     }
 
-    /* vida en el centro: un tercio menos que el doble que probamos (42 → 28
-       px) y «20/20» debajo */
-    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-    .bw-hud-vida img { width: 28px; height: 28px; }
+    /* vida en el centro */
+    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: .2cqw; }
+    .bw-hud-vida img { width: 5.4cqw; height: 5.4cqw; object-fit: contain; }
     .bw-hud-vida b {
-      font: 700 13px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 700 3cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
 
     /* edificios: icono, nombre y puntos de nivel en rojo. En la fila del medio
        son cuatro y van apilados (icono, nombre, puntos) para que quepan. */
-    .bw-hud-edif { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-    .bw-edif { display: flex; align-items: center; gap: 3px; min-width: 0; }
+    .bw-hud-edif { display: flex; flex-direction: column; gap: .6cqw; min-width: 0; }
+    .bw-edif { display: flex; align-items: center; gap: .6cqw; min-width: 0; }
     /* Los cuatro huecos de la fortaleza: sin icono, cada uno en su caja roja
        de esquinas redondeadas con el texto en blanco roto. */
     .bw-hud-fila.medio .bw-edif {
-      flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
-      background: #7a1010; border-radius: 5px;
-      padding: 2px 1px 3px;
+      flex-direction: column; justify-content: center; gap: .8cqw; min-width: 0;
+      background: #7a1010; border-radius: 1cqw;
+      padding: 1.6cqw .6cqw 1.7cqw;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
     }
     .bw-hud-fila.medio .bw-edif-nombre { color: #f4ecdd; }
@@ -2260,22 +2286,18 @@ function cssAdicional() {
       background: #f4ecdd; border-color: #f4ecdd;
     }
     .bw-edif-valor {
-      font: 700 7.5px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 700 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
-    .bw-edif img { width: 13px; height: 13px; flex: 0 0 auto; }
+    .bw-edif img { width: 2.5cqw; height: 2.5cqw; flex: 0 0 auto; }
     .bw-edif-nombre {
-      font: 600 7.5px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 600 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
-    /* Los puntos van pegados al nombre, no empujados al borde, y un tercio más
-       grandes que antes (3,5 → 4,7 px). */
-    .bw-edif-puntos { display: flex; gap: 1.5px; margin-left: 2px; }
-    /* Hueco vacío: aro rojo; nivel conseguido: círculo rojo relleno. El borde
-       va dentro de la medida para que los cuatro puntos quepan en el hueco. */
+    .bw-edif-puntos { display: flex; gap: .3cqw; margin-left: .4cqw; }
     .bw-edif-puntos i {
       box-sizing: border-box;
-      width: 5px; height: 5px; border-radius: 50%;
+      width: 1cqw; height: 1cqw; border-radius: 50%;
       border: 1px solid rgba(122, 16, 16, .55); background: transparent;
     }
     .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
@@ -2286,10 +2308,10 @@ function cssAdicional() {
        resto (los márgenes negativos la sacaban fuera del papel por los lados). */
     .bw-hud-pie {
       grid-column: 1 / -1; flex: 0 0 auto;
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 1.2cqw;
       margin: 0;
     }
-    .bw-hud-pie .bw-luna { width: 12px; height: 12px; flex: 0 0 auto; }
+    .bw-hud-pie .bw-luna { width: 2.3cqw; height: 2.3cqw; flex: 0 0 auto; }
     .bw-hud-pie .bw-hud-turnos { flex: 1; }
     /* Pilas en la fortaleza: media talla (28 px, antes 56) y encogiendo con
        el mapa, para que en un móvil pequeño no se coman la peana. El alto va
@@ -2302,7 +2324,7 @@ function cssAdicional() {
     .fort-pila-caja.decrees { transform: translateY(calc(-4.6 * var(--u))); }
     /* Todo en --u (1 % del ancho del mundo) para que pilas, círculos y huecos
        crezcan con la imagen de la fortaleza al girar el móvil. */
-    .fort-pila { width: calc(8.6 * var(--u)); height: auto; display: block; margin: calc(.5 * var(--u)) auto 0; }
+    .fort-pila { width: calc(8.6 * var(--u)); height: auto; display: block; margin: calc(.5 * var(--u)) auto 0; filter: drop-shadow(0 6px 12px rgba(0,0,0,.85)); }
     /* El nombre, colgando justo debajo de la pila y en el color de su moneda. */
     .fort-nombre {
       position:absolute; top:100%; left:50%; transform:translateX(-50%);
@@ -2395,11 +2417,21 @@ function cssAdicional() {
       /* Único mando del aire entre el marco y el castillo. Lo usan el bloque
          del mapa y el tablero (fichas, lanzaderas, torres): así los círculos
          de las escaleras se mueven siempre con la imagen. */
-      /* 246 px: los 210 de antes más los 36 que crece el marco retrato arriba
-         (de 788 a 1014 de alto: 36,5 px a 390 de ancho). Con él bajan el
-         castillo, la escalera, los caminos y el tablero, que cuelgan de este
-         número. */
-      --margen-castillo: 276px;
+      /* El marco, en medidas reutilizables: 90 % del ancho del mundo (el mismo
+         ancho que usa su regla: 90 % del contenedor) con tope de 520 px, y su
+         alto según el arte 2172 × 1477. Va en --u (1 % del ancho del mundo) y
+         no en vw: con barra de scroll el 90 % del contenedor y el 90 vw no
+         miden lo mismo —la barra entra en vw y no en el %—, y el marco se
+         quedaba más estrecho que su alto calculado: todo se descuadraba al
+         cambiar el ancho de la ventana. */
+      --ancho-marco: min(90 * var(--u), 520px);
+      --alto-marco: calc(var(--ancho-marco) * 1477 / 2172);
+      /* Aire hasta el castillo: 26 px de la escena + el marco entero + 43 px de
+         aire. Antes eran 276 px en seco y, al ensanchar la pantalla, el marco
+         crecía y la fortaleza se le metía debajo: la distancia cambiaba con el
+         ancho. De aquí cuelgan el castillo, la escalera, los caminos y el
+         tablero. */
+      --margen-castillo: calc(26px + var(--alto-marco) + 11 * var(--u));
       /* Solape de la escalera sobre la fortaleza: 253 px cuando el mundo mide
          390 px, o sea el 64,9 % del ancho (bajada de 40 px sobre los 293
          originales). En proporción para que las dos imágenes se hagan
@@ -2483,24 +2515,23 @@ function cssAdicional() {
       position:absolute;
       display:flex; flex-direction:column; align-items:center; gap:calc(.77 * var(--u));
       transform:translate(-50%,-50%);
+      filter: drop-shadow(0 6px 18px rgba(0,0,0,.7));
     }
     /* El número solo, en un círculo, en el sitio que ocupaba el texto. */
     .fort-cifra {
       display:flex; align-items:center; justify-content:center;
       transform:translateY(calc(-1 * var(--u)));
-      /* El dígito, ópticamente centrado: con line-height 1 y sin descendentes
-         el número queda alto en el círculo, así que se baja un poco. */
-      /* Mismo círculo que los números de camino: 4.95u y el mismo relleno de
-         centrado; solo cambia el color, que va con su 80 % de opacidad. */
-      box-sizing:border-box; padding-top:calc(.55 * var(--u));
+      box-sizing:border-box;
       width:calc(4.95 * var(--u)); height:calc(4.95 * var(--u));
       border-radius:50%;
       font:800 calc(2.3 * var(--u))/1 ui-sans-serif, system-ui, sans-serif;
       border:0;
       box-shadow:0 1px 4px rgba(0,0,0,.55);
     }
-    .fort-plat.energia .fort-cifra { background:rgba(138,106,26,.9); color:#fff; }  /* monedas: dorado oscuro */
-    .fort-plat.vida    .fort-cifra { background:rgba(122,16,16,.9); color:#fff; }     /* decretos: rojo */
+    .fort-plat.energia .fort-cifra { background:rgba(138,106,26,.9); color:#fff; position:relative; top:calc(-3.82 * var(--u)); left:calc(1.35 * var(--u)); }
+    .fort-plat.energia .fort-pila-caja { position:relative; top:calc(-2.25 * var(--u)); left:calc(.9 * var(--u)); }
+    .fort-plat.vida    .fort-cifra { background:rgba(122,16,16,.9); color:#fff; position:relative; top:calc(-3.82 * var(--u)); left:calc(-1.35 * var(--u)); }
+    .fort-plat.vida    .fort-pila-caja { position:relative; top:calc(-3.15 * var(--u)); left:calc(-.9 * var(--u)); }
 
     .fort-label {
       font-size:calc(2.56 * var(--u)); font-weight:700; letter-spacing:.01em;
@@ -2516,6 +2547,28 @@ function cssAdicional() {
       position:absolute;
       transform:translate(-50%,-50%);
       display:flex; flex-direction:column; align-items:center; gap:calc(.5 * var(--u));
+    }
+    .fort-circulo-edif {
+      display:inline-block; position:relative;
+      padding:calc(4 * var(--u));
+    }
+    .fort-circulo-edif .fort-nivel {
+      position:absolute;
+      top:calc(2.5 * var(--u) + 3px);
+      left:50%; transform:translateX(-50%);
+      z-index:2;
+      background:rgb(122,16,16);
+      border:0;
+      padding:calc(1.4 * var(--u));
+      gap:3px;
+      white-space:nowrap;
+    }
+    .fort-circulo-edif .fort-nivel i {
+      width:calc(1.4 * var(--u)); height:calc(1.4 * var(--u));
+    }
+    .fort-edif-img {
+      width: calc(22 * var(--u)); height: auto;
+      display: block;
     }
     .fort-circulo .fort-label { border-color:rgba(130,160,255,.55); }
     .fort-nivel {
@@ -2583,17 +2636,27 @@ function cssAdicional() {
     /* Los banderines arrancan justo en el borde de abajo del marco: 6 px de la
        escena más el alto del marco (un tercio de su ancho, tope 520). */
     .capa-flags {
-      position:absolute; left:calc(-5% - 50px); right:calc(-5% + 50px); width:110%;
+      position:absolute;
+      /* Todo en % del ancho del mundo: los −50 px de antes se quedaban clavados
+         al cambiar el ancho y descuadraban el banderín. −5 % − 50 px a 390 px
+         de ancho equivale a −17,8 %, 2 puntos más hacia fuera y 20 px (5,1 %)
+         de vuelta hacia dentro. */
+      left:calc(-19.8% + 5.1 * var(--u)); width:110%;
       pointer-events:none;
-      /* 20 px más abajo que el borde del marco: -34 → -14. */
-      /* El alto del marco nuevo (2172 × 1477: 61,2 vw, tope 354 px con 520 de
-         ancho) y 25 px de subida sobre el borde (−14 + 20 − 25), 20 px menos
-         de subida que antes: de −19 px a +1 px. */
-      top:calc(1px + min(61.2vw, 354px));
-      height:calc(70vw);
+      /* Cuelgan del borde de abajo del marco (26 px de la escena + su alto),
+         25 px por encima de ese borde. El alto del marco ya es proporcional, así
+         que la distancia se mantiene al cambiar el ancho. */
+      /* 30 px más arriba, en --u (7,7 % del ancho: a 390 px son esos 30 px),
+         1 punto de subida al abrirse hacia fuera, 20 px (5,1 %) más y 8 px
+         (2,05 %) de vuelta abajo: 7,7 + 1 + 5,1 − 2,05. */
+      top:calc(26px + var(--alto-marco) - 25px - 11.8 * var(--u));
+      height:calc(70 * var(--u));
       background-image:url('${BASE_IMG}/mapas/nieve/flags.png');
       background-size:60% auto;
-      background-position:left -90px;
+      /* Los −90 px de subida del dibujo, en --u (1 % del ancho): −23,1 % a
+         390 px. En píxeles fijos el banderín no subía igual al cambiar el
+         tamaño. */
+      background-position:left calc(-23 * var(--u));
       background-repeat:no-repeat;
       z-index:2;
       transform:translateX(var(--px-flags, 0px)) translateY(var(--py-flags, 0px));
@@ -2601,16 +2664,18 @@ function cssAdicional() {
     }
     .capa-flags-r {
       /* 30 px más a la derecha que el resto del mapa: manda el left porque con
-         width:110% el right queda ignorado. */
-      position:absolute; left:calc(-5% + 23px); right:-5%; width:110%;
+         width:110% el right queda ignorado. Los +23 px van en % (−5 % + 23 px a
+         390 px equivale a 0,9 %), 2 puntos más hacia fuera y 20 px (5,1 %) de
+         vuelta hacia dentro. */
+      position:absolute; left:calc(2.9% - 5.1 * var(--u)); right:-5%; width:110%;
       pointer-events:none;
-      /* 20 px más abajo que el borde del marco: -34 → -14. */
-      /* El alto del marco nuevo y 25 px de subida sobre el borde (−14 + 20 − 25). */
-      top:calc(1px + min(61.2vw, 354px));
-      height:calc(70vw);
+      /* Mismo borde de abajo del marco y misma subida de 25 px que el otro. */
+      top:calc(26px + var(--alto-marco) - 25px - 11.8 * var(--u));
+      height:calc(70 * var(--u));
       background-image:url('${BASE_IMG}/mapas/nieve/flags-r.png');
       background-size:60% auto;
-      background-position:right -80px;
+      /* Los −80 px, en --u: −20,5 % a 390 px de ancho. */
+      background-position:right calc(-20.5 * var(--u));
       background-repeat:no-repeat;
       z-index:2;
       transform:translateX(calc(-1 * var(--px-flags, 0px))) translateY(var(--py-flags, 0px));
