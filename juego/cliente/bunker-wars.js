@@ -892,6 +892,16 @@ function pintarMiBunker(j, priv, fase) {
     return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l};top:${pos.t}">${mon ? `M${mon.nivel ?? "?"}` : ""}</div>`;
   }).join("");
 
+  /* Los tres edificios de la fortaleza, con el mismo modelo: arriba la
+     pastilla borgoña con un hueco por nivel, y debajo la imagen del edificio
+     dentro de su caja. La imagen se pinta siempre: si el nivel es 0 se usa el
+     arte del nivel 1, para poder colocar el edificio antes de construirlo. */
+  const edificioFortaleza = (izq, arriba, nivel, max, archivo, topPastilla = null) => `
+              <div class="fort-circulo fort-circulo-edif" style="left:${izq};top:${arriba}">
+                <div class="fort-nivel"${topPastilla == null ? "" : ` style="top:${topPastilla}"`}>${dots(nivel, max)}</div>
+                <img src="${BASE_IMG}/edificios/${archivo}" class="fort-edif-img" alt="">
+              </div>`;
+
   return `
     ${pintarHud(j, priv)}
     <section class="escena">
@@ -918,19 +928,9 @@ function pintarMiBunker(j, priv, fase) {
                   <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">
                 </div>
               </div>
-              <div class="fort-circulo fort-circulo-edif" style="left:24.2%;top:42.47%">
-                <div class="fort-nivel">${dots(lab,4)}</div>
-                ${lab > 0 ? `<img src="${BASE_IMG}/edificios/criadero${lab}.png" class="fort-edif-img" alt="">` : ""}
-              </div>
-              <div class="fort-circulo" style="left:50.3%;top:47.9%">
-                ${cien > 0 ? `<img src="${BASE_IMG}/edificios/laboratorio.png" class="fort-edif-img" alt="">` : ""}
-                <div class="fort-label">Ciencia · ${cien}</div>
-                <div class="fort-nivel">${dots(cien, 2)}</div>
-              </div>
-              <div class="fort-circulo fort-circulo-edif" style="left:76.3%;top:44.9%">
-                <div class="fort-nivel">${dots(arm,3)}</div>
-                ${arm > 0 ? `<img src="${BASE_IMG}/edificios/armeria${arm}.png" class="fort-edif-img" alt="">` : ""}
-              </div>
+              ${edificioFortaleza("24.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
+              ${edificioFortaleza("49.9%", "50.9%",  cien, 2, "laboratorio.png", "0")}
+              ${edificioFortaleza("76.2%", "42.47%", arm,  3, `armeria${arm > 0 ? arm : 1}.png`)}
               ${slotsHtml}
             </div>
           </div>
@@ -2548,8 +2548,11 @@ function cssAdicional() {
       transform:translate(-50%,-50%);
       display:flex; flex-direction:column; align-items:center; gap:calc(.5 * var(--u));
     }
+    /* Sin position aquí: lo pone .fort-circulo (absolute). Con relative, el
+       left/top de cada edificio solo lo desplazaba desde donde caía en el
+       flujo y las posiciones en % no significaban lo que parecían. */
     .fort-circulo-edif {
-      display:inline-block; position:relative;
+      display:inline-block;
       padding:calc(4 * var(--u));
     }
     .fort-circulo-edif .fort-nivel {
