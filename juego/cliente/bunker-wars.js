@@ -928,9 +928,9 @@ function pintarMiBunker(j, priv, fase) {
                   <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">
                 </div>
               </div>
-              ${edificioFortaleza("24.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
+              ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
               ${edificioFortaleza("49.9%", "50.9%",  cien, 2, "laboratorio.png", "0")}
-              ${edificioFortaleza("76.2%", "42.47%", arm,  3, `armeria${arm > 0 ? arm : 1}.png`)}
+              ${edificioFortaleza("24.2%", "42.47%", arm,  3, `armeria${arm > 0 ? arm : 1}.png`)}
               ${slotsHtml}
             </div>
           </div>
