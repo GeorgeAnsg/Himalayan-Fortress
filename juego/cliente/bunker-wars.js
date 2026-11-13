@@ -842,7 +842,14 @@ function pintarMiBunker(j, priv, fase) {
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%">${nivelDe(f)}</div>`;
+      /* Icono del monstruo: usa la frontal por defecto, y la vista trasera
+         cuando la ficha tiene la clase .vista-trasera (monstruos subiendo la
+         escalera). Las imágenes están en /app/juegos/bunker-wars/img/monstruos/. */
+      const imgFrontal = `${BASE_IMG}/monstruos/m1-f.png`;
+      const imgTrasera = `${BASE_IMG}/monstruos/m1-t.png`;
+      const img = f.vistaTrasera ? imgTrasera : imgFrontal;
+      const clsMonstruo = f.vistaTrasera ? "vista-trasera" : "";
+      return `<div class="ficha ${cls} ${clsMonstruo}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%">${nivelDe(f)}<img src="${img}" alt="monstruo nv1" class="ficha-img"/></div>`;
     })
   ).join("");
 
@@ -2234,7 +2241,11 @@ function cssAdicional() {
     .bw-hud-celda { display: flex; justify-content: center; min-width: 0; }
     /* Fila del medio: cuatro columnas. Armería en la primera, la ciencia
        ocupando las dos del centro y el criadero en la última. */
-    .bw-hud-fila.medio { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6cqw; }
+    /* Fila del medio: cuatro columnas. Armería en la primera, la ciencia
+       ocupando las dos del centro y el criadero en la última. La fila se
+       hace un 10% más ancha para dar respiro a los puntos y que la
+       separación coincida con la de la fortaleza. */
+    .bw-hud-fila.medio { grid-template-columns: repeat(4, minmax(0, 1.1fr)); gap: .7cqw; }
     .bw-hud-fila.medio > .bw-edif:nth-child(1) { grid-column: 1; }
     .bw-hud-fila.medio > .bw-edif-ciencia    { grid-column: 2 / 4; }
     .bw-hud-fila.medio > .bw-edif:nth-child(3) { grid-column: 4; }
@@ -2305,11 +2316,12 @@ function cssAdicional() {
       font: 600 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
-    .bw-edif-puntos { display: flex; gap: .3cqw; margin-left: .4cqw; }
+    .bw-edif-puntos { display: flex; gap: .6 * var(--u); margin-left: .5 * var(--u); }
     .bw-edif-puntos i {
       box-sizing: border-box;
-      width: 1cqw; height: 1cqw; border-radius: 50%;
+      width: 8.6 * var(--u); height: 8.6 * var(--u); border-radius: 50%;
       border: 1px solid rgba(122, 16, 16, .55); background: transparent;
+      /* Igual tamaño que las pilas de la fortaleza (8,6 * var(--u)). */
     }
     .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
 
