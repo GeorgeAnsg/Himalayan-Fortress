@@ -47,8 +47,33 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
 
   `;
   /* Las fichas que han avanzado esta ronda se deslizan hasta su casilla en vez
-     de aparecer de golpe en ella. */
-  animarFichas(contenedor);
+     de aparecer de golpe en ella. Solo cuenta como ronda de monstruos lo que
+     se mueve sin ser tuyo (los que atacan tu búnker o los del enemigo) y los
+     que acaban de aparecer: ahí se baja la vista al tablero y no se puede
+     tocar nada mientras dura el deslizamiento. */
+  /* Carta de Destino que anuncia algo de las escaleras: si va a salir ahora,
+     las fichas esperan a que se cierre la carta y la vista baje al tablero. */
+  const destino = privada?.cartaDestino ?? null;
+  const tope = totalesBunker(yo?.bunker);
+  const sinGastar = (privada?.energia ?? 0) >= tope.monedas
+    && (privada?.accionesRestantes ?? 0) >= tope.monjes;
+  const esMiCarta = destino?.jugadorId === tu;
+  const saleDestino = !!destino && teToca && esMiCarta
+    && fase === "acciones" && sinGastar && claveDestino(destino) !== destinoVisto;
+  const esperaCarta = saleDestino && DESTINO_ESCALERAS.has(destino.tipo);
+
+  const { ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta });
+  const ajenasAhora = contenedor.querySelectorAll(".ficha.atacante, .ficha.ajena").length;
+  const aparecen = ajenasPrevias !== null && ajenasAhora > ajenasPrevias;
+  ajenasPrevias = ajenasAhora;
+  const rondaDeMonstruos = ajenasMovidas > 0 || aparecen;
+  avanceRetenido = esperaCarta && rondaDeMonstruos ? reproducir : null;
+  if (rondaDeMonstruos && !esperaCarta) {
+    bajarAlTablero();
+    bloquearPorAvance(true);
+  } else if (!rondaDeMonstruos) {
+    bloquearPorAvance(false);
+  }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */
   document.getElementById("bw-nav-global")?.remove();
@@ -127,6 +152,10 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     if (!b || !enviarAccion) return;
     const accion = accionesMesa[Number(b.dataset.i)];
     if (!accion) return;
+    /* «Terminar acciones» cierra el panel: la ronda de monstruos que viene
+       detrás se ve en el tablero, no debajo de las acciones. Se cambia de
+       pestaña (y no solo se oculta) para que no vuelva a abrirse al repintar. */
+    if (accion.tipo === "pasar") activarTab("box");
     const items = [...accPanel.querySelectorAll(".bw-accion-item")];
     items.forEach(x => { x.disabled = true; });
     const r = await enviarAccion(accion);
@@ -180,6 +209,10 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     b.addEventListener("click", async () => {
       const accion = acciones[Number(b.dataset.i)];
       if (!accion || !enviarAccion) return;
+      /* «Terminar acciones» cierra el panel de acciones: lo que viene detrás (la
+         ronda de monstruos) hay que verlo en el tablero, no bajo el panel. Se
+         cambia de pestaña para que tampoco vuelva a abrirse al repintar. */
+      if (accion.tipo === "pasar") activarTab("box");
       botones.forEach((x) => { x.disabled = true; });
       const r = await enviarAccion(accion);
       if (r?.error) {
@@ -212,6 +245,9 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     if (res?.error) aviso(res.error, { error: true });
   });
 
+  /* Ciencia del HUD: al tocarla, sus cartas instaladas. */
+  contenedor.querySelector(".bw-edif-ciencia")?.addEventListener("click", abrirCiencia);
+
   /* Box: clic en monstruo para mandarlo */
   const boxEl = contenedor.querySelector(".bw-box");
   boxEl?.addEventListener("click", (ev) => {
@@ -237,11 +273,26 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      a menudo y no queremos que el panel se cierre solo). */
   activarTab(tabMesa);
 
-  /* Carta de Destino: sale sola, como una carta, en cuanto toca. */
-  const destino = privada?.cartaDestino ?? null;
-  if (destino && teToca) {
-    const k = claveDestino(destino);
-    if (k !== destinoVisto) { destinoVisto = k; abrirDestino(destino); }
+  /* Carta de Destino: sale sola al empezar TU turno, una sola vez.
+     El motor resuelve «carta» y «energía» de golpe, así que la pista de que
+     estás al principio del turno es que no has gastado nada: energía y
+     acciones siguen en su tope. Con eso, si ya has jugado una carta o hecho
+     una acción, o refrescas la app después, la carta no vuelve a salir; y en
+     monstruos, avance o lanzadera tampoco, porque en esas fases ya se gastó.
+
+     Si la carta habla de las escaleras, al cerrarla se baja al tablero y el
+     movimiento de las fichas empieza cuando la vista está abajo del todo. */
+  if (saleDestino) {
+    destinoVisto = claveDestino(destino);
+    abrirDestino(destino, {
+      alCerrar: () => {
+        const retenido = avanceRetenido;
+        avanceRetenido = null;
+        if (!retenido) { bajarAlTablero(); return; }
+        bloquearPorAvance(true);
+        bajarYDespues(retenido);
+      },
+    });
   }
 
   /* Fase LANZAR: el rival se elige en un modal, no en la lista de acciones. */
@@ -261,20 +312,105 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
 
 /* Última casilla conocida de cada ficha, para saber cuáles se han movido. */
 const fichasPrevias = new Map();
+/* Fichas de monstruos (ajenas o atacantes) que había en el tablero la última
+   vez: si ahora hay más, es que acaban de aparecer. */
+let ajenasPrevias = null;
 
-function animarFichas(raiz) {
+/* Devuelve cuántas fichas se han movido, cuántas de ellas son monstruos que no
+   son tuyos y una función para lanzar el deslizamiento cuando toque.
+
+   Con `diferir` las fichas se quedan pintadas en su casilla de salida y el
+   movimiento no empieza hasta llamar a `reproducir()`: así, cuando la carta de
+   Destino anuncia algo de las escaleras, primero se cierra la carta y se baja
+   al tablero, y solo entonces se ve aparecer o avanzar a los monstruos. */
+function animarFichas(raiz, { diferir = false } = {}) {
+  let movidas = 0;
+  let ajenas = 0;
+  const esAjena = (el) => el.classList.contains("atacante") || el.classList.contains("ajena");
+  const pendientes = [];
+
   for (const el of raiz.querySelectorAll(".ficha[data-ol]")) {
     const ol = el.dataset.ol;
     const ot = el.dataset.ot;
+    const finL = el.style.left;
+    const finT = el.style.top;
     el.removeAttribute("data-ol");
     el.removeAttribute("data-ot");
-    /* Web Animations: no hace falta que el navegador pinte antes la casilla de
-       salida, así que la ficha se desliza siempre (2 s de casilla a casilla). */
-    el.animate?.(
-      [{ left: `${ol}%`, top: `${ot}%` }, { left: el.style.left, top: el.style.top }],
-      { duration: 2000, easing: "cubic-bezier(.45,.05,.3,1)" }
-    );
+    if (diferir) { el.style.left = `${ol}%`; el.style.top = `${ot}%`; }
+    pendientes.push({ el, ol, ot, finL, finT });
+    movidas++;
+    if (esAjena(el)) ajenas++;
   }
+
+  const reproducir = () => {
+    for (const { el, ol, ot, finL, finT } of pendientes) {
+      el.style.left = finL;
+      el.style.top = finT;
+      /* Web Animations: no hace falta que el navegador pinte antes la casilla de
+         salida, así que la ficha se desliza siempre (2 s de casilla a casilla). */
+      el.animate?.(
+        [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }],
+        { duration: 2000, easing: "cubic-bezier(.45,.05,.3,1)" }
+      );
+    }
+  };
+
+  if (!diferir) reproducir();
+  return { movidas, ajenas, reproducir };
+}
+
+/* Lleva la pantalla hasta abajo y, cuando deja de moverse, hace lo que le
+   manden. Se usa para que la animación no se gaste mientras todavía se está
+   desplazando la vista. */
+function bajarYDespues(alBajar) {
+  const pantalla = document.getElementById("pantalla");
+  if (!pantalla?.scrollTo) { alBajar?.(); return; }
+  pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" });
+  let ultima = pantalla.scrollTop;
+  let quieta = 0;
+  let frames = 0;
+  const paso = () => {
+    const y = pantalla.scrollTop;
+    quieta = Math.abs(y - ultima) < 1 ? quieta + 1 : 0;
+    ultima = y;
+    /* Dos frames sin moverse o 1,2 s de tope: la vista ya está abajo. */
+    if (quieta >= 2 || ++frames > 72) { alBajar?.(); return; }
+    requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
+}
+
+/* Tipos de carta de Destino que hablan de las escaleras: monstruos que llegan,
+   que avanzan, que se retiran, que cambian de nivel… Si sale una de estas, la
+   vista baja al tablero antes de que se muevan las fichas. */
+const DESTINO_ESCALERAS = new Set([
+  "amenaza", "amenaza_doble", "amenaza_triple", "amenaza_rival",
+  "colocar_monstruos", "aniquilar_entrada", "aniquilar_nivel", "matar_mayor",
+  "avanzar_extra", "miedo", "convertir_aliado", "subir_monstruos", "bajar_monstruos",
+]);
+/* Avance retenido a la espera de que se cierre la carta de Destino. */
+let avanceRetenido = null;
+
+/* Ronda de monstruos: la vista baja sola hasta el tablero, que es donde ocurre
+   el avance, para no perderse la animación de 2 s. */
+function bajarAlTablero() {
+  const pantalla = document.getElementById("pantalla");
+  if (!pantalla?.scrollTo) return;
+  /* Dos pasadas: la primera coloca el final actual y la segunda, tras el
+     repintado, ajusta por si la escena ha cambiado de alto. */
+  pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" });
+  requestAnimationFrame(() => pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" }));
+}
+
+/* Mientras dura la fase de avance ninguna acción del usuario responde: no se
+   toca una casilla que aún se está moviendo. Se apaga al llegar la siguiente
+   fase; el reloj es solo una red por si esa fase no llegara. */
+let relojAvance = null;
+function bloquearPorAvance(activo) {
+  clearTimeout(relojAvance);
+  if (!activo) { document.body.classList.remove("bw-avanzando"); return; }
+  document.body.classList.add("bw-avanzando");
+  relojAvance = setTimeout(() => document.body.classList.remove("bw-avanzando"), 4000);
 }
 
 /* ── Modal de lanzadera: elegir rival y camino ───────────────────────────── */
@@ -537,7 +673,7 @@ function relatoDestino(d) {
     case "bajar_monstruos":
       return "Los monstruos de nivel 2 o más pierden su rango: la montaña los humilla.";
     case "colocar_monstruos":
-      return `Los criaderos han parido nuevas bestias: <strong>${cant} ${esc(pluralMonstruo(n))}</strong> salen a defenderte.`;
+      return `Los criaderos han parido nuevas bestias: <strong>${cant} ${esc(pluralMonstruo(n))}</strong> aparecen en tu box, listas para salir a defenderte.`;
     case "carta_roja":
       return "La luna se tiñe de rojo: desde ahora los monstruos llegan con su nivel real.";
     default:
@@ -571,7 +707,7 @@ function imgDestino(d) {
   return `${BASE_IMG}/cartas/azul/${mapa[d.tipo] ?? "monstruo-nv1"}.png`;
 }
 
-function abrirDestino(d) {
+function abrirDestino(d, { alCerrar } = {}) {
   document.getElementById("bw-modal-destino")?.remove();
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-destino";
@@ -591,8 +727,12 @@ function abrirDestino(d) {
   document.body.appendChild(fondo);
 
   /* Sin X y sin cerrar tocando el fondo: de aquí solo se sale con «Entendido»,
-     para que la carta del turno no se quede sin leer. */
-  fondo.querySelector(".bw-modal-usar").addEventListener("click", () => fondo.remove());
+     para que la carta del turno no se quede sin leer. Al cerrar se avisa, que
+     es cuando toca bajar al tablero y soltar las animaciones. */
+  fondo.querySelector(".bw-modal-usar").addEventListener("click", () => {
+    fondo.remove();
+    alCerrar?.();
+  });
 }
 
 /* ── Mi búnker: escena completa del demo ──────────────────────────────────── */
@@ -631,7 +771,13 @@ function pintarMiBunker(j, priv, fase) {
   const lanzaderas = priv?.lanzaderas ?? [null, null];
   const s    = j?.senderos ?? [{}, {}, {}];
   const torres = j?.bunker?.torres ?? [null, null, null];
-  const tot = totalesBunker(j?.bunker);
+  /* Las dos cifras de la fortaleza son lo que te queda AHORA, no la producción
+     del turno (esa ya va en el resumen de arriba, «N por luna nueva»): así
+     bajan al jugar una carta, crear un monstruo o disparar una torre. */
+  const quedan = {
+    monedas:  energia,
+    decretos: priv?.accionesRestantes ?? 0,
+  };
 
   /* Puntos indicadores de nivel (dots) */
   const dots = (n, max) => Array.from({length: max}, (_, i) =>
@@ -664,6 +810,15 @@ function pintarMiBunker(j, priv, fase) {
      390 px): la peana de su casilla se mueve con ella. */
   const TORRES_POS = [{l:"26.55",t:"32.28"},{l:"49.92",t:"32.28"},{l:"74.13",t:"32.28"}];
 
+  /* Casilla virtual de entrada, una por escalera: la que sale de prolongar la
+     recta que forman las dos primeras losas hacia abajo. No existe en el
+     tablero, solo sirve para dibujar al monstruo naciendo por debajo y verle
+     subir hasta su casilla cuando entra. */
+  const ENTRADA = LOSAS.map(([a, b]) => ({
+    l: (2 * Number(a.l) - Number(b.l)).toFixed(2),
+    t: (2 * Number(a.t) - Number(b.t)).toFixed(2),
+  }));
+
   /* Fichas reales */
   const fichasHtml = [0,1,2].flatMap(i =>
     [0,1,2,3].map(paso => {
@@ -673,10 +828,13 @@ function pintarMiBunker(j, priv, fase) {
       const esAtacante = f.tipo === "atacante";
       const cls = esAtacante ? (f.dueno ? "ajena" : "atacante") : "mia";
       /* Si la ficha viene de otra casilla, se pinta en la de antes y se mueve
-         a la nueva: así se ve el avance del turno. */
+         a la nueva: así se ve el avance del turno. Si no la habíamos visto
+         nunca y entra por el primer peldaño, sale de la casilla virtual de
+         abajo: es la entrada desde la bruma. */
       const antes = f.id ? fichasPrevias.get(f.id) : null;
       const movida = !!antes && (antes.calle !== i || antes.paso !== paso);
-      const desde = movida ? LOSAS[antes.calle][antes.paso] : null;
+      const entra = !antes && paso === 0;
+      const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
       return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%">${nivelDe(f)}</div>`;
@@ -714,10 +872,19 @@ function pintarMiBunker(j, priv, fase) {
   )).join("");
 
   /* Slots de box en la fort-ui */
-  const slotPos = [{l:"37.6",t:"63.5"},{l:"37.6",t:"73.1"},{l:"62.7",t:"64.1"},{l:"63.1",t:"72.7"}];
+  /* Cuatro huecos de la fortaleza: arriba-izquierda, abajo-izquierda,
+     arriba-derecha y abajo-derecha. Los retoques van en --u (1 % del ancho del
+     mundo) para que sigan en su sitio al girar el móvil. */
+  const slotPos = [
+    { l:"37.6%",                            t:"calc(63.5% - 1.28 * var(--u))" },  // 5 px arriba
+    { l:"calc(37.6% + 0.51 * var(--u))",   t:"calc(73.1% - 1.28 * var(--u))" },  // 5 arriba, 2 dcha
+    { l:"calc(62.7% + 0.51 * var(--u))",   t:"calc(64.1% - 2.56 * var(--u))" },  // 10 arriba, 2 dcha
+    { l:"63.1%",                            t:"calc(72.7% - 0.51 * var(--u))" },  // 2 px arriba
+  ];
   const slotsHtml = slotPos.map((pos, i) => {
     const mon = box[i];
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l}%;top:${pos.t}%">${mon ? `M${mon.nivel ?? "?"}` : ""}</div>`;
+    // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l};top:${pos.t}">${mon ? `M${mon.nivel ?? "?"}` : ""}</div>`;
   }).join("");
 
   return `
@@ -735,21 +902,21 @@ function pintarMiBunker(j, priv, fase) {
             <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
             <div class="fort-ui">
               <div class="fort-plat energia" style="left:30.3%;top:31.8%">
-                <div class="fort-cifra">${tot.monedas}</div>
+                <div class="fort-cifra">${quedan.monedas}</div>
                 <div class="fort-pila-caja coins">
-                  <img src="${pilaCoins(tot.monedas)}" class="fort-pila" alt="">
+                  <img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt="">
                   <div class="fort-nombre">Monedas</div>
                 </div>
               </div>
               <div class="fort-plat vida" style="left:69.3%;top:31.8%">
-                <div class="fort-cifra">${tot.monjes}</div>
+                <div class="fort-cifra">${quedan.decretos}</div>
                 <div class="fort-pila-caja decrees">
-                  <img src="${pilaDecrees(tot.monjes)}" class="fort-pila" alt="">
+                  <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">
                   <div class="fort-nombre">Decretos</div>
                 </div>
               </div>
               <div class="fort-circulo" style="left:31.4%;top:52.1%">
-                <div class="fort-label">Laboratorio · ${lab}</div>
+                <div class="fort-label">Criadero · ${lab}</div>
                 <div class="fort-nivel">${dots(lab,4)}</div>
               </div>
               <div class="fort-circulo" style="left:49.8%;top:52.5%">
@@ -774,9 +941,9 @@ function pintarMiBunker(j, priv, fase) {
 
         <div class="tablero">
           <div class="bw-layer">
-            <div class="num-calle" style="left:24.5%;top:83%">1</div>
-            <div class="num-calle" style="left:49.2%;top:83%">2</div>
-            <div class="num-calle" style="left:73.2%;top:83%">3</div>
+            <div class="num-calle" style="left:calc(24.5% - 0.51 * var(--u));top:83%">1</div>
+            <div class="num-calle" style="left:calc(49.2% + 0.77 * var(--u));top:83%">2</div>
+            <div class="num-calle" style="left:calc(73.2% + 4.62 * var(--u));top:83%">3</div>
           </div>
           <div class="bw-layer">${lanzHtml}</div>
           <div class="bw-layer">${losasHtml}</div>
@@ -804,6 +971,7 @@ function pintarHud(j, priv) {
      laboratorio. */
   const armeria = j?.bunker?.armeria ?? 0;
   const criadero = j?.bunker?.laboratorio ?? 0;
+  const ciencia = (j?.bunker?.ciencia ?? []).length;
   const ICONO = (n) => `${BASE_IMG}/iconos/${n}.png`;
 
   /* Un punto por nivel de edificio: lleno en rojo los que tiene. */
@@ -812,15 +980,18 @@ function pintarHud(j, priv) {
 
   /* La unidad de la partida es la luna: cada luna nueva, tantas monedas. */
   const recurso = (icono, nombre, turno, quedan) => `
-        <div class="bw-rec" title="${nombre}: ${turno} por luna nueva. Te quedan ${quedan}.">
+        <div class="bw-rec" title="${nombre}: ${turno} por ciclo. Te quedan ${quedan}.">
           <img src="${ICONO(icono)}" alt="">
-          <b>${turno}</b><em>por luna nueva</em>
+          <b>${turno}</b>
+          <em>por ciclo</em>
         </div>`;
-  const edificio = (icono, nombre, nivel) => `
-        <div class="bw-edif" title="${nombre} a nivel ${nivel}">
-          <img src="${ICONO(icono)}" alt="">
+  /* Un hueco de la fila de abajo: icono, nombre y, o los puntos de nivel, o
+     un valor de texto (los huecos libres del box). */
+  const edificio = (icono, nombre, nivel, max = 4, valor = null) => `
+        <div class="bw-edif" title="${nivel == null ? nombre : `${nombre} a nivel ${nivel}`}">
+          ${icono ? `<img src="${ICONO(icono)}" alt="">` : ""}
           <span class="bw-edif-nombre">${nombre}</span>
-          <span class="bw-edif-puntos">${puntos(nivel)}</span>
+          ${valor ?? `<span class="bw-edif-puntos">${puntos(nivel, max)}</span>`}
         </div>`;
 
   /* Grid de turnos pegado al fondo del marco: un slot por jugador. */
@@ -831,21 +1002,28 @@ function pintarHud(j, priv) {
   const nTurnos = Math.max(1, jugadoresMesa.length);
   const nivelVida = vida > 12 ? "alta" : vida > 6 ? "media" : "baja";
 
+  /* Tres filas: arriba las monedas, la vida y los decretos; en medio los
+     cuatro huecos de la fortaleza; abajo la franja de turnos. */
   return `
     <div class="bw-hud">
       <div class="bw-hud-caja" title="Fortaleza: producción, vida y edificios">
         <div class="bw-hud-cuerpo">
-          <div class="bw-hud-prod">
-            ${recurso("monedas", "Monedas", tot.monedas, energia)}
-            ${recurso("pergaminos", "Decretos", tot.monjes, acciones)}
+          <div class="bw-hud-fila arriba">
+            <div class="bw-hud-celda izq">${recurso("monedas", "Monedas", tot.monedas, energia)}</div>
+            <div class="bw-hud-vida ${nivelVida}" title="Vida del búnker: ${vida} de 20">
+              <img src="${ICONO("escudo")}" alt="">
+              <b>${vida}/20</b>
+            </div>
+            <div class="bw-hud-celda der">${recurso("pergaminos", "Decretos", tot.monjes, acciones)}</div>
           </div>
-          <div class="bw-hud-vida ${nivelVida}" title="Vida del búnker: ${vida} de 20">
-            <img src="${ICONO("escudo")}" alt="">
-            <b>${vida} de 20</b>
-          </div>
-          <div class="bw-hud-edif">
-            ${edificio("espadas", "Armería", armeria)}
-            ${edificio("calavera", "Criadero", criadero)}
+          <div class="bw-hud-fila medio">
+            ${edificio(null, "Armería", armeria, 3)}
+            <button type="button" class="bw-edif bw-edif-ciencia" data-ciencia="1"
+                    title="Ciencia: ${ciencia} de ${SLOTS_CIENCIA}. Toca para ver las cartas instaladas.">
+              <span class="bw-edif-nombre">Ciencia</span>
+              <span class="bw-edif-puntos">${puntos(ciencia, SLOTS_CIENCIA)}</span>
+            </button>
+            ${edificio(null, "Criadero", criadero, 4)}
           </div>
           <div class="bw-hud-pie">
             <div class="bw-hud-turnos" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
@@ -937,12 +1115,12 @@ function pintarManuscritos() {
       ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
     `)}
 
-    ${seccion("Laboratorio", `
-      ${fila("Laboratorio 1", "crea hasta Nv 1", "")}
-      ${fila("Laboratorio 2", "crea hasta Nv 2", "2 mon.")}
-      ${fila("Laboratorio 3", "crea hasta Nv 3", "2 mon.")}
-      ${fila("Laboratorio 4", "crea hasta Nv 5", "2 mon.")}
-      ${parrafo("Se sube en orden y la carta cuesta 2 monedas. El nivel 7 nunca sale del laboratorio: solo llega por Destino o subiendo de rango.")}
+    ${seccion("Criadero", `
+      ${fila("Criadero 1", "crea hasta Nv 1", "")}
+      ${fila("Criadero 2", "crea hasta Nv 2", "2 mon.")}
+      ${fila("Criadero 3", "crea hasta Nv 3", "2 mon.")}
+      ${fila("Criadero 4", "crea hasta Nv 5", "2 mon.")}
+      ${parrafo("Se sube en orden y la carta cuesta 2 monedas. El nivel 7 nunca sale del criadero: solo llega por Destino o subiendo de rango.")}
     `)}
 
     ${seccion("Armería", `
@@ -998,7 +1176,7 @@ function textoDestino(d) {
     case "convertir_aliado":return "Convierte un monstruo atacante en un monstruo tuyo";
     case "subir_monstruos": return "Tus monstruos de nivel 5 o inferior suben un rango";
     case "bajar_monstruos": return "Tus monstruos de nivel 2 o superior bajan un rango";
-    case "colocar_monstruos": return `Coloca ${d.cantidad ?? 3} monstruos de nivel ${n} saliendo de tu búnker`;
+    case "colocar_monstruos": return `Pon ${d.cantidad ?? 3} monstruos de nivel ${n} en tu box (criadero)`;
     case "carta_roja":      return "¡Carta roja! Desde ahora los monstruos suben de nivel";
     default:                return String(d.tipo ?? "");
   }
@@ -1031,9 +1209,9 @@ const NOMBRES_EFECTO = {
   torreta2_gratis:      "Torre de nivel 2",
   monstruo3_gratis:     "Monstruo de nivel 3",
   subir_armeria:        "Subir armería",
-  subir_laboratorio:    "Subir laboratorio",
+  subir_laboratorio:    "Subir criadero",
   subir_recursos:       "Subir recursos",
-  subir_lab_o_arm:      "Laboratorio o armería",
+  subir_lab_o_arm:      "Criadero o armería",
 };
 
 let enviarAccion = null;
@@ -1058,7 +1236,10 @@ const BASE_IMG   = "/app/juegos/bunker-wars/img";
 const ASSETS_IMG = "/app/juegos/bunker-wars/img/coins-and-decrees";
 const CARD_BG    = `${BASE_IMG}/card.png`;
 
-function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(1, Math.ceil(n / 14 * 7)))}.png`; }
+/* Las pilas van 1:1 con la cifra (7 imágenes como tope). Antes las monedas se
+   repartían sobre el máximo de producción (14), así que 4 monedas enseñaban la
+   pila de 2: al pasar a «lo que queda» el dibujo tiene que ser el número. */
+function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(1, n))}.png`; }
 function pilaDecrees(n) { return `${ASSETS_IMG}/decrees_${Math.min(7, Math.max(1, n))}.png`; }
 const SLOTS_CIENCIA = 2;
 
@@ -1066,7 +1247,7 @@ function defsCarta(c) {
   const defs = {
     recursos:    { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`, cls: "recursos",    costo: c.coste },
     armeria:     { emoji: "🔧", label: c.titulo ?? `Armería nv${c.nivel ?? ""}`,  cls: "armeria",     costo: c.coste },
-    laboratorio: { emoji: "🧪", label: c.titulo ?? `Laboratorio nv${c.nivel ?? ""}`, cls: "laboratorio", costo: c.coste },
+    laboratorio: { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`, cls: "laboratorio", costo: c.coste },
     ciencia:     { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia", cls: "ciencia", costo: c.coste },
     ciencia_i:   { emoji: "⚗️", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Inmediata", cls: "ciencia_i", costo: c.coste },
   };
@@ -1210,7 +1391,7 @@ function abrirCarta(el) {
         ${reemplazos
           ? reemplazos.map(c => `<button type="button" class="bw-modal-usar" data-reemplazo="${esc(c.efecto ?? "")}"${jugable ? "" : " disabled"}>Quitar ${esc(NOMBRES_EFECTO[c.efecto] ?? c.titulo ?? c.efecto ?? "?")}</button>`).join("")
           : elecciones
-            ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable ? "" : " disabled"}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir laboratorio") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
+            ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable ? "" : " disabled"}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir criadero") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
             : `<button type="button" class="bw-modal-usar"${puedeUsar ? "" : " disabled"}${opciones.length === 1 ? ` data-accion="${accionesMesa.indexOf(opciones[0])}"` : ""}>Usar carta</button>`}
       </div>
       ${motivo ? `<p class="bw-modal-nota">${esc(motivo)}</p>` : ""}
@@ -1241,6 +1422,47 @@ function abrirCarta(el) {
 function cerrarCarta() {
   document.getElementById("bw-modal-carta")?.remove();
   document.removeEventListener("keydown", escaparCarta);
+}
+
+/* ── Ciencia instalada: sus cartas, en el mismo papel que la carta grande ──
+   Caben dos (SLOTS_CIENCIA): se muestran una al lado de la otra, o una sola
+   si solo hay una. */
+function abrirCiencia() {
+  document.getElementById("bw-modal-ciencia")?.remove();
+  const cartas = cienciasMesa ?? [];
+
+  const celda = (c) => {
+    const t = defsCarta(c);
+    return `
+      <div class="bw-carta-grande">
+        <span class="bw-carta-coste-grande">${c.coste ?? 0}</span>
+        <div class="bw-carta-grande-img"><img src="${esc(imgCarta(c.tipo, c.nivel))}" alt=""></div>
+        <div class="bw-carta-grande-texto">
+          <div class="bw-carta-grande-titulo">${esc(t.label)}</div>
+          <p class="bw-carta-grande-desc">${conNegritas(c.descripcion)}</p>
+        </div>
+      </div>`;
+  };
+
+  const fondo = document.createElement("div");
+  fondo.id = "bw-modal-ciencia";
+  fondo.className = "bw-modal-fondo";
+  fondo.innerHTML = `
+    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Ciencia instalada">
+      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
+      <div class="bw-ciencia-fila${cartas.length > 1 ? " dos" : ""}">
+        ${cartas.length
+          ? cartas.map(celda).join("")
+          : `<p class="bw-modal-nota">Todavía no tienes ninguna ciencia instalada.</p>`}
+      </div>
+    </div>`;
+  document.body.appendChild(fondo);
+
+  const cerrar = () => fondo.remove();
+  const escapar = (ev) => { if (ev.key === "Escape") { cerrar(); document.removeEventListener("keydown", escapar); } };
+  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
+  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
+  document.addEventListener("keydown", escapar);
 }
 
 function abrirEnvio(mon) {
@@ -1483,8 +1705,8 @@ function css() {
       display:flex; flex-direction:column; align-items:center;
       padding-top:9%; gap:2px;
       color:#2a1808;
-      /* Asoma más carta: 54 % (57 px) → 45 % (68 px) → 39 % (75 px) → 33 %,
-         y ahora 43 %: 10 puntos más metidas, estaban muy salidas. */
+      /* Cuánto queda metida la carta bajo el menú: 54 % → 45 % → 39 % → 33 %
+         → 43 % → 38 % → 43 % (los 5 puntos de abajo que faltaban). */
       transform:translateY(43%);
       transition:transform .18s ease, box-shadow .18s ease;
       position:relative; user-select:none;
@@ -1492,7 +1714,7 @@ function css() {
     /* Todas las cartas suben igual al pulsarlas, aunque no te llegue para
        jugarla: la animación no depende de si la carta es jugable. */
     .bw-carta:hover, .bw-carta:active {
-      /* Al pulsarla sube solo un 10 % del alto, no el 37 % de antes */
+      /* Al pulsarla sube solo un 5 % del alto, para que no dé un salto */
       transform:translateY(33%); box-shadow:0 14px 28px rgba(0,0,0,.8);
     }
     .bw-carta.descartable { outline:2px solid rgba(224,83,63,.7); }
@@ -1505,13 +1727,18 @@ function css() {
     }
     .bw-carta .bw-carta-img {
       order:2;
-      /* 26 % → 34 % → 41 %: el dibujo queda un 55 % más grande que al principio.
+      /* 26 % → 34 % → 41 % → 49,2 % (+20 % sobre 41): el dibujo es cuadrado y
+         el alto es lo que lo limita, así que subir el alto un 20 % lo agranda
+         un 20 % sin tocar el ancho, que ya sobra.
          Sin transform, porque un transform aquí aísla al <img> y el
          mix-blend-mode:multiply deja de fundirse con el papel de la carta. */
-      flex:0 0 41%; width:91%;
+      flex:0 0 49.2%; width:91%;
       margin-top:3px;
       display:flex; align-items:center; justify-content:center;
       overflow:hidden;
+      /* Los mismos 12 px que el título, con la misma técnica (solo pintura),
+         para no repetir el transform que rompía el multiply del dibujo. */
+      position:relative; top:8.5cqw;
     }
     .bw-carta .bw-carta-img img {
       width:100%; height:100%; object-fit:contain;
@@ -1525,6 +1752,11 @@ function css() {
       /* −17 px sobre una carta de 82 px de ancho: en % del ancho, para que
          suba lo mismo en cualquier tamaño. */
       margin-top:-20.7cqw;
+      /* 12 px más abajo dentro de la carta (14.6 cqw a 82 px de ancho), menos
+         los 5 px que sube ahora (6.1 cqw): queda en 8.5 cqw. Se mueve sin
+         tocar el reparto del flex, así que ni el título ni el dibujo cambian
+         de tamaño ni empujan nada. */
+      position:relative; top:8.5cqw;
     }
 
     /* Modal carta ampliada */
@@ -1558,6 +1790,10 @@ function css() {
       animation:bwCartaAbre .18s ease;
     }
     @keyframes bwCartaAbre { from { opacity:0; transform:scale(.9) translateY(10px); } to { opacity:1; transform:none; } }
+    /* Ciencia instalada: una o dos cartas, una al lado de la otra. Con dos se
+       estrechan para que quepan de sobra en el móvil. */
+    .bw-ciencia-fila { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .bw-ciencia-fila.dos .bw-carta-grande { width: min(42vw, 172px); }
     .bw-carta-coste-grande {
       position:absolute; top:calc(3.5% - 5px); left:50%; transform:translateX(-50%);
       width:16%; aspect-ratio:1;
@@ -1849,7 +2085,7 @@ function cssAdicional() {
     body.bw-himalaya .turno-aviso {
       position: fixed !important;
       /* Debajo del marco: 33 px del alto + el marco completo */
-      top: calc(env(safe-area-inset-top, 0px) + 59px + min(45.4vw, 243px)) !important;
+      top: calc(env(safe-area-inset-top, 0px) + 59px + min(66.1vw, 354px)) !important;
       left: 50% !important; right: auto !important; bottom: auto !important;
       transform: translateX(-50%) !important;
       margin: 0 !important; width: auto !important; max-width: 86vw !important;
@@ -1918,65 +2154,115 @@ function cssAdicional() {
       /* 20 px más abajo que el borde de la escena (antes 6). */
       top: 26px;
       z-index: 16; box-sizing: border-box; pointer-events: none;
-      /* El marco nuevo: 2172 × 1014, con más pergamino para meter más datos.
-         El pequeño (marco.png) sigue siendo el del aviso de versión nueva. */
-      aspect-ratio: 2172 / 1014;
+      /* El marco nuevo: 2172 × 1477, con el pergamino grande abajo y una
+         franja de papel arriba para lo que venga. El pequeño (marco.png)
+         sigue siendo el del aviso de versión nueva. */
+      aspect-ratio: 2172 / 1477;
       background: url('${BASE_IMG}/marco-new.png') center / 100% 100% no-repeat;
     }
     /* Hueco interior del marco, en % del propio marco: deja fuera tejado,
        banderines, columnas y peana. */
     .bw-hud-caja {
       position: absolute;
-      /* Hueco del pergamino medido sobre marco-new.png (2172 × 1014): el papel
-         va del 11,3 % al 88,7 % de ancho y del 29,6 % al 79,8 % de alto. La
-         caja se queda dentro: 11,5 % / 11 % y 29,6 % / 22,8 % (acaba 2,6
-         puntos antes del filo del papel, como antes). */
-      left: 11.5%; right: 11%; top: 29.6%; bottom: 22.8%;
+      /* Hueco del pergamino grande medido sobre el marco de 2172 × 1477: el
+         papel va del 11,4 % al 88,6 % de ancho y del 40,9 % al 79,4 % de
+         alto. La caja se queda dentro: 11,5 % / 11 % de ancho y 40,9 % /
+         23,3 % de alto (acaba 2,6 puntos antes del filo de abajo). */
+      left: 11.5%; right: 11%; top: 40.9%; bottom: 23.3%;
       display: flex; flex-direction: column;
       /* 10 px de aire por los cuatro lados dentro del papel. */
       justify-content: center; gap: 2px;
-      padding: 10px; overflow: hidden;
+      /* 6 px arriba y abajo: las tres filas con el escudo al doble ya no caben
+         con los 10 de antes. */
+      padding: 6px 10px; overflow: hidden;
     }
 
     /* ── La fortaleza de un vistazo ──
        Dos filas: arriba tres huecos iguales —producción, vida y edificios— y
        debajo una entera con la luna y la franja de turnos. */
     .bw-hud-cuerpo {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      align-items: center; gap: 2px 6px; min-width: 0;
-      /* La rejilla se estira hasta llenar el papel: la primera fila arriba y la
-         franja de turnos arrastrada al borde de abajo. */
-      height: 100%; align-content: space-between;
+      /* Tres filas apiladas: arriba, medio y la franja de turnos. */
+      display: flex; flex-direction: column; justify-content: space-between;
+      gap: 0; min-width: 0;
+      height: 100%;
     }
     .bw-hud-caja img { display: block; object-fit: contain; }
 
+    /* Fila de arriba: monedas a la izquierda, vida en el centro y decretos a
+       la derecha. */
+    .bw-hud-fila { display: grid; align-items: center; min-width: 0; }
+    .bw-hud-fila.arriba { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .bw-hud-celda { display: flex; justify-content: center; min-width: 0; }
+    /* Fila del medio: cuatro columnas. Armería en la primera, la ciencia
+       ocupando las dos del centro y el criadero en la última. */
+    .bw-hud-fila.medio { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+    .bw-hud-fila.medio > .bw-edif:nth-child(1) { grid-column: 1; }
+    .bw-hud-fila.medio > .bw-edif-ciencia    { grid-column: 2 / 4; }
+    .bw-hud-fila.medio > .bw-edif:nth-child(3) { grid-column: 4; }
+
     /* producción: icono y «6 por luna nueva» */
     .bw-hud-prod { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    /* El recurso va en columna y centrado: icono, la cifra y, debajo, «por
+       ciclo» (antes decía «por luna nueva»). */
+    .bw-hud-celda .bw-rec {
+      flex-direction: column; align-items: center; gap: 1px; min-width: 0;
+      margin-inline: auto;
+    }
     .bw-rec { display: flex; align-items: center; gap: 4px; min-width: 0; }
     .bw-rec img { width: 15px; height: 15px; flex: 0 0 auto; }
     /* Todo el texto del resumen va en el rojo de los puntos y en la serif de
        las cartas. */
     .bw-rec b {
-      font: 700 11px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 700 13px/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010;
     }
+    /* «por ciclo» con la misma serif de siempre, pero más grande (7 → 10 px):
+       a 7 no se leía. */
     .bw-rec em {
-      font-style: normal; color: rgba(122, 16, 16, .8); white-space: nowrap;
-      font: 400 7px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font-style: normal; color: rgba(122, 16, 16, .85); white-space: nowrap;
+      font: 400 10px/1 ui-serif, Georgia, "Times New Roman", serif;
     }
 
-    /* vida en el centro: el icono un poco más grande y «20 de 20» */
-    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-    .bw-hud-vida img { width: 21px; height: 21px; }
+    /* vida en el centro: un tercio menos que el doble que probamos (42 → 28
+       px) y «20/20» debajo */
+    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .bw-hud-vida img { width: 28px; height: 28px; }
     .bw-hud-vida b {
-      font: 700 11px/1 ui-serif, Georgia, "Times New Roman", serif;
+      font: 700 13px/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
 
-    /* edificios a la derecha: icono, nombre y puntos de nivel en rojo */
+    /* edificios: icono, nombre y puntos de nivel en rojo. En la fila del medio
+       son cuatro y van apilados (icono, nombre, puntos) para que quepan. */
     .bw-hud-edif { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .bw-edif { display: flex; align-items: center; gap: 3px; min-width: 0; }
+    /* Los cuatro huecos de la fortaleza: sin icono, cada uno en su caja roja
+       de esquinas redondeadas con el texto en blanco roto. */
+    .bw-hud-fila.medio .bw-edif {
+      flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
+      background: #7a1010; border-radius: 5px;
+      padding: 2px 1px 3px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
+    }
+    .bw-hud-fila.medio .bw-edif-nombre { color: #f4ecdd; }
+    /* La ciencia es un botón (abre sus cartas): sin borde ni fuente de sistema. */
+    .bw-edif-ciencia {
+      font: inherit; color: inherit; -webkit-appearance: none; appearance: none;
+      border: 0; cursor: pointer;
+    }
+    .bw-edif-ciencia:active { filter: brightness(1.18); }
+    .bw-hud-fila.medio .bw-edif-valor  { color: #f4ecdd; }
+    /* Dentro de la caja roja los puntos van en blanco roto: relleno si el nivel
+       está conseguido, solo el aro si no. */
+    .bw-hud-fila.medio .bw-edif-puntos { margin-left: 0; }
+    .bw-hud-fila.medio .bw-edif-puntos i { border-color: rgba(244, 236, 221, .65); }
+    .bw-hud-fila.medio .bw-edif-puntos i.llena {
+      background: #f4ecdd; border-color: #f4ecdd;
+    }
+    .bw-edif-valor {
+      font: 700 7.5px/1 ui-serif, Georgia, "Times New Roman", serif;
+      color: #7a1010; white-space: nowrap;
+    }
     .bw-edif img { width: 13px; height: 13px; flex: 0 0 auto; }
     .bw-edif-nombre {
       font: 600 7.5px/1 ui-serif, Georgia, "Times New Roman", serif;
@@ -1994,10 +2280,12 @@ function cssAdicional() {
     }
     .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
 
+    /* ── Antes aquí iba el bloque temporal de colores de depuración. fuera. */
+
     /* fila entera de abajo: la franja de turnos, dentro del padding como el
        resto (los márgenes negativos la sacaban fuera del papel por los lados). */
     .bw-hud-pie {
-      grid-column: 1 / -1;
+      grid-column: 1 / -1; flex: 0 0 auto;
       display: flex; align-items: center; gap: 6px;
       margin: 0;
     }
@@ -2010,33 +2298,48 @@ function cssAdicional() {
     .fort-pila-caja { position:relative; }
     /* +4 px las monedas y +2 px los decretos sobre lo que había (−22 / −19),
        descontando los 3 px que sube la columna al encoger el círculo. */
-    .fort-pila-caja.coins   { transform: translateY(-23px); }
-    .fort-pila-caja.decrees { transform: translateY(-18px); }
-    .fort-pila { width: clamp(24px, 8.6vw, 34px); height: auto; display: block; margin: 2px auto 0; }
+    .fort-pila-caja.coins   { transform: translateY(calc(-5.9 * var(--u))); }
+    .fort-pila-caja.decrees { transform: translateY(calc(-4.6 * var(--u))); }
+    /* Todo en --u (1 % del ancho del mundo) para que pilas, círculos y huecos
+       crezcan con la imagen de la fortaleza al girar el móvil. */
+    .fort-pila { width: calc(8.6 * var(--u)); height: auto; display: block; margin: calc(.5 * var(--u)) auto 0; }
     /* El nombre, colgando justo debajo de la pila y en el color de su moneda. */
     .fort-nombre {
       position:absolute; top:100%; left:50%; transform:translateX(-50%);
       /* Bajada desde el borde de la pila: 1 px de aire + 5 px + 10 px. Con
          top:100%, el margen positivo baja el tag; el negativo lo sube. */
-      margin-top:16px; white-space:nowrap;
-      font:700 max(9px,1.1vw)/1 ui-sans-serif, system-ui, sans-serif;
-      padding:2px 7px; border-radius:999px;
-      /* Colores al revés: fondo del color del tipo y texto en negro. */
-      color:#000;
-      border:1px solid #000;
+      margin-top:calc(4.1 * var(--u)); white-space:nowrap;
+      /* La tipografía plana de la carta de Destino: la del cuerpo, sin serif,
+         en peso 500 (un punto por encima del normal, sin llegar a la negrita). */
+      font-family:inherit; font-weight:500;
+      font-size:calc(2.3 * var(--u)); line-height:1; letter-spacing:.02em;
+      /* Mismo modelo que los círculos de camino: flex centrado, sin borde, el
+         relleno de arriba que corrige la métrica y la misma altura que ellos. */
+      display:flex; align-items:center; justify-content:center;
+      box-sizing:border-box; text-align:center;
+      min-height:calc(4.95 * var(--u));
+      /* El relleno va abajo, no arriba, y a media subida: con el .9u completo
+         la letra se pasaba de alta. */
+      padding:0 calc(1.8 * var(--u)) calc(.45 * var(--u)); border-radius:999px;
+      /* Fondo del color del tipo (rojo / dorado oscuro) al 80 % y texto blanco. */
+      color:#fff;
+      border:0;
       text-shadow:none;
     }
-    .fort-plat.energia .fort-nombre { background:#facc15; }   /* monedas: pill amarilla, texto negro */
-    .fort-plat.vida    .fort-nombre { background:#e0533f; }   /* decretos: pill roja, texto negro */
+    /* Pill del nombre: decretos en el rojo corporativo, monedas en dorado
+       oscuro. Texto blanco en las dos. */
+    .fort-plat.energia .fort-nombre { background:rgba(138,106,26,.8); }  /* monedas: dorado oscuro */
+    .fort-plat.vida    .fort-nombre { background:rgba(122,16,16,.8); }  /* decretos: rojo */
     /* La pila de monedas sube 5 px más que la de decretos: el nombre compensa
        esos 5 px para que los dos textos queden a la misma altura. */
-    .fort-pila-caja.coins .fort-nombre { margin-top:21px; }
-    /* Grid de turnos: franja de 4px al fondo del marco */
-    .bw-hud-turnos { display: grid; gap: 2px; }
+    .fort-pila-caja.coins .fort-nombre { margin-top:calc(5.4 * var(--u)); }
+    /* Grid de turnos: una barra larga por jugador al fondo del marco. La del
+       jugador en curso va rellena de rojo; las demás, solo con el borde. */
+    .bw-hud-turnos { display: grid; gap: 3px; height: 6px; }
     .bw-turno {
-      height: 4px; border-radius: 2px; border: 0; padding: 0;
-      /* En rojo, no en negro: el de cada jugador y el que está en curso. */
-      background: rgba(122,16,16,.18);
+      box-sizing: border-box; height: 6px; border-radius: 3px;
+      padding: 0; background: transparent;
+      border: 1.5px solid #7a1010;
     }
     .bw-turno.activo { background: #7a1010; }
     /* Dentro de la barra los datos no llevan pastilla propia: manda el fondo de
@@ -2107,6 +2410,9 @@ function cssAdicional() {
          medido en --u (1 % del ancho del mundo) y no en vw: así cuelga de la
          imagen y no del viewport. */
       --tope-castillo: calc(var(--margen-castillo) + 93.47 * var(--u) - var(--solape-escalera));
+      /* Hueco de suelo por debajo de la escalera: alarga el scroll sin mover
+         el tablero, que descuenta lo mismo por abajo. */
+      --aire-escalera: 50px;
     }
     /* --u = 1% del ancho del mundo (1cqw): fallback con vw si container-query no disponible */
     @supports (container-type:inline-size) {
@@ -2161,6 +2467,9 @@ function cssAdicional() {
       /* El solape va en % del ancho (ver --solape-escalera en .mundo): fijo en
          px, la escalera se despegaba de la fortaleza al cambiar el tamaño. */
       margin-top:calc(-1 * var(--solape-escalera));
+      /* Aire por debajo de la imagen: alarga el suelo (y el scroll). La misma
+         medida se descuenta en caminos y tablero para que no se estiren. */
+      margin-bottom:var(--aire-escalera);
     }
 
     /* fort-ui */
@@ -2172,31 +2481,32 @@ function cssAdicional() {
     .fort-ui > * { pointer-events:auto; }
     .fort-plat {
       position:absolute;
-      display:flex; flex-direction:column; align-items:center; gap:3px;
+      display:flex; flex-direction:column; align-items:center; gap:calc(.77 * var(--u));
       transform:translate(-50%,-50%);
     }
     /* El número solo, en un círculo, en el sitio que ocupaba el texto. */
     .fort-cifra {
       display:flex; align-items:center; justify-content:center;
-      transform:translateY(-4px);
+      transform:translateY(calc(-1 * var(--u)));
       /* El dígito, ópticamente centrado: con line-height 1 y sin descendentes
-         el número queda alto en el círculo, así que se baja 1 px. */
-      box-sizing:border-box; padding-top:2px;
-      /* Del alto del tag de debajo, un poco más pequeño que antes (22 px). */
-      width:max(16px,1.9vw); height:max(16px,1.9vw);
+         el número queda alto en el círculo, así que se baja un poco. */
+      /* Mismo círculo que los números de camino: 4.95u y el mismo relleno de
+         centrado; solo cambia el color, que va con su 80 % de opacidad. */
+      box-sizing:border-box; padding-top:calc(.55 * var(--u));
+      width:calc(4.95 * var(--u)); height:calc(4.95 * var(--u));
       border-radius:50%;
-      font:800 max(9px,1.1vw)/1 ui-sans-serif, system-ui, sans-serif;
-      border:1px solid #000;
+      font:800 calc(2.3 * var(--u))/1 ui-sans-serif, system-ui, sans-serif;
+      border:0;
       box-shadow:0 1px 4px rgba(0,0,0,.55);
     }
-    .fort-plat.energia .fort-cifra { background:#facc15; color:#000; }  /* monedas: amarillo, número negro */
-    .fort-plat.vida    .fort-cifra { background:#e0533f; color:#000; }     /* decretos: rojo, número negro */
+    .fort-plat.energia .fort-cifra { background:rgba(138,106,26,.9); color:#fff; }  /* monedas: dorado oscuro */
+    .fort-plat.vida    .fort-cifra { background:rgba(122,16,16,.9); color:#fff; }     /* decretos: rojo */
 
     .fort-label {
-      font-size:max(10px,1.2vw); font-weight:700; letter-spacing:.01em;
+      font-size:calc(2.56 * var(--u)); font-weight:700; letter-spacing:.01em;
       color:#fff;
       background:rgba(0,0,0,.72);
-      border-radius:999px; padding:3px 10px;
+      border-radius:999px; padding:calc(.77 * var(--u)) calc(2.56 * var(--u));
       border:1px solid rgba(255,255,255,.32);
       backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
       white-space:nowrap; line-height:1.3;
@@ -2205,18 +2515,18 @@ function cssAdicional() {
     .fort-circulo {
       position:absolute;
       transform:translate(-50%,-50%);
-      display:flex; flex-direction:column; align-items:center; gap:2px;
+      display:flex; flex-direction:column; align-items:center; gap:calc(.5 * var(--u));
     }
     .fort-circulo .fort-label { border-color:rgba(130,160,255,.55); }
     .fort-nivel {
-      display:flex; gap:max(3px,.4vw); align-items:center;
+      display:flex; gap:calc(.77 * var(--u)); align-items:center;
       background:rgba(0,0,0,.7); border-radius:999px;
-      padding:max(2px,.3vw) max(5px,.6vw);
+      padding:calc(.51 * var(--u)) calc(1.28 * var(--u));
       border:1px solid rgba(255,255,255,.2);
     }
     .fort-nivel i {
       display:block;
-      width:max(7px,.85vw); height:max(7px,.85vw);
+      width:calc(1.79 * var(--u)); height:calc(1.79 * var(--u));
       border-radius:50%;
       border:.5px solid rgba(255,255,255,.7);
       background:transparent;
@@ -2224,13 +2534,13 @@ function cssAdicional() {
     .fort-nivel i.lleno { background:rgba(255,255,255,.9); }
     .fort-tot { opacity:.62; font-weight:600 }
     /* Huecos en varias filas: pastilla rectangular y puntos algo más pequeños */
-    .fort-nivel.filas { flex-direction:column; gap:max(2px,.3vw); border-radius:9px; }
-    .fort-fila { display:flex; gap:max(3px,.35vw); justify-content:center; }
-    .fort-nivel.filas i { width:max(6px,.68vw); height:max(6px,.68vw); }
+    .fort-nivel.filas { flex-direction:column; gap:calc(.51 * var(--u)); border-radius:9px; }
+    .fort-fila { display:flex; gap:calc(.9 * var(--u)); justify-content:center; }
+    .fort-nivel.filas i { width:calc(1.54 * var(--u)); height:calc(1.54 * var(--u)); }
     .fort-slot {
       position:absolute;
       transform:translate(-50%,-50%);
-      width:max(30px,3.2vw); height:max(30px,3.2vw);
+      width:calc(7.7 * var(--u)); height:calc(7.7 * var(--u));
       border-radius:5px;
       background:rgba(0,0,0,.7);
       border:2px dashed rgba(255,255,255,.85);
@@ -2240,7 +2550,7 @@ function cssAdicional() {
       border-style:solid; border-color:#4a90d9;
       background:rgba(74,144,217,.35); color:#8dc0f0;
       display:flex; align-items:center; justify-content:center;
-      font:800 max(8px,1.1vw)/1 ui-monospace,monospace;
+      font:800 calc(2.05 * var(--u))/1 ui-monospace,monospace;
     }
 
     /* nubes */
@@ -2276,8 +2586,10 @@ function cssAdicional() {
       position:absolute; left:calc(-5% - 50px); right:calc(-5% + 50px); width:110%;
       pointer-events:none;
       /* 20 px más abajo que el borde del marco: -34 → -14. */
-      /* El alto del marco nuevo y 25 px de subida sobre el borde (−14 + 20 − 25). */
-      top:calc(-19px + min(42vw, 243px));
+      /* El alto del marco nuevo (2172 × 1477: 61,2 vw, tope 354 px con 520 de
+         ancho) y 25 px de subida sobre el borde (−14 + 20 − 25), 20 px menos
+         de subida que antes: de −19 px a +1 px. */
+      top:calc(1px + min(61.2vw, 354px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags.png');
       background-size:60% auto;
@@ -2294,7 +2606,7 @@ function cssAdicional() {
       pointer-events:none;
       /* 20 px más abajo que el borde del marco: -34 → -14. */
       /* El alto del marco nuevo y 25 px de subida sobre el borde (−14 + 20 − 25). */
-      top:calc(-19px + min(42vw, 243px));
+      top:calc(1px + min(61.2vw, 354px));
       height:calc(70vw);
       background-image:url('${BASE_IMG}/mapas/nieve/flags-r.png');
       background-size:60% auto;
@@ -2312,7 +2624,9 @@ function cssAdicional() {
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
       background-position:center bottom;
-      z-index:2;
+      /* Por encima del tablero (z-index 2): así el monstruo que entra aparece
+         entre la bruma en vez de por delante de ella. */
+      z-index:4;
       transform:translateY(var(--py-fog, 0px));
       will-change:transform;
     }
@@ -2326,16 +2640,17 @@ function cssAdicional() {
 
     /* ── Caminos ── */
     .caminos {
-      position:absolute; left:0; right:0; bottom:0;
+      position:absolute; left:0; right:0; bottom:var(--aire-escalera);
       top:var(--tope-castillo);
       width:100%; height:auto; z-index:1; overflow:visible;
       -webkit-mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
       mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
     }
     .tablero {
-      position:absolute; left:0; right:0; bottom:0;
+      position:absolute; left:0; right:0; bottom:var(--aire-escalera);
       /* Mismo ancla que los caminos: el alto de la escalera, salga el ancho que
-         salga. bottom:0 hace que la caja acabe justo en el borde de la imagen. */
+         salga. El bottom descuenta el aire de debajo de la escalera para que
+         las losas no se muevan al dar más suelo. */
       top:var(--tope-castillo);
       height:auto; z-index:2;
     }
@@ -2477,13 +2792,28 @@ function cssAdicional() {
     }
 
     /* número de calle */
+    /* Mientras las fichas avanzan no responde nada: ni el tablero, ni el box,
+       ni la mano, ni la barra. El scroll de #pantalla sigue vivo para poder
+       seguir la animación. */
+    body.bw-avanzando #pantalla *,
+    body.bw-avanzando .bw-mano-wrap,
+    body.bw-avanzando .bw-panel,
+    body.bw-avanzando #bw-nav-global,
+    body.bw-avanzando #barra,
+    body.bw-avanzando .bw-modal-fondo { pointer-events:none !important; }
+
     .num-calle {
-      position:absolute; margin:calc(-2.07 * var(--u)) 0 0 calc(-2.07 * var(--u));
-      width:calc(4.13 * var(--u)); aspect-ratio:1; border-radius:50%;
-      background:rgba(0,0,0,.45); border:calc(.2 * var(--u)) solid rgba(195,204,212,.2);
-      display:grid; place-items:center;
+      position:absolute; margin:calc(-2.48 * var(--u)) 0 0 calc(-2.48 * var(--u));
+      /* Círculo un 20 % mayor (4.13 → 4.95u) y letra un punto más. */
+      width:calc(4.95 * var(--u)); aspect-ratio:1; border-radius:50%;
+      /* Solo el fondo translúcido: el número va blanco a plena opacidad. */
+      background:rgba(122,16,16,.8); border:0;
+      /* Flex y un pelín de relleno arriba: con la métrica mono el dígito
+         quedaba un poco alto; el padding lo baja sin mover el círculo. */
+      display:flex; align-items:center; justify-content:center;
+      box-sizing:border-box; padding:calc(.55 * var(--u)) 0 0; text-align:center;
       font-weight:700; font-family:ui-monospace,monospace;
-      font-size:calc(1.86 * var(--u)); line-height:1; color:rgba(195,204,212,.7);
+      font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
       z-index:3;
     }
   </style>`;

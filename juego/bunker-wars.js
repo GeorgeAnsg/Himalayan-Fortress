@@ -104,9 +104,9 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 acciones extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
-  { tipo:"laboratorio", nivel:2, coste:2, titulo: "LABORATORIO 2", descripcion: "Te permite crear rastreadores y carroñeros en el box." },
-  { tipo:"laboratorio", nivel:3, coste:2, titulo: "LABORATORIO 3", descripcion: "Te permite crear rastreadores, carroñeros y yetis en el box." },
-  { tipo:"laboratorio", nivel:4, coste:2, titulo: "LABORATORIO 4", descripcion: "Te permite crear rastreadores, carroñeros, yetis y colosos de hielo en el box." },
+  { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en el box." },
+  { tipo:"laboratorio", nivel:3, coste:2, titulo: "CRIADERO 3", descripcion: "Te permite criar rastreadores, carroñeros y yetis en el box." },
+  { tipo:"laboratorio", nivel:4, coste:2, titulo: "CRIADERO 4", descripcion: "Te permite criar rastreadores, carroñeros, yetis y colosos de hielo en el box." },
   /* Textos copiados de las cartas físicas: no inventar efectos ni redacciones. */
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
@@ -119,14 +119,14 @@ const PLANTILLAS_BUNKER = [
   { tipo:"ciencia_i",   efecto:"evolucionar_torreta",coste:2, titulo: "Evolucionar torre", descripcion: "Evoluciona una torre al siguiente nivel." },
   { tipo:"ciencia_i",   efecto:"vuelo_seguro",       coste:2, titulo: "Vuelo seguro", descripcion: "Manda un monstruo de nivel 3 o inferior (**yeti**, **carroñero** o **rastreador**) a la entrada de una escalera rival." },
   { tipo:"ciencia_i",   efecto:"torreta2_gratis",    coste:3, titulo: "Torre de nivel 2", descripcion: "Construye una torre de nivel 2 en tu búnker sin necesidad de tener ARMERÍA 3." },
-  { tipo:"ciencia_i",   efecto:"monstruo3_gratis",   coste:3, titulo: "Monstruo de nivel 3", descripcion: "Crea un monstruo de nivel 3 (**yeti**) en un box sin necesidad de tener LABORATORIO 3." },
+  { tipo:"ciencia_i",   efecto:"monstruo3_gratis",   coste:3, titulo: "Monstruo de nivel 3", descripcion: "Crea un monstruo de nivel 3 (**yeti**) en un box sin necesidad de tener CRIADERO 3." },
   /* Estas cuatro suben el nivel al momento: no se busca ninguna carta en el
      mazo ni se baraja, el sobreprecio respecto a la carta de búnker es el
      atajo. */
   { tipo:"ciencia_i",   efecto:"subir_armeria",      coste:3, titulo: "Subir armería", descripcion: "Aumenta un nivel la armería." },
-  { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir laboratorio", descripcion: "Aumenta un nivel el laboratorio." },
+  { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir criadero", descripcion: "Aumenta un nivel el criadero." },
   { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Suma 1 moneda y 1 monje por turno a tu búnker." },
-  { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Laboratorio o armería", descripcion: "Aumenta un nivel el laboratorio o la armería." },
+  { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Criadero o armería", descripcion: "Aumenta un nivel el criadero o la armería." },
 ];
 
 /* Topes de los edificios del búnker. Los recursos no son un nivel único:
@@ -1133,7 +1133,7 @@ function legalesAcciones(e, jugadorId) {
          tope. */
       if ((j.bunker.laboratorio ?? 0) < TOPE_LABORATORIO) {
         acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid, edificio: "laboratorio",
-                   texto: `Jugar ${nombre} · laboratorio a nivel ${(j.bunker.laboratorio ?? 0) + 1}` });
+                   texto: `Jugar ${nombre} · criadero a nivel ${(j.bunker.laboratorio ?? 0) + 1}` });
       }
       if ((j.bunker.armeria ?? 0) < TOPE_ARMERIA) {
         acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid, edificio: "armeria",
@@ -1446,7 +1446,7 @@ function subirEdificio(j, cual, evs) {
   const nivel = j.bunker[cual] ?? 0;
   if (nivel >= tope) return false;
   j.bunker[cual] = nivel + 1;
-  evs.push({ tipo: "mejora", texto: `${j.nombre} sube ${cual === "armeria" ? "la armería" : "el laboratorio"} a nivel ${nivel + 1}.` });
+  evs.push({ tipo: "mejora", texto: `${j.nombre} sube ${cual === "armeria" ? "la armería" : "el criadero"} a nivel ${nivel + 1}.` });
   return true;
 }
 
@@ -1836,13 +1836,17 @@ function resolverDestino(e, jugadorId, carta) {
       break;
     case "colocar_monstruos": {
       let colocados = 0;
+      /* Es un regalo del mazo de Destino, no una cría del criadero: el nivel de
+         la carta no depende del nivel del edificio. Antes se comprobaba
+         `carta.nivel <= nivelMaxLab(j)` y con el criadero a nivel 1 una carta
+         de yetis (nivel 3) no creaba ninguno. */
       for (let i = 0; i < j.box.length && colocados < carta.cantidad; i++) {
-        if (!j.box[i] && carta.nivel <= nivelMaxLab(j)) {
+        if (!j.box[i]) {
           j.box[i] = { id: uid("m"), tipo: "monstruo", nivel: carta.nivel, dueno: j.id };
           colocados++;
         }
       }
-      evs.push({ tipo: "monstruos_gratis", texto: `${j.nombre} recibe ${colocados} monstruo(s) nivel ${carta.nivel}.`, a: jugadorId });
+      evs.push({ tipo: "monstruos_gratis", texto: `${j.nombre} recibe ${colocados} monstruo(s) nivel ${carta.nivel} en el box.`, a: jugadorId });
       break;
     }
   }
