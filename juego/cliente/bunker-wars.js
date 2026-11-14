@@ -185,7 +185,10 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
         /* Banderines: se abren al hacer scroll (uno hacia cada lado). A −0,42 se
        separaban demasiado rápido; un 20 % menos lento es −0,336. */
     sueloEl?.style.setProperty("--px-flags",   `${sy * -0.336}px`);
-    sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40 + 50}px`);
+      /* La niebla no se pasa del final: con +50 se metía 50 px por debajo del
+         suelo, su borde opaco quedaba recortado y abajo asomaba una franja
+         (negra antes, de nubes después). A tope de scroll queda a ras. */
+    sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40}px`);
     /* Vista arriba el mapa se ve un 15 % más grande y vuelve a su tamaño al
        bajar. Va en el mundo entero para que el castillo, los caminos, los
        círculos de calle, las jaulas y el tablero crezcan juntos. */
@@ -2575,13 +2578,7 @@ function cssAdicional() {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: none !important;
       z-index: 1 !important;
-      /* Fondo del propio contenedor: la niebla con la que acaba el mapa. Cuando
-         en el móvil el scroll rebota (o se pasa un poco), en el borde no asoma
-         una franja negra —asomaba el negro del body— sino más niebla, que es
-         lo que hay justo ahí. En reposo el mapa tapa todo y no se ve. */
-      background:
-        url('${BASE_IMG}/mapas/nieve/bottom-fog.png') center bottom / 100% auto no-repeat,
-        #dfe4e8 !important;
+      background: transparent !important;
     }
     /* Nada dentro del juego debe quedar acotado a 560px */
     body.bw-himalaya #pantalla * { max-width: none; box-sizing: border-box; }
@@ -2973,7 +2970,10 @@ function cssAdicional() {
       --tope-castillo: calc(var(--margen-castillo) + 93.47 * var(--u) - var(--solape-escalera));
       /* Hueco de suelo por debajo de la escalera: alarga el scroll sin mover
          el tablero, que descuenta lo mismo por abajo. */
-      --aire-escalera: 50px;
+      /* Aire por debajo de la escalera. Eran 50 px que solo estiraban el suelo
+         (y el scroll) sin que se viera nada: el tablero y los caminos cuelgan
+         de esta misma medida, así que a 0 siguen pegados a la escalera. */
+      --aire-escalera: 0px;
     }
     /* --u = 1% del ancho del mundo (1cqw): fallback con vw si container-query no disponible */
     @supports (container-type:inline-size) {
