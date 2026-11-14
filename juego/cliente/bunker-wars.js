@@ -2145,11 +2145,12 @@ function css() {
       box-shadow:0 10px 24px rgba(0,0,0,.72);
     }
     .bw-desc-celda.sel .bw-carta-grande { outline:1px solid #e0a33f; outline-offset:1px; }
-    /* La marca de la carta elegida: el check de tinta negra sobre el papel. */
+    /* La marca de la carta elegida: el check de tinta negra en el círculo
+       amarillo de siempre. */
     .bw-desc-celda.sel::after {
       content:"✓"; position:absolute; top:-6px; right:-6px;
       width:20px; height:20px; border-radius:50%;
-      background:#f7f1e4; color:#12161a;
+      background:#e0a33f; color:#12161a;
       border:1px solid #12161a;
       display:grid; place-items:center; font-size:12px; font-weight:900;
       box-shadow:0 1px 4px rgba(0,0,0,.5);
@@ -2277,11 +2278,19 @@ function css() {
     /* La separación entre las dos filas va en % del ancho (el row-gap en % de
        un contenedor de alto automático se queda en 0). */
     .bw-criar-grid .bw-desc-celda:nth-child(n+3) { margin-top:5%; }
-    /* Carta que no se puede criar (sin monedas o jaula llena): apagada y sin toque */
-    .bw-desc-celda:disabled { opacity:.42; cursor:not-allowed; }
-    .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.65); }
-    /* El botón de criar va debajo de las cartas, como el de descartar */
+    /* Carta que no se puede criar (sin monedas o jaula llena): el cartón queda
+       opaco y encima va un velo negro, así no se transparenta el modal. */
+    .bw-desc-celda:disabled { cursor:not-allowed; }
+    .bw-desc-celda:disabled::before {
+      content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
+      border-radius:9px; background:rgba(0,0,0,.6);
+    }
+    .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.35); }
+    /* El botón de criar va debajo de las cartas, como el de descartar, y sube
+       sobre el hueco de la nota (que casi siempre está vacía). */
     .bw-criar-ok { min-width:170px; }
+    #bw-modal-criadero .bw-modal-acciones { margin-top:-6px; }
+    #bw-modal-criadero .bw-desc-nota { min-height:0; }
   </style>`;
 }
 
