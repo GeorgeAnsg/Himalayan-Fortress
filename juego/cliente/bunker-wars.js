@@ -1149,6 +1149,8 @@ const BESTIARIO_UI = [
   { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "Defiende tu base con 2 de fuerza y ataca con 2. Se mueve una casilla por turno." },
   { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "Defiende tu base con 3 de fuerza y ataca con 3. Se mueve una casilla por turno." },
   { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Defiende tu base con 5 de fuerza y ataca con 5. Se mueve una casilla por turno." },
+  /* El nivel 7 no sale del criadero: la carta se ve, pero nunca se puede criar. */
+  { nivel: 7, nombre: "Devorador de cumbres", puntos: 7, coste: 3, noCriable: true, texto: "No se cría: solo llega con la carta de Destino o al subir de rango un monstruo." },
 ];
 
 /* Box al que va la cría. Se predefine al abrir el criadero desde un hueco,
@@ -1178,7 +1180,9 @@ function abrirCriadero(boxInicial = null) {
   const max = nivelMaxCriadero(criaderoMesa || 1);
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const monedasDe = (m) => Math.max(0, m.coste - barato);
-  const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
+  /* Las cinco cartas del bestiario: las que el criadero ya permite criar y,
+     siempre al final, la del nivel 7 que nunca sale de aquí. */
+  const lista = BESTIARIO_UI.filter(m => m.noCriable || m.nivel <= max);
   const libre = libresEnBox(boxCriadero) > 0;
 
   /* Igual que la pantalla de descartar: cartas de papel para elegir una y, abajo,
@@ -1186,7 +1190,7 @@ function abrirCriadero(boxInicial = null) {
      lo que hace el monstruo. */
   const celda = (m) => {
     const monedas = monedasDe(m);
-    const puede = monedas <= energiaMesa && libre;
+    const puede = !m.noCriable && monedas <= energiaMesa && libre;
     return `
       <button type="button" class="bw-desc-celda" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>
         <div class="bw-carta-grande">
@@ -1210,7 +1214,7 @@ function abrirCriadero(boxInicial = null) {
       <div class="bw-criar-toggle">
         ${[0, 1].map((b) => `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">A la jaula ${b + 1}<span>${libresEnBox(b)} ${libresEnBox(b) === 1 ? "libre" : "libres"}</span></button>`).join("")}
       </div>
-      <div class="bw-desc-grid">${lista.map(celda).join("")}</div>
+      <div class="bw-criar-grid">${lista.map(celda).join("")}</div>
       <p class="bw-desc-nota"></p>
       <div class="bw-modal-acciones">
         <button type="button" class="bw-modal-usar bw-criar-ok" disabled>Criar</button>
@@ -2261,6 +2265,13 @@ function css() {
       color:#12161a; border-color:transparent;
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
+    /* Tres cartas arriba y dos abajo, con anchos en % del modal (nada fijo):
+       tres huecos de un tercio menos los dos huecos de separación. */
+    .bw-criar-grid {
+      display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start;
+      gap:3%; width:100%; margin:0 auto;
+    }
+    .bw-criar-grid .bw-desc-celda { flex:0 0 calc((100% - 6%) / 3); width:calc((100% - 6%) / 3); }
     /* Carta que no se puede criar (sin monedas o jaula llena): apagada y sin toque */
     .bw-desc-celda:disabled { opacity:.42; cursor:not-allowed; }
     .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.65); }
