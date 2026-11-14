@@ -2538,9 +2538,9 @@ function cssAdicional() {
       position: relative !important; top: auto !important;
       left: auto !important; right: auto !important; bottom: auto !important;
       flex: 0 0 auto !important; width: 100% !important;
-      /* El mismo aire arriba y abajo (más el notch, si lo hay): el contenido
-         queda centrado de verdad en vez de pegado al borde de arriba. */
-      padding: calc(8px + env(safe-area-inset-top, 0px)) 12px !important;
+      /* El mismo aire arriba y abajo (más el notch, si lo hay), y el alto de
+         siempre: 7 + 22 + 7 + el borde = 37 px. */
+      padding: calc(7px + env(safe-area-inset-top, 0px)) 12px !important;
     }
     /* El ribete de piedra del menú, también debajo de la barra: los dos
        extremos de la pantalla se cierran con el mismo adorno. */

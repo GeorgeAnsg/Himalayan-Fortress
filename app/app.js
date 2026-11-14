@@ -332,7 +332,7 @@ function actualizarBarra() {
   }
   /* Avatar del centro: el del usuario, en su círculo. Solo se repinta si
      cambia, para no rehacer el SVG en cada empujón del servidor. */
-  const yo = document.getElementById("yo");
+  const yo = document.getElementById("yo-avatar");
   if (yo) {
     const avatar = String(estado.usuario.avatar ?? 0);
     if (yo.dataset.avatar !== avatar) {
@@ -429,9 +429,9 @@ function abrirAjustes() {
   cerrado.then((r) => { if (r === "cuenta") abrirCuenta(); });
 }
 
-document.getElementById("ajustes")?.addEventListener("click", abrirAjustes);
-/* El avatar del centro abre la cuenta. */
-document.getElementById("yo")?.addEventListener("click", abrirCuenta);
+/* El avatar del centro es el botón de ajustes: conexión, notificaciones y
+   cuenta, todo en su modal. */
+document.getElementById("yo")?.addEventListener("click", abrirAjustes);
 
 async function abrirCuenta() {
   if (!estado.usuario) return;
