@@ -2772,7 +2772,8 @@ function cssAdicional() {
       display:grid; place-items:center; cursor:pointer; z-index:5;
     }
     .ficha-img {
-      position:absolute; left:50%; bottom:50%; transform:translateX(-50%);
+      /* Centrada en la caja de la ficha (el div verde). */
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
       /* Un tercio del tamaño natural de la lámina (121 × 224 px). */
       width:calc(8.5 * var(--u)); height:auto; pointer-events:none;
       filter:drop-shadow(0 calc(.5 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,.5));
@@ -2789,7 +2790,7 @@ function cssAdicional() {
     .ficha { outline:1px solid rgba(0,255,102,.95); background:rgba(0,255,102,.22); }
     .ficha-img { outline:1px solid rgba(255,0,204,.95); background:rgba(255,0,204,.18); }
     .ficha-nv {
-      position:absolute; left:50%; bottom:calc(14 * var(--u));
+      position:absolute; left:50%; bottom:calc(12 * var(--u));
       transform:translateX(-50%);
       width:calc(4.4 * var(--u)); height:calc(4.4 * var(--u));
       display:grid; place-items:center; border-radius:50%;
