@@ -824,7 +824,11 @@ function pintarMiBunker(j, priv, fase) {
          nunca y entra por el primer peldaño, sale de la casilla virtual de
          abajo: es la entrada desde la bruma. */
       const antes = f.id ? fichasPrevias.get(f.id) : null;
-      const movida = !!antes && (antes.calle !== i || antes.paso !== paso);
+      /* Solo se anima el avance dentro de su propia calle. Si la ficha aparece
+         en otra calle (o es la primera vez que se ve), se pinta ya en su
+         casilla: nunca se la ve cruzar el tablero de una calle a otra. */
+      const mismaCalle = !!antes && antes.calle === i;
+      const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });

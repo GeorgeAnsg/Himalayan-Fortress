@@ -21,8 +21,13 @@ function barajar(arr, e) {
   return a;
 }
 
+/* Los ids viajan dentro de la partida guardada. El contador vuelve a cero cada
+   vez que arranca el servidor, así que dos fichas distintas podían acabar con
+   el mismo id ("e2" en dos calle s): el cliente animaba una encima de la otra y
+   parecía que un monstruo cruzaba de calle. La marca de arranque lo evita. */
 let _seq = 0;
-function uid(p) { return `${p}${++_seq}`; }
+const ARRANQUE = Math.random().toString(36).slice(2, 7);
+function uid(p) { return `${p}${ARRANQUE}${++_seq}`; }
 
 // ── Niveles válidos ───────────────────────────────────────────────────────
 const NIVELES = [1, 2, 3, 5, 7];
@@ -357,9 +362,32 @@ function normalizarDuenos(e) {
   }
 }
 
+/* Repara partidas guardadas con ids repetidos (de cuando el contador volvía a
+   cero): se queda el primero y los demás se renombran. */
+function normalizarIds(e) {
+  const vistos = new Set();
+  /* El nombre nuevo es siempre el mismo para el mismo id repetido (-2, -3…):
+     así el cliente ve el id estable y la ficha no parpadea en cada repintado. */
+  const unico = (f) => {
+    if (!f || typeof f !== "object" || typeof f.id !== "string") return;
+    if (!vistos.has(f.id)) { vistos.add(f.id); return; }
+    let n = 2;
+    let nuevo = `${f.id}-${n}`;
+    while (vistos.has(nuevo)) nuevo = `${f.id}-${++n}`;
+    f.id = nuevo;
+    vistos.add(nuevo);
+  };
+  for (const j of Object.values(e.jugadores ?? {})) {
+    for (const m of j.box ?? []) unico(m);
+    for (const m of j.lanzaderas ?? []) unico(m);
+    for (const s of j.senderos ?? []) for (const f of s.posiciones ?? []) unico(f);
+  }
+}
+
 function sincronizarTorres(e) {
   migrarNombres(e);
   sincronizarTextosCartas(e);
+  normalizarIds(e);
   normalizarDuenos(e);
   normalizarBox(e);
   for (const j of Object.values(e.jugadores ?? {})) {
