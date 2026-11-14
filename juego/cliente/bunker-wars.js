@@ -171,6 +171,14 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
        separaban demasiado rápido; un 20 % menos lento es −0,336. */
     sueloEl?.style.setProperty("--px-flags",   `${sy * -0.336}px`);
     sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40 + 50}px`);
+    /* Vista arriba el mapa se ve un 15 % más grande y vuelve a su tamaño al
+       bajar. Va en el mundo entero para que el castillo, los caminos, los
+       círculos de calle, las jaulas y el tablero crezcan juntos. */
+    const mundo = contenedor.querySelector(".mundo");
+    if (mundo) {
+      const p = max > 0 ? Math.min(1, Math.max(0, sy / max)) : 0;
+      mundo.style.setProperty("--zoom-mapa", (1.15 - 0.15 * p).toFixed(3));
+    }
   }
   (pantalla ?? window).addEventListener("scroll", () => {
     if (!rafPending) { rafPending = true; requestAnimationFrame(parallax); }
@@ -476,10 +484,13 @@ function avisarTurnoNuevo(clave, reproducir) {
   if (document.querySelector(".bw-modal-fondo")) return;
   const capa = document.getElementById("capa");
   if (capa && !capa.hidden) return;
+  /* Mismo modal que el aviso de versión nueva: el marco de piedra con el texto
+     dentro y el botón gris debajo, a lo ancho. */
   modal({
-    titulo: "Es tu turno",
-    texto: "Tienes la mesa hasta que termines tus decretos.",
-    botones: [{ texto: "Empezar turno", estilo: "principal", valor: "ok" }],
+    titulo: "",
+    texto: "Es tu turno",
+    clase: "modal-version",
+    botones: [{ texto: "Comenzar tu turno", estilo: "boton", valor: "ok" }],
     obligatorio: true,
   }).then(() => {
     turnoEmpezado = clave;
@@ -2796,6 +2807,12 @@ function cssAdicional() {
       position:relative;
       width:100%;
       container-type:inline-size;
+      /* Vista arriba: el mapa entero se ve un 15 % más grande (--zoom-mapa lo
+         pone el parallax). Escala desde arriba, así el castillo se agranda
+         hacia abajo sin mover nada de sitio. */
+      transform:scale(var(--zoom-mapa, 1));
+      transform-origin:50% 0;
+      will-change:transform;
       /* Único mando del aire entre el marco y el castillo. Lo usan el bloque
          del mapa y el tablero (fichas, lanzaderas, torres): así los círculos
          de las escaleras se mueven siempre con la imagen. */
