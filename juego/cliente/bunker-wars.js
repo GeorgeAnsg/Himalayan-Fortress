@@ -926,13 +926,13 @@ function pintarMiBunker(j, priv, fase) {
               <div class="fort-plat energia" style="left:20.5%;top:25.5%">
                 <div class="fort-cifra">${quedan.monedas}</div>
                 <div class="fort-pila-caja coins">
-                  <img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt="">
+                  ${quedan.monedas > 0 ? `<img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt="">` : ""}
                 </div>
               </div>
               <div class="fort-plat vida" style="left:80.5%;top:25.4%">
                 <div class="fort-cifra">${quedan.decretos}</div>
                 <div class="fort-pila-caja decrees">
-                  <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">
+                  ${quedan.decretos > 0 ? `<img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">` : ""}
                 </div>
               </div>
               ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
@@ -1250,8 +1250,10 @@ const CARD_BG    = `${BASE_IMG}/card.png`;
 /* Las pilas van 1:1 con la cifra (7 imágenes como tope). Antes las monedas se
    repartían sobre el máximo de producción (14), así que 4 monedas enseñaban la
    pila de 2: al pasar a «lo que queda» el dibujo tiene que ser el número. */
-function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(1, n))}.png`; }
-function pilaDecrees(n) { return `${ASSETS_IMG}/decrees_${Math.min(7, Math.max(1, n))}.png`; }
+/* Montones de 0 a 7: con 0 no hay imagen (antes el max(1) pintaba el montón
+   de uno aunque no tuvieras nada). */
+function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(0, n))}.png`; }
+function pilaDecrees(n) { return `${ASSETS_IMG}/decrees_${Math.min(7, Math.max(0, n))}.png`; }
 const SLOTS_CIENCIA = 2;
 
 function defsCarta(c) {
