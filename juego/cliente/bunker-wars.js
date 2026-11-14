@@ -3248,26 +3248,19 @@ function cssAdicional() {
        crezca hacia arriba. Los 100 px de más la subían hasta la mitad del mapa,
        así que se quedó en su altura original. */
     .capa-bottom-fog {
-      /* 20 px más alta que el 40 % (5.1u a 390 px de ancho de mundo), menos los
-         80 px que subió al recortar el suelo: su borde de arriba vuelve a caer
-         sobre el mismo punto del dibujo (la fila de huecos del tablero). */
-      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u) - 80px);
+      /* Bruma solo del borde de abajo: 200 px más baja que antes, así empieza
+         por debajo del final de la escalera y no tapa la fila de huecos. */
+      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u) - 280px);
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
-      background-position:center bottom;
+      /* El parallax mueve la foto dentro de su caja, no la caja: así el borde
+         de abajo queda siempre tapado por la parte opaca de la niebla y no
+         asoma ninguna franja. Al bajar, la niebla sube un poco. */
+      background-position:center calc(100% + var(--py-fog, 0px));
       /* Por encima del tablero (z-index 2): así el monstruo que entra aparece
          entre la bruma en vez de por delante de ella. */
       z-index:4;
-      /* El scroll mueve la niebla (--py-fog) y el vaivén lento va en translate,
-         que se suma sin pisar el transform del parallax. */
-      transform:translateY(var(--py-fog, 0px));
-      animation:bwBruma 12s ease-in-out infinite alternate;
-      will-change:transform, translate;
-    }
-    /* Vaivén de la bruma: sube y baja unos 7 px en 12 s, sin parar. */
-    @keyframes bwBruma {
-      from { translate:0 calc(-1.8 * var(--u)); }
-      to   { translate:0 calc(1.8 * var(--u)); }
+      /* Sin vaivén propio: se mueve solo con el scroll (--py-fog). */
     }
 
     .suelo::after {
