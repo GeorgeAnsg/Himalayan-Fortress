@@ -83,13 +83,13 @@ jugador = {
     { id: 3, posiciones: [null,null,null,null], torreta: null },
   ],
 
-  // 2 cajas de BOX, 2 huecos cada una (4 en total)
+  // 2 jaulas, 2 huecos cada una (4 en total)
   // caja 1 → caminos 1 y 2 · caja 2 → caminos 2 y 3
   box: [null, null, null,  null, null, null],
   // cada slot: null | { id, nivel }
 
   lanzaderas: [null, null],
-  // una por box: la 1 recibe del box 1 y la 2 del box 2
+  // una por jaula: la 1 recibe de la jaula 1 y la 2 de la jaula 2
   // { id, nivel } cada una — listas para lanzar al inicio del siguiente turno
 
   mano: [],                   // máx 4 cartas al final del turno
@@ -147,7 +147,7 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
   su nivel si es su calle, nivel − 1 en las demás).
 - Para destruir un atacante hay que hacer su nivel en daño; se paga ese daño.
 
-**Entre monstruos** (acción: avanzar / atacar, o lanzar desde el box):
+**Entre monstruos** (acción: avanzar / atacar, o lanzar desde la jaula):
 - Por categorías y sin desgaste: **el que se mueve a la casilla del otro ataca
   primero** y gana los empates.
 - Atacante nivel ≥ defensor → el defensor muere y el atacante sobrevive, ocupando
@@ -162,12 +162,12 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
 
 ## Movimiento de monstruos
 
-Desde BOX (2 cajas de 2 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos 2 y 3):
-- **BOX → lanzadera:** 1 decreto, sin monedas. Cualquier nivel, y solo a la
-  lanzadera de su propio box: del box 1 a la lanzadera 1, del box 2 a la 2.
-- **BOX → casilla 4 del camino:** 1 decreto + 1 moneda. Sale a la casilla 4
+Desde las jaulas (2 jaulas de 2 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos 2 y 3):
+- **Jaula → lanzadera:** 1 decreto, sin monedas. Cualquier nivel, y solo a la
+  lanzadera de su propia jaula: de la jaula 1 a la lanzadera 1, de la 2 a la 2.
+- **Jaula → casilla 4 del camino:** 1 decreto + 1 moneda. Sale a la casilla 4
   (posición 3), la que toca al búnker, de cara a los atacantes, y solo a los dos
-  caminos adyacentes a la caja del monstruo (box 1 → C1-4 o C2-4 · box 2 → C2-4 o
+  caminos adyacentes a la jaula del monstruo (jaula 1 → C1-4 o C2-4 · jaula 2 → C2-4 o
   C3-4); nunca a mitad de camino. Nivel máximo 5 (nivel 7 no puede).
 - Si la casilla 4 está ocupada por un **atacante**, el lanzamiento es un ataque
   directo: se resuelve el combate por categorías (el que llega ataca) y el
@@ -183,7 +183,7 @@ En sendero propio:
   atacante, la acción es un ataque y se resuelve por categorías.
 - Si llega a posición 0 → pasa a lanzadera adyacente, bloqueado hasta el siguiente turno.
 
-Desde lanzadera (hay dos, una por box):
+Desde lanzadera (hay dos, una por jaula):
 - Fase LANZAR: se envía al sendero elegido de un rival (jugador elige a quién y
   por qué sendero). Cada lanzadera se manda por separado, así que en la misma
   fase se pueden hacer uno o dos lanzamientos.
@@ -237,7 +237,7 @@ Desde lanzadera (hay dos, una por box):
 | (I) Evoluciona una torre al siguiente nivel                                      | 2     |
 | (I) Vuelo seguro: envía un monstruo nivel ≤3 a la entrada de un sendero rival   | 2     |
 | (I) Construye una torre nivel 2 sin necesitar Armería 3                          | 3     |
-| (I) Crea un monstruo nivel 3 en un BOX sin necesitar Laboratorio 3              | 3     |
+| (I) Crea un monstruo nivel 3 en una jaula sin necesitar Laboratorio 3          | 3     |
 | (I) Sube un nivel la armería al instante (tope 3)                               | 3     |
 | (I) Sube un nivel el laboratorio al instante (tope 4)                            | 3     |
 | (I) Sube un nivel los recursos al instante: la carta más floja sube uno (tope 4) | 4     |
@@ -256,7 +256,7 @@ Notas de ciencia:
 - Subir rango pide elegir monstruo: valen los tuyos que defienden tus caminos y los que lanzaste a un rival (el atacante guarda quién lo mandó), nunca por encima de nivel 5. Sin objetivo no se gasta la carta.
 - Todas las ciencias que eligen objetivo (avanzar al rival, convertir, bajar rango, evolucionar torre, vuelo seguro, torre de nivel 2, monstruo nivel 3) muestran una opción por objetivo legal y no se cobran si no la reciben.
 - Avanzar al rival: solo monstruos nivel ≤3 que lanzaste tú. Si están en la casilla 4 del rival entran al búnker y suman sus puntos como un atacante normal.
-- Vuelo seguro: saca el monstruo del box (nivel ≤3) y lo deja en la entrada de un camino rival; no se ofrecen caminos con la entrada ocupada.
+- Vuelo seguro: saca el monstruo de la jaula (nivel ≤3) y lo deja en la entrada de un camino rival; no se ofrecen caminos con la entrada ocupada.
 - Bajar rango / convertir: solo atacantes que estén en tus senderos (el que te ataca), nivel ≤5. Bajar salta la escalera 3→2→1, nunca pasa por un nivel inexistente.
 - Torre de nivel 2: sirve para una posición vacía o para subir una torre de nivel 1; nunca baja ni repite una torre que ya es 2 o más.
 - Las inmediatas de subida de nivel no buscan nada en el mazo ni barajan: el nivel sube en el acto y la carta va al descarte. No se pueden jugar si el edificio ya está al tope.
@@ -373,8 +373,8 @@ rival se lanza (o "No lanzar").
 5. DECRETOS
    El jugador gasta decretos (y monedas) en cualquier orden:
    a) mejorar_bunker: jugar carta de mano en la zona correspondiente del búnker.
-   b) crear_monstruo: colocar ficha en el BOX que elija el jugador (1 o 2) si tiene
-      hueco libre: 1 decreto + las monedas del nivel (0, 1, 2 o 3). Un decreto por box.
+   b) crear_monstruo: colocar ficha en la jaula que elija el jugador (1 o 2) si tiene
+      hueco libre: 1 decreto + las monedas del nivel (0, 1, 2 o 3).
    c) construir_torreta: torre nivel 1 en una posición de torre del búnker
       (1 decreto, 1 moneda).
    d) evolucionar_torreta: subir nivel de una torre (pagar diferencia de coste).
@@ -382,8 +382,8 @@ rival se lanza (o "No lanzar").
       deseadas (ataca si el destino es un atacante).
    f) atacar_monstruo: disparar con las torres del búnker a un atacante de
       cualquier camino (pagar el daño en monedas).
-   g) mover_a_lanzadera: BOX → lanzadera (1 decreto, sin monedas).
-   h) mover_a_sendero: BOX → casilla 4 del sendero (1 decreto + 1 moneda, no nivel 7).
+   g) mover_a_lanzadera: jaula → lanzadera (1 decreto, sin monedas).
+   h) mover_a_sendero: jaula → casilla 4 del sendero (1 decreto + 1 moneda, no nivel 7).
 
 6. DESCARTAR
    — Si se han jugado cartas ese turno: descartar hasta 2 (o ninguna).

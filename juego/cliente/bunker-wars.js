@@ -94,7 +94,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
       <span>Fortaleza</span>
     </button>
     <button class="bw-nav-tab" data-tab="box" type="button">
-      <span>Box</span>
+      <span>Jaulas</span>
     </button>
     <button class="bw-nav-tab" data-tab="acciones" type="button">
       <span>Acciones</span>
@@ -665,7 +665,7 @@ function relatoDestino(d) {
     case "bajar_monstruos":
       return "Los monstruos de nivel 2 o más pierden su rango: la montaña los humilla.";
     case "colocar_monstruos":
-      return `Los criaderos han parido nuevas bestias: <strong>${cant} ${esc(pluralMonstruo(n))}</strong> aparecen en tu box, listas para salir a defenderte.`;
+      return `Los criaderos han parido nuevas bestias: <strong>${cant} ${esc(pluralMonstruo(n))}</strong> aparecen en tus jaulas, listas para salir a defenderte.`;
     case "carta_roja":
       return "La luna se tiñe de rojo: desde ahora los monstruos llegan con su nivel real.";
     default:
@@ -1045,19 +1045,19 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (box ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
-        : `<div class="bw-box-slot vacio" data-box="${b}" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
+        : `<div class="bw-box-slot vacio" data-box="${b}" title="Jaula ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     const caminos = b === 0 ? "1 y 2" : "2 y 3";
     return `
       <div class="bw-caja">
-        <div class="bw-caja-label">Box ${b + 1} <span class="bw-panel-sub">→ caminos ${caminos}</span></div>
+        <div class="bw-caja-label">Jaula ${b + 1} <span class="bw-panel-sub">→ caminos ${caminos}</span></div>
         <div class="bw-box">${slots}</div>
       </div>`;
   };
 
   return `
-    <div class="bw-panel-label">📦 Box <span class="bw-panel-sub">${box.filter(Boolean).length} / 4</span></div>
+    <div class="bw-panel-label">🐾 Jaulas <span class="bw-panel-sub">${box.filter(Boolean).length} / 4</span></div>
     <div class="bw-cajas">${caja(0)}${caja(1)}</div>
     <div class="bw-slot-sub" style="margin-top:6px">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja. Un hueco con aspa abre el criadero.</div>
   `;
@@ -1169,8 +1169,9 @@ function abrirCriadero(boxInicial = null) {
     aviso("Ya no te quedan decretos este turno.", { error: true });
     return;
   }
-  if (!(boxActual ?? []).some((m) => !m)) {
-    aviso("El box está lleno: manda un monstruo o gasta uno antes de criar.", { error: true });
+  const libresEnBox = (b) => (boxActual ?? []).slice(b * 2, b * 2 + 2).filter((m) => !m).length;
+  if (libresEnBox(0) === 0 && libresEnBox(1) === 0) {
+    aviso("Las jaulas están llenas: saca un monstruo antes de criar.", { error: true });
     return;
   }
 
@@ -1178,46 +1179,75 @@ function abrirCriadero(boxInicial = null) {
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const monedasDe = (m) => Math.max(0, m.coste - barato);
   const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
-  const libresEnBox = (b) => (boxActual ?? []).slice(b * 2, b * 2 + 2).filter((m) => !m).length;
-  const huecoEnBox = libresEnBox(boxCriadero) > 0;
+  const libre = libresEnBox(boxCriadero) > 0;
 
-  const tarjetas = lista.map((m) => {
+  /* Igual que la pantalla de descartar: cartas de papel para elegir una y, abajo,
+     el botón de criar. Cada carta lleva su imagen, el coste en monedas arriba y
+     lo que hace el monstruo. */
+  const celda = (m) => {
     const monedas = monedasDe(m);
-    const alcanza = monedas <= energiaMesa;
-    const puede = alcanza && huecoEnBox;
-    return `<div class="bw-criar-card" data-nivel="${m.nivel}">
-        <div class="bw-criar-cabeza">
-          <img src="${BASE_IMG}/monstruos/m1-f.png" alt="">
-          <div class="bw-criar-datos">
-            <div class="bw-criar-tit">${esc(m.nombre)} · nv ${m.nivel}</div>
-            <div class="bw-criar-coste"><img src="${BASE_IMG}/iconos/monedas.png" alt="">${monedas} ${monedas === 1 ? "moneda" : "monedas"}</div>
+    const puede = monedas <= energiaMesa && libre;
+    return `
+      <button type="button" class="bw-desc-celda" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>
+        <div class="bw-carta-grande">
+          <span class="bw-carta-coste-grande">${monedas}</span>
+          <div class="bw-carta-grande-img"><img src="${BASE_IMG}/monstruos/m1-f.png" alt=""></div>
+          <div class="bw-carta-grande-texto">
+            <div class="bw-carta-grande-titulo">${esc(m.nombre)}</div>
+            <p class="bw-carta-grande-desc">${esc(m.texto)}</p>
           </div>
         </div>
-        <p class="bw-criar-desc">${esc(m.texto)}</p>
-        <button type="button" class="bw-modal-usar bw-criar-op" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>Crear</button>
-      </div>`;
-  }).join("");
+      </button>`;
+  };
 
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-criadero";
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
-    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Criadero">
+    <div class="bw-modal bw-desc-modal" role="dialog" aria-modal="true" aria-label="Criadero">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
-      <div class="bw-modal-titulo">Criadero ${criaderoMesa || 1}</div>
+      <div class="bw-desc-tit">Criadero ${criaderoMesa || 1}</div>
       <div class="bw-criar-toggle">
-        ${[0, 1].map((b) => `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">Al box ${b + 1}<span>${libresEnBox(b)} ${libresEnBox(b) === 1 ? "libre" : "libres"}</span></button>`).join("")}
+        ${[0, 1].map((b) => `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">A la jaula ${b + 1}<span>${libresEnBox(b)} ${libresEnBox(b) === 1 ? "libre" : "libres"}</span></button>`).join("")}
       </div>
-      <div class="bw-criar-grid">${tarjetas}</div>
-      <p class="bw-modal-pie">Tienes ${energiaMesa} monedas${huecoEnBox ? "" : ` · el box ${boxCriadero + 1} está lleno`}.</p>
+      <div class="bw-desc-grid">${lista.map(celda).join("")}</div>
+      <p class="bw-desc-nota"></p>
+      <div class="bw-modal-acciones">
+        <button type="button" class="bw-modal-usar bw-criar-ok" disabled>Criar</button>
+      </div>
     </div>`;
   document.body.appendChild(fondo);
+
+  const ok = fondo.querySelector(".bw-criar-ok");
+  const nota = fondo.querySelector(".bw-desc-nota");
+  const marcar = () => {
+    const sel = fondo.querySelector(".bw-desc-celda.sel");
+    const m = sel ? lista.find(x => x.nivel === Number(sel.dataset.nivel)) : null;
+    ok.disabled = !m;
+    ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
+    nota.textContent = !libre
+      ? `La jaula ${boxCriadero + 1} está llena: cambia de jaula o saca un monstruo.`
+      : m
+        ? `Va a la jaula ${boxCriadero + 1}.`
+        : `Elige un monstruo. Tienes ${energiaMesa} monedas.`;
+  };
+  marcar();
+
+  /* Una sola carta marcada a la vez, como en el descarte. */
+  for (const b of fondo.querySelectorAll(".bw-desc-celda")) {
+    b.addEventListener("click", () => {
+      const ya = b.classList.contains("sel");
+      fondo.querySelectorAll(".bw-desc-celda").forEach(x => x.classList.remove("sel"));
+      if (!ya) b.classList.add("sel");
+      marcar();
+    });
+  }
 
   const cerrar = () => fondo.remove();
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
   fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
 
-  /* Toggle de box: se puede cambiar siempre, también si se entró por un hueco. */
+  /* Toggle de jaula: se puede cambiar siempre, también si se entró por un hueco. */
   for (const tb of fondo.querySelectorAll(".bw-criar-box")) {
     tb.addEventListener("click", () => {
       const b = Number(tb.dataset.box);
@@ -1226,19 +1256,18 @@ function abrirCriadero(boxInicial = null) {
     });
   }
 
-  for (const b of fondo.querySelectorAll(".bw-criar-op")) {
-    b.addEventListener("click", async () => {
-      if (!enviarAccion) return;
-      b.disabled = true;
-      const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(b.dataset.nivel), boxIdx: boxCriadero });
-      if (r?.error) {
-        aviso(r.error, { error: true });
-        b.disabled = false;
-        return;
-      }
-      cerrar();
-    });
-  }
+  ok.addEventListener("click", async () => {
+    const sel = fondo.querySelector(".bw-desc-celda.sel");
+    if (!sel || !enviarAccion) return;
+    ok.disabled = true;
+    const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(sel.dataset.nivel), boxIdx: boxCriadero });
+    if (r?.error) {
+      aviso(r.error, { error: true });
+      marcar();
+      return;
+    }
+    cerrar();
+  });
 }
 
 /* ── Manuscritos: la referencia de reglas del juego ─────────────────────── */
@@ -1330,7 +1359,7 @@ function textoDestino(d) {
     case "convertir_aliado":return "Convierte un monstruo atacante en un monstruo tuyo";
     case "subir_monstruos": return "Tus monstruos de nivel 5 o inferior suben un rango";
     case "bajar_monstruos": return "Tus monstruos de nivel 2 o superior bajan un rango";
-    case "colocar_monstruos": return `Pon ${d.cantidad ?? 3} monstruos de nivel ${n} en tu box (criadero)`;
+    case "colocar_monstruos": return `Pon ${d.cantidad ?? 3} monstruos de nivel ${n} en tus jaulas (criadero)`;
     case "carta_roja":      return "¡Carta roja! Desde ahora los monstruos suben de nivel";
     default:                return String(d.tipo ?? "");
   }
@@ -2217,8 +2246,8 @@ function css() {
       margin:0; max-width:min(340px,90vw); text-align:center;
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
-    /* Criadero: toggle de box y una cartita por monstruo */
-    .bw-criar-toggle { display:flex; gap:8px; width:min(340px,90vw); }
+    /* Criadero: toggle de jaula y cartas de papel para elegir el monstruo */
+    .bw-criar-toggle { display:flex; gap:8px; width:100%; }
     .bw-criar-toggle .bw-criar-box {
       flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
       padding:8px 4px; border-radius:9px; cursor:pointer;
@@ -2232,31 +2261,11 @@ function css() {
       color:#12161a; border-color:transparent;
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
-    .bw-criar-grid {
-      display:flex; flex-direction:column; gap:10px;
-      width:min(340px,90vw); max-height:calc(100vh - 250px);
-      overflow-y:auto; padding:2px;
-    }
-    .bw-criar-card {
-      display:flex; flex-direction:column; gap:8px;
-      padding:10px 12px; border-radius:12px;
-      background:rgba(18,16,14,.92);
-      border:1px solid rgba(244,236,221,.18);
-    }
-    .bw-criar-cabeza { display:flex; align-items:center; gap:10px; }
-    .bw-criar-cabeza img { width:38px; height:52px; object-fit:contain; flex:0 0 auto; }
-    .bw-criar-datos { display:flex; flex-direction:column; gap:4px; min-width:0; }
-    .bw-criar-tit { font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; color:#f4ecdd; }
-    .bw-criar-coste {
-      display:flex; align-items:center; gap:5px;
-      font:800 13px/1 ui-monospace, SFMono-Regular, monospace; color:#e8d9b8;
-    }
-    .bw-criar-coste img { width:15px; height:15px; }
-    .bw-criar-desc { margin:0; font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#cfc4ad; }
-    .bw-criar-card .bw-criar-op {
-      width:100%; padding:13px; font-size:15px;
-      font-family:ui-serif, serif; font-weight:700;
-    }
+    /* Carta que no se puede criar (sin monedas o jaula llena): apagada y sin toque */
+    .bw-desc-celda:disabled { opacity:.42; cursor:not-allowed; }
+    .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.65); }
+    /* El botón de criar va debajo de las cartas, como el de descartar */
+    .bw-criar-ok { min-width:170px; }
   </style>`;
 }
 

@@ -104,9 +104,9 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 decretos extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
-  { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en el box." },
-  { tipo:"laboratorio", nivel:3, coste:2, titulo: "CRIADERO 3", descripcion: "Te permite criar rastreadores, carroñeros y yetis en el box." },
-  { tipo:"laboratorio", nivel:4, coste:2, titulo: "CRIADERO 4", descripcion: "Te permite criar rastreadores, carroñeros, yetis y colosos de hielo en el box." },
+  { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
+  { tipo:"laboratorio", nivel:3, coste:2, titulo: "CRIADERO 3", descripcion: "Te permite criar rastreadores, carroñeros y yetis en la jaula." },
+  { tipo:"laboratorio", nivel:4, coste:2, titulo: "CRIADERO 4", descripcion: "Te permite criar rastreadores, carroñeros, yetis y colosos de hielo en la jaula." },
   /* Textos copiados de las cartas físicas: no inventar efectos ni redacciones. */
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
@@ -821,7 +821,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.energia -= coste;
       j.accionesRestantes--;
       j.box[boxIdx] = { id: uid("m"), tipo: "monstruo", nivel, dueno: j.id };
-      evs.push({ tipo: "crear", texto: `${j.nombre} crea monstruo ${nivel} en box ${boxDeIndice(boxIdx) + 1} (1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}).`, a: jugadorId });
+      evs.push({ tipo: "crear", texto: `${j.nombre} crea monstruo ${nivel} en la jaula ${boxDeIndice(boxIdx) + 1} (1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}).`, a: jugadorId });
       break;
     }
 
@@ -863,7 +863,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.box[boxIdx] = null;
       j.lanzaderas[i] = mon;
       j.accionesRestantes--;
-      evs.push({ tipo: "lanzadera", texto: `${j.nombre} mueve monstruo ${mon.nivel} del box ${i + 1} a la lanzadera ${i + 1}.`, a: jugadorId });
+      evs.push({ tipo: "lanzadera", texto: `${j.nombre} mueve monstruo ${mon.nivel} de la jaula ${i + 1} a la lanzadera ${i + 1}.`, a: jugadorId });
       break;
     }
 
@@ -1142,8 +1142,8 @@ function legalesAcciones(e, jugadorId) {
         if (!Array.from({ length: BOX_TAM }, (_, k) => b * BOX_TAM + k).some((i) => !j.box[i])) continue;
         acc.push({
           tipo: "mejorar_bunker", cartaId: carta.uid, boxIdx: b,
-          etiqueta: `Monstruo 3 en box ${b + 1}`,
-          texto: `Monstruo de nivel 3 en el box ${b + 1}`,
+          etiqueta: `Monstruo 3 en la jaula ${b + 1}`,
+          texto: `Monstruo de nivel 3 en la jaula ${b + 1}`,
         });
       }
     } else if (carta.efecto === "subir_lab_o_arm") {
@@ -1174,7 +1174,7 @@ function legalesAcciones(e, jugadorId) {
       if (j.energia >= coste) {
         acc.push({ tipo: "crear_monstruo", nivel: nv, boxIdx,
                    /* Criar gasta 1 decreto y, además, las monedas del nivel. */
-                   texto: `Crear monstruo ${nv} en box ${boxIdx + 1} · 1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}` });
+                   texto: `Crear monstruo ${nv} en la jaula ${boxIdx + 1} · 1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}` });
       }
     }
   }
@@ -1566,7 +1566,7 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
     }
     case "monstruo3_gratis": {
       j.box[o.hueco] = { id: uid("m"), tipo: "monstruo", nivel: 3, dueno: j.id };
-      evs.push({ tipo: "crear", texto: `${j.nombre} crea un monstruo 3 en el box ${o.boxIdx + 1}.` });
+      evs.push({ tipo: "crear", texto: `${j.nombre} crea un monstruo 3 en la jaula ${o.boxIdx + 1}.` });
       return true;
     }
     default: return false;
@@ -1865,7 +1865,7 @@ function resolverDestino(e, jugadorId, carta) {
           colocados++;
         }
       }
-      evs.push({ tipo: "monstruos_gratis", texto: `${j.nombre} recibe ${colocados} monstruo(s) nivel ${carta.nivel} en el box.`, a: jugadorId });
+      evs.push({ tipo: "monstruos_gratis", texto: `${j.nombre} recibe ${colocados} monstruo(s) nivel ${carta.nivel} en la jaula.`, a: jugadorId });
       break;
     }
   }
