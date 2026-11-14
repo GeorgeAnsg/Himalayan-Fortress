@@ -1226,9 +1226,7 @@ function abrirCriadero(boxInicial = null) {
     ok.disabled = !m;
     ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
     /* La jaula elegida ya se ve en el toggle: aquí solo lo que no se ve. */
-    nota.textContent = !libre
-      ? `La jaula ${ROMANOS[boxCriadero + 1]} está llena: cambia de jaula o saca un monstruo.`
-      : m ? "" : `Elige un monstruo. Tienes ${energiaMesa} monedas.`;
+    nota.textContent = libre ? "" : `La jaula ${ROMANOS[boxCriadero + 1]} está llena: cambia de jaula o saca un monstruo.`;
   };
   marcar();
 
@@ -2252,9 +2250,10 @@ function css() {
     }
     /* Criadero: toggle de jaula y cartas de papel para elegir el monstruo */
     .bw-criar-toggle { display:flex; gap:8px; width:100%; }
-    /* Jaula y huecos libres en la misma línea: el toggle no crece de alto. */
+    /* Jaula y huecos libres en la misma línea: el toggle no crece de alto, y
+       los dos botones miden lo mismo aunque uno diga "2 libres". */
     .bw-criar-toggle .bw-criar-box {
-      flex:1; display:flex; flex-direction:row; align-items:baseline; justify-content:center; gap:4px;
+      flex:1 1 0; min-width:0; box-sizing:border-box; display:flex; flex-direction:row; align-items:baseline; justify-content:center; gap:4px;
       padding:6px 6px; border-radius:9px; cursor:pointer; white-space:nowrap;
       font:700 13px/1.1 ui-sans-serif, system-ui, sans-serif;
       color:#cfc4ad; background:rgba(244,236,221,.10);
