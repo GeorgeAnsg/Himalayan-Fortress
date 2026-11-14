@@ -2538,7 +2538,21 @@ function cssAdicional() {
       position: relative !important; top: auto !important;
       left: auto !important; right: auto !important; bottom: auto !important;
       flex: 0 0 auto !important; width: 100% !important;
-      padding-top: env(safe-area-inset-top, 0px) !important;
+      /* El mismo aire arriba y abajo (más el notch, si lo hay): el contenido
+         queda centrado de verdad en vez de pegado al borde de arriba. */
+      padding: calc(8px + env(safe-area-inset-top, 0px)) 12px !important;
+    }
+    /* El ribete de piedra del menú, también debajo de la barra: los dos
+       extremos de la pantalla se cierran con el mismo adorno. */
+    body.bw-himalaya .barra::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: -9px;
+      height: 10px;
+      background: url('${BASE_IMG}/ribete.png') left top / auto 100% repeat-x;
+      /* Del revés, como el de la mano, que mira al otro lado. */
+      transform: scaleY(-1);
+      pointer-events: none;
+      z-index: 2;
     }
     body.bw-himalaya #pantalla {
       /* Segunda fila de la columna: ocupa todo el hueco que dejan barra y menú.

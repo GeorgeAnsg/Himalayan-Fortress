@@ -330,6 +330,16 @@ function actualizarBarra() {
   if (red && !red.className.includes("on") && !red.className.includes("off")) {
     red.classList.toggle("on", estado.redAntes);
   }
+  /* Avatar del centro: el del usuario, en su círculo. Solo se repinta si
+     cambia, para no rehacer el SVG en cada empujón del servidor. */
+  const yo = document.getElementById("yo");
+  if (yo) {
+    const avatar = String(estado.usuario.avatar ?? 0);
+    if (yo.dataset.avatar !== avatar) {
+      yo.dataset.avatar = avatar;
+      yo.innerHTML = avatarSVG(estado.usuario.avatar, { tam: 22 });
+    }
+  }
   pintarCabeceraJuego();
 }
 
@@ -348,11 +358,6 @@ function pintarCabeceraJuego() {
     ciclo.hidden = !n;
     ciclo.textContent = n ? (cab.ciclos ? `Ciclo ${n} de ${cab.ciclos}` : `Ciclo ${n}`) : "";
   }
-  /* Con partida en marcha el ciclo ocupa el sitio del nombre: en un móvil no
-     caben las dos cosas y lo que hace falta ver es el ciclo. */
-  const marca = document.querySelector(".barra .marca");
-  if (marca) marca.hidden = !!cab?.ciclo;
-
   const rec = document.getElementById("recursos");
   if (rec) {
     const lista = cab?.recursos ?? [];
@@ -425,6 +430,8 @@ function abrirAjustes() {
 }
 
 document.getElementById("ajustes")?.addEventListener("click", abrirAjustes);
+/* El avatar del centro abre la cuenta. */
+document.getElementById("yo")?.addEventListener("click", abrirCuenta);
 
 async function abrirCuenta() {
   if (!estado.usuario) return;
