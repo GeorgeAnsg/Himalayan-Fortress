@@ -1145,10 +1145,10 @@ function abrirModalAcciones() {
 
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
-  { nivel: 1, nombre: "Rastreador",      puntos: 1, coste: 0, texto: "Defiende tu base con 1 de fuerza y ataca con 1. Se mueve una casilla por turno." },
-  { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "Defiende tu base con 2 de fuerza y ataca con 2. Se mueve una casilla por turno." },
-  { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "Defiende tu base con 3 de fuerza y ataca con 3. Se mueve una casilla por turno." },
-  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Defiende tu base con 5 de fuerza y ataca con 5. Se mueve una casilla por turno." },
+  { nivel: 1, nombre: "Rastreador",      puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza" },
+  { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza" },
+  { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza" },
+  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza" },
 ];
 
 /* Box al que va la cría. Se predefine al abrir el criadero desde un hueco,
@@ -1966,9 +1966,12 @@ function css() {
       z-index:1000; padding:20px;
     }
     .bw-modal { position:relative; display:flex; flex-direction:column; align-items:center; gap:14px; }
-    /* Cerrar: una X arriba a la derecha, fuera de la fila de botones */
+    /* Cerrar: siempre en la esquina de arriba a la derecha de la pantalla, a
+       20 px de los bordes y sin salirse con el safe-area del móvil. */
     .bw-modal-x {
-      position:absolute; top:-34px; right:-34px; z-index:5;
+      position:fixed; z-index:5;
+      top:calc(env(safe-area-inset-top, 0px) + 20px);
+      right:calc(env(safe-area-inset-right, 0px) + 20px);
       width:32px; height:32px; border-radius:50%;
       display:grid; place-items:center; cursor:pointer;
       border:1px solid rgba(244,236,221,.28); background:rgba(18,16,14,.94);
@@ -2268,7 +2271,7 @@ function css() {
        despegada para que se lean como dos filas. */
     .bw-criar-grid {
       display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start;
-      column-gap:3%; row-gap:0; width:100%; margin:0 auto;
+      column-gap:3%; row-gap:0; width:76%; margin:0 auto;
     }
     .bw-criar-grid .bw-desc-celda { flex:0 0 calc((100% - 3%) / 2); width:calc((100% - 3%) / 2); }
     /* La separación entre las dos filas va en % del ancho (el row-gap en % de
