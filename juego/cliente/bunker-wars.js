@@ -2249,7 +2249,8 @@ function css() {
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
     /* Criadero: toggle de jaula y cartas de papel para elegir el monstruo */
-    .bw-criar-toggle { display:flex; gap:8px; width:100%; }
+    /* Mismo ancho que la rejilla de cartas (76 % del modal). */
+    .bw-criar-toggle { display:flex; gap:8px; width:76%; margin:0 auto; }
     /* Jaula y huecos libres en la misma línea: el toggle no crece de alto, y
        los dos botones miden lo mismo aunque uno diga "2 libres". */
     .bw-criar-toggle .bw-criar-box {
