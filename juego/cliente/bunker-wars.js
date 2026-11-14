@@ -2575,7 +2575,13 @@ function cssAdicional() {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: none !important;
       z-index: 1 !important;
-      background: transparent !important;
+      /* Fondo del propio contenedor: la niebla con la que acaba el mapa. Cuando
+         en el móvil el scroll rebota (o se pasa un poco), en el borde no asoma
+         una franja negra —asomaba el negro del body— sino más niebla, que es
+         lo que hay justo ahí. En reposo el mapa tapa todo y no se ve. */
+      background:
+        url('${BASE_IMG}/mapas/nieve/bottom-fog.png') center bottom / 100% auto no-repeat,
+        #dfe4e8 !important;
     }
     /* Nada dentro del juego debe quedar acotado a 560px */
     body.bw-himalaya #pantalla * { max-width: none; box-sizing: border-box; }
