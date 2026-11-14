@@ -2289,7 +2289,8 @@ function cssAdicional() {
     .bw-hud-fila.medio .bw-edif {
       flex-direction: column; justify-content: center; gap: .8cqw; min-width: 0;
       background: #7a1010; border-radius: 1cqw;
-      padding: 1.6cqw .6cqw 1.7cqw;
+      /* 10 % más alta que antes (1,6 / 1,7 → 1,76 / 1,87). */
+      padding: 1.76cqw .6cqw 1.87cqw;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
     }
     .bw-hud-fila.medio .bw-edif-nombre { color: #f4ecdd; }
@@ -2316,12 +2317,14 @@ function cssAdicional() {
       font: 600 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
       color: #7a1010; white-space: nowrap;
     }
-    .bw-edif-puntos { display: flex; gap: .6 * var(--u); margin-left: .5 * var(--u); }
+    /* En cqw (1 % del ancho del marco): antes iba en var(--u) sin calc(), que
+       es CSS inválido y dejaba los puntos sin tamaño. */
+    .bw-edif-puntos { display: flex; gap: .6cqw; margin-left: .5cqw; }
     .bw-edif-puntos i {
       box-sizing: border-box;
-      width: 8.6 * var(--u); height: 8.6 * var(--u); border-radius: 50%;
+      /* 4× el tamaño original de 1cqw. */
+      width: 4cqw; height: 4cqw; border-radius: 50%;
       border: 1px solid rgba(122, 16, 16, .55); background: transparent;
-      /* Igual tamaño que las pilas de la fortaleza (8,6 * var(--u)). */
     }
     .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
 
