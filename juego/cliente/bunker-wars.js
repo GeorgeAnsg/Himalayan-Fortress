@@ -2789,19 +2789,18 @@ function cssAdicional() {
     /* TEMPORAL: marco la caja de la ficha y la de la imagen. */
     .ficha { outline:1px solid rgba(0,255,102,.95); background:rgba(0,255,102,.22); }
     .ficha-img { outline:1px solid rgba(255,0,204,.95); background:rgba(255,0,204,.18); }
+    /* Mismo estilo que el número de calle: mono, blanco y sin borde. */
     .ficha-nv {
       position:absolute; left:50%; bottom:calc(12 * var(--u));
       transform:translateX(-50%);
-      width:calc(4.4 * var(--u)); height:calc(4.4 * var(--u));
-      display:grid; place-items:center; border-radius:50%;
-      background:#7a1010; color:#f4ecdd;
-      border:calc(.3 * var(--u)) solid rgba(244,236,221,.9);
-      font:700 calc(2.6 * var(--u))/1 ui-serif, Georgia, "Times New Roman", serif;
-      box-shadow:0 calc(.4 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,.45);
+      width:calc(4.4 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(122,16,16,.8); border:0;
+      display:flex; align-items:center; justify-content:center;
+      box-sizing:border-box; padding:calc(.5 * var(--u)) 0 0; text-align:center;
+      font-weight:700; font-family:ui-monospace,monospace;
+      font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
       pointer-events:none;
     }
-    .ficha.mia .ficha-nv      { background:#2a5c92; }
-    .ficha.ajena .ficha-nv    { background:#5c2a72; }
 
     /* torres */
     .torre {
@@ -2913,8 +2912,9 @@ function cssAdicional() {
       position:absolute; margin:calc(-2.48 * var(--u)) 0 0 calc(-2.48 * var(--u));
       /* Círculo un 20 % mayor (4.13 → 4.95u) y letra un punto más. */
       width:calc(4.95 * var(--u)); aspect-ratio:1; border-radius:50%;
-      /* Solo el fondo translúcido: el número va blanco a plena opacidad. */
-      background:rgba(122,16,16,.8); border:0;
+      /* Fondo negro y el número blanco a plena opacidad (el monstruo se queda
+         con el borgoña de antes). */
+      background:rgba(0,0,0,.78); border:0;
       /* Flex y un pelín de relleno arriba: con la métrica mono el dígito
          quedaba un poco alto; el padding lo baja sin mover el círculo. */
       display:flex; align-items:center; justify-content:center;
