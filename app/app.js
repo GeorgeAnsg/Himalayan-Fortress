@@ -45,8 +45,9 @@ async function arrancar() {
     return;
   }
   estado.version = v.datos.version;
+  /* Solo se apunta la versión: ya no se vigila ni sale el modal de «nueva
+     versión» (saltaba en cada cambio de código). */
   versionMod.fijarCargada(estado.version);
-  versionMod.vigilar();
 
   const juegos = await api.juegos();
   estado.juegos = juegos.datos?.juegos ?? [];
@@ -102,7 +103,6 @@ function conectar() {
     alMesa,
     alSinMesa,
     alError: (texto) => aviso(texto, { error: true }),
-    alVersion: (v) => versionMod.avisarNueva(v),
     alRed,
     alSesionCaida: () => {
       sesion.borrar();
