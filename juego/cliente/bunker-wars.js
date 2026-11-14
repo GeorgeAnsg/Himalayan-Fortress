@@ -188,7 +188,8 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
       /* La niebla no se pasa del final: con +50 se metía 50 px por debajo del
          suelo, su borde opaco quedaba recortado y abajo asomaba una franja
          (negra antes, de nubes después). A tope de scroll queda a ras. */
-    sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40}px`);
+      /* 10,7 u son los 40 px de antes a 375 px de ancho, en proporción. */
+    sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 10.7}cqw`);
     /* Vista arriba el mapa se ve un 15 % más grande y vuelve a su tamaño al
        bajar. Va en el mundo entero para que el castillo, los caminos, los
        círculos de calle, las jaulas y el tablero crezcan juntos. */
@@ -3248,9 +3249,13 @@ function cssAdicional() {
        crezca hacia arriba. Los 100 px de más la subían hasta la mitad del mapa,
        así que se quedó en su altura original. */
     .capa-bottom-fog {
-      /* Bruma solo del borde de abajo: 200 px más baja que antes, así empieza
-         por debajo del final de la escalera y no tapa la fila de huecos. */
-      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u) - 280px);
+      /* Bruma solo del borde de abajo, 200 px más baja que antes (así empieza
+         por debajo del final de la escalera y no tapa la fila de huecos).
+         Todo en u, no en px, para que escale con el ancho: 40 % del suelo
+         + los 5,1 u del ajuste original − 21,3 u (los 80 px que subió al
+         recortar el suelo) − 53,3 u (los 200 px que se baja ahora). */
+      position:absolute; bottom:0; left:0; right:0;
+      height:calc(40% + 5.1 * var(--u) - 21.3 * var(--u) - 53.3 * var(--u));
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
       /* El parallax mueve la foto dentro de su caja, no la caja: así el borde
