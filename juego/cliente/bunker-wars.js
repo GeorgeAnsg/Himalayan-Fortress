@@ -842,14 +842,14 @@ function pintarMiBunker(j, priv, fase) {
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
-      /* Icono del monstruo: usa la frontal por defecto, y la vista trasera
-         cuando la ficha tiene la clase .vista-trasera (monstruos subiendo la
-         escalera). Las imágenes están en /app/juegos/bunker-wars/img/monstruos/. */
+      /* Icono del monstruo: de espaldas (m1-t, sin cabeza) cuando sube la
+         escalera atacando el fuerte, y de frente (m1-f, la cabeza hacia abajo)
+         cuando lo defiende. Encima lleva una pastilla con su fuerza. Las
+         imágenes están en /app/juegos/bunker-wars/img/monstruos/. */
       const imgFrontal = `${BASE_IMG}/monstruos/m1-f.png`;
       const imgTrasera = `${BASE_IMG}/monstruos/m1-t.png`;
-      const img = f.vistaTrasera ? imgTrasera : imgFrontal;
-      const clsMonstruo = f.vistaTrasera ? "vista-trasera" : "";
-      return `<div class="ficha ${cls} ${clsMonstruo}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%">${nivelDe(f)}<img src="${img}" alt="monstruo nv1" class="ficha-img"/></div>`;
+      const img = esAtacante ? imgTrasera : imgFrontal;
+      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
@@ -2764,31 +2764,40 @@ function cssAdicional() {
     }
     .losa.base-torre { border:none }
 
-    /* fichas */
+    /* fichas: el monstruo es la imagen, apoyado en la losa y centrado; arriba
+       lleva una pastilla redonda con su fuerza, como los decretos del HUD. */
     .ficha {
       position:absolute; width:calc(7 * var(--u)); aspect-ratio:1;
       margin:calc(-3.5 * var(--u)) 0 0 calc(-3.5 * var(--u));
-      border-radius:50%; border:calc(.41 * var(--u)) solid rgba(0,0,0,.45);
-      display:grid; place-items:center; cursor:pointer;
-      font-weight:700; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-      font-size:calc(2.7 * var(--u)); line-height:1; color:#fff;
-      z-index:5;
-      box-shadow:0 6px 10px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35);
+      display:grid; place-items:center; cursor:pointer; z-index:5;
     }
-    .ficha.mia      { background:radial-gradient(circle at 35% 30%, #7fb4ea, var(--azul) 62%, #2a5c92) }
+    .ficha-img {
+      position:absolute; left:50%; bottom:50%; transform:translateX(-50%);
+      /* Un tercio del tamaño natural de la lámina (121 × 224 px). */
+      width:calc(8.5 * var(--u)); height:auto; pointer-events:none;
+      filter:drop-shadow(0 calc(.5 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,.5));
+    }
     .ficha::after {
-      content:""; position:absolute; left:50%; top:132%;
-      width:calc(7 * var(--u)); height:calc(2.5 * var(--u));
+      content:""; position:absolute; left:50%; top:100%;
+      width:calc(9 * var(--u)); height:calc(2.5 * var(--u));
       transform:translate(-50%,-50%);
       border-radius:50%; z-index:-1;
       background:radial-gradient(closest-side, rgba(0,0,0,.5), transparent);
     }
     .ficha:active { filter:brightness(1.15) }
-    .ficha.atacante { background:radial-gradient(circle at 35% 30%, #f0836f, var(--rojo) 62%, #8e2b1e) }
-    .ficha.ajena    {
-      background:radial-gradient(circle at 35% 30%, #c08ad6, var(--morado) 62%, #5c2a72);
-      border-style:dashed; border-color:rgba(255,255,255,.55);
+    .ficha-nv {
+      position:absolute; left:50%; bottom:calc(14 * var(--u));
+      transform:translateX(-50%);
+      width:calc(4.4 * var(--u)); height:calc(4.4 * var(--u));
+      display:grid; place-items:center; border-radius:50%;
+      background:#7a1010; color:#f4ecdd;
+      border:calc(.3 * var(--u)) solid rgba(244,236,221,.9);
+      font:700 calc(2.6 * var(--u))/1 ui-serif, Georgia, "Times New Roman", serif;
+      box-shadow:0 calc(.4 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,.45);
+      pointer-events:none;
     }
+    .ficha.mia .ficha-nv      { background:#2a5c92; }
+    .ficha.ajena .ficha-nv    { background:#5c2a72; }
 
     /* torres */
     .torre {
