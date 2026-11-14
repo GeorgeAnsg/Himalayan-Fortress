@@ -2,6 +2,14 @@
 
 import { esc, avatarSVG, modal } from "../../app/ui.js";
 
+/* Casco ya pintado (ver pintar): el nodo que lo contiene, que se vuelve a
+   colgar en cada repintado, y la firma de lo estructural. */
+let cascoNodo = null;
+let cascoPintado = null;
+/* Monstruos que acaban de bajar a la casilla 4, con la hora: la animación de
+   llegada tiene que aguantar los repintados que llegan detrás de una jugada. */
+const llegadasFichas = new Map();
+
 export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll }) {
   if (!publica) { contenedor.innerHTML = "Cargando…"; return; }
 
@@ -49,13 +57,52 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      scrollTop ya vale 0: el sitio donde miraba el jugador llega en `scroll`. */
   const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
-  contenedor.innerHTML = `
+  /* El casco —estilos, niebla, banderines, fortaleza, escaleras, losas y el
+     marco del tablón— se pinta una vez y se guarda como nodo. La plataforma
+     vacía el contenedor en cada repintado, así que el casco se vuelve a colgar
+     tal cual: al no recrearse, las láminas grandes no se vuelven a decodificar
+     y desaparece el fogonazo negro. Solo se refrescan las capas con
+     data-capa, que son las que de verdad cambian. */
+  const html = `
     ${css()}
     ${cssAdicional()}
 
     ${yo ? pintarMiBunker(yo, privada, fase) : ""}
 
   `;
+  /* La escena no depende de la fase: solo de la luna y de la gente de la mesa.
+     Mientras no cambie eso, el casco se reutiliza aunque cambie el turno. */
+  const firmaCasco = `${lunaMesa}|${jugadoresMesa.length}`;
+  let reusado = false;
+  if (yo && cascoNodo && firmaCasco === cascoPintado) {
+    try {
+      contenedor.replaceChildren(cascoNodo);
+      /* El molde se parsea inerte (DOMParser): así no se vuelven a pedir ni a
+         decodificar las imágenes del mapa solo por leer las capas nuevas. */
+      const molde = new DOMParser().parseFromString(html, "text/html");
+      for (const capa of cascoNodo.querySelectorAll("[data-capa]")) {
+        const nueva = molde.querySelector(`[data-capa="${capa.dataset.capa}"]`);
+        if (nueva) capa.innerHTML = nueva.innerHTML;
+      }
+      reusado = true;
+    } catch (err) {
+      /* Si el casco venía en un estado raro, se pinta entero: nunca una
+         pantalla en blanco por ahorrarse un repintado. */
+      console.log("[casco] se repinta entero:", err?.message ?? err);
+    }
+  }
+  if (!reusado) {
+    contenedor.innerHTML = html;
+    /* La envoltura no ocupa caja (display:contents): sus hijos se colocan como
+       si colgaran directamente del contenedor. */
+    const envoltura = document.createElement("div");
+    envoltura.className = "bw-casco";
+    envoltura.style.display = "contents";
+    while (contenedor.firstChild) envoltura.appendChild(contenedor.firstChild);
+    contenedor.appendChild(envoltura);
+    cascoNodo = yo ? envoltura : null;
+    cascoPintado = yo ? firmaCasco : null;
+  }
   /* Las fichas que han avanzado esta ronda se deslizan hasta su casilla en vez
      de aparecer de golpe en ella. Solo cuenta como ronda de monstruos lo que
      se mueve sin ser tuyo (los que atacan tu búnker o los del enemigo) y los
@@ -1018,8 +1065,15 @@ function pintarMiBunker(j, priv, fase) {
           const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
       /* Un monstruo recién bajado a la casilla 4 entra desde atrás (ver
-         .ficha-despliegue): aparece fundido y se asienta en su sitio. */
-      const despliega = !antes && paso === 3;
+         .ficha-despliegue). Se apunta la hora para que la animación aguante
+         los repintados que llegan detrás de la jugada: con el retardo
+         negativo se reanuda donde estaba en vez de empezar de cero. */
+      if (!antes && paso === 3 && f.id) llegadasFichas.set(f.id, Date.now());
+      const llegada = f.id ? (llegadasFichas.get(f.id) ?? 0) : 0;
+      const desdeLlegada = llegada ? Date.now() - llegada : Infinity;
+      if (desdeLlegada > 5000) llegadasFichas.delete(f.id);
+      const despliega = desdeLlegada < 1000;
+      const retardo = despliega ? ` style="animation-delay:-${Math.max(0, Math.round(desdeLlegada))}ms"` : "";
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
@@ -1030,7 +1084,7 @@ function pintarMiBunker(j, priv, fase) {
       const imgFrontal = `${BASE_IMG}/monstruos/m1-f.png`;
       const imgTrasera = `${BASE_IMG}/monstruos/m1-t.png`;
       const img = esAtacante ? imgTrasera : imgFrontal;
-      return `<div class="ficha ${cls}${despliega ? " ficha-despliegue" : ""}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      return `<div class="ficha ${cls}${despliega ? " ficha-despliegue" : ""}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"${retardo}/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
@@ -1114,7 +1168,7 @@ function pintarMiBunker(j, priv, fase) {
           <div class="capa-himalaya bloque-mapa">
             <img src="${BASE_IMG}/mapas/nieve/fortress.png" class="img-fortress" alt="">
             <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
-            <div class="fort-ui">
+            <div class="fort-ui" data-capa="fort-ui">
               <div class="fort-plat energia" style="left:20.5%;top:25.5%">
                 <div class="fort-cifra">${quedan.monedas}</div>
                 <div class="fort-pila-caja coins">
@@ -1148,10 +1202,10 @@ function pintarMiBunker(j, priv, fase) {
             <div class="num-calle" style="left:calc(49.2% + 0.77 * var(--u));top:83%">2</div>
             <div class="num-calle" style="left:calc(73.2% + 4.62 * var(--u));top:83%">3</div>
           </div>
-          <div class="bw-layer">${lanzHtml}</div>
+          <div class="bw-layer" data-capa="lanzaderas">${lanzHtml}</div>
           <div class="bw-layer">${losasHtml}</div>
-          <div class="bw-layer">${torresHtml}</div>
-          <div class="bw-layer">${fichasHtml}</div>
+          <div class="bw-layer" data-capa="torres">${torresHtml}</div>
+          <div class="bw-layer" data-capa="fichas">${fichasHtml}</div>
         </div>
       </div>
     </section>
@@ -1208,11 +1262,11 @@ function pintarHud(j, priv) {
      cuatro huecos de la fortaleza; abajo la franja de turnos. */
   return `
     <div class="bw-hud">
-      <div class="bw-hud-aviso" title="Turno en curso">
+      <div class="bw-hud-aviso" data-capa="hud-aviso" title="Turno en curso">
         <span class="bw-hud-aviso-texto">${tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}</span>
         <div class="bw-hud-turnos aviso" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
       </div>
-      <div class="bw-hud-caja" title="Fortaleza: producción, vida y edificios">
+      <div class="bw-hud-caja" data-capa="hud-caja" title="Fortaleza: producción, vida y edificios">
         <div class="bw-hud-cuerpo">
           <div class="bw-hud-fila arriba">
             <div class="bw-hud-celda izq">${recurso("monedas", "Monedas", tot.monedas, energia)}</div>
@@ -1916,13 +1970,11 @@ function abrirEnvio(mon) {
       if (!accion || !enviarAccion) return;
       b.disabled = true;
       desvanecerJaula();
+      /* El modal se cierra ya: si esperase a que conteste el servidor, el
+         tablero se repintaría detrás del velo y el movimiento no se vería. */
+      cerrarEnvio();
       const r = await enviarAccion(accion);
-      if (r?.error) {
-        aviso(r.error, { error: true });
-        b.disabled = false;
-        return;
-      }
-      fondo.remove();
+      if (r?.error) aviso(r.error, { error: true });
     });
   }
 }
