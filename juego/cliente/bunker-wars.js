@@ -1084,7 +1084,7 @@ function notaCriadero() {
     .filter(nv => nv <= max)
     .map(nv => `nv ${nv} = ${Math.max(0, COSTE_MONSTRUO_UI[nv] - barato)} mon.`)
     .join(" · ");
-  return `🩸 Criadero ${lab} · crea hasta nivel ${max} · 1 decreto por monstruo${costes ? ` · ${costes}` : ""}`;
+  return `🩸 Criadero ${lab} · crea hasta nivel ${max}${costes ? ` · ${costes}` : ""}`;
 }
 
 function motivoSinAcciones() {
@@ -1105,26 +1105,26 @@ function abrirModalAcciones() {
   cerrarModalAcciones();
   const lista = (accionesMesa ?? []).filter(a => a.tipo !== "lanzar" && a.tipo !== "no_lanzar");
   const cuerpo = lista.length
-    ? `<div class="bw-envio-opciones">${lista.map(a =>
-        `<button type="button" class="bw-envio-op bw-acc-op" data-i="${accionesMesa.indexOf(a)}">${esc(a.etiqueta ?? a.texto ?? "Acción")}</button>`
+    ? `<div class="bw-modal-lista">${lista.map(a =>
+        `<button type="button" class="bw-modal-usar bw-acc-op" data-i="${accionesMesa.indexOf(a)}">${esc(a.etiqueta ?? a.texto ?? "Acción")}</button>`
       ).join("")}</div>`
-    : `<p class="bw-modal-nota">${esc(motivoSinAcciones())}</p>`;
+    : `<p class="bw-modal-pie">${esc(motivoSinAcciones())}</p>`;
 
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-acciones";
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
-    <div class="bw-envio" role="dialog" aria-modal="true" aria-label="Acciones">
-      <div class="bw-envio-titulo">Acciones · ${lista.length}</div>
+    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Acciones">
+      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
+      <div class="bw-modal-titulo">Acciones</div>
       ${cuerpo}
-      <p class="bw-slot-sub" style="margin:0">${esc(notaCriadero())}</p>
-      <button type="button" class="bw-envio-cerrar bw-acc-cerrar">Cerrar</button>
+      <p class="bw-modal-pie">${esc(notaCriadero())}</p>
     </div>`;
   document.body.appendChild(fondo);
 
   const cerrar = () => fondo.remove();
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
-  fondo.querySelector(".bw-acc-cerrar").addEventListener("click", cerrar);
+  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
 
   for (const b of fondo.querySelectorAll(".bw-acc-op")) {
     b.addEventListener("click", async () => {
@@ -1176,13 +1176,15 @@ function abrirCriadero() {
   const filas = lista.map((m) => {
     const monedas = monedasDe(m);
     const alcanza = monedas <= energiaMesa;
-    return `<button type="button" class="bw-criar" data-nivel="${m.nivel}"${alcanza ? "" : " disabled"}>
-        <span class="bw-criar-img"><img src="${BASE_IMG}/monstruos/m1-f.png" alt=""></span>
-        <span>
-          <span class="bw-criar-nombre">${esc(m.nombre)} · nv ${m.nivel}</span>
-          <span class="bw-criar-sub">${esc(m.texto)} · ${monedas} ${monedas === 1 ? "moneda" : "monedas"}${alcanza ? "" : " · no te llega"}</span>
+    return `<button type="button" class="bw-modal-usar bw-criar-op" data-nivel="${m.nivel}"${alcanza ? "" : " disabled"}>
+        <span class="bw-criar-fila">
+          <img src="${BASE_IMG}/monstruos/m1-f.png" alt="">
+          <span class="bw-criar-texto">
+            <span class="bw-criar-nombre">${esc(m.nombre)} · nv ${m.nivel}</span>
+            <span class="bw-criar-sub">${esc(m.texto)}${alcanza ? "" : " · no te llega"}</span>
+          </span>
         </span>
-        <span class="bw-criar-coste">1 decreto</span>
+        <span class="bw-criar-mon"><img src="${BASE_IMG}/iconos/monedas.png" alt="">${monedas}</span>
       </button>`;
   }).join("");
 
@@ -1190,19 +1192,19 @@ function abrirCriadero() {
   fondo.id = "bw-modal-criadero";
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
-    <div class="bw-envio" role="dialog" aria-modal="true" aria-label="Criadero">
-      <div class="bw-envio-titulo">Criadero ${criaderoMesa || 1} · crea hasta nivel ${max}</div>
-      <div class="bw-criar-lista">${filas}</div>
-      <p class="bw-slot-sub" style="margin:0">Tienes ${energiaMesa} monedas y ${accionesRestantesMesa} decretos. El monstruo sale en el primer hueco libre.</p>
-      <button type="button" class="bw-envio-cerrar bw-criar-cerrar">Cerrar</button>
+    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Criadero">
+      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
+      <div class="bw-modal-titulo">Criadero ${criaderoMesa || 1} · hasta nivel ${max}</div>
+      <div class="bw-modal-lista">${filas}</div>
+      <p class="bw-modal-pie">Tienes ${energiaMesa} monedas. El monstruo sale en el primer hueco libre.</p>
     </div>`;
   document.body.appendChild(fondo);
 
   const cerrar = () => fondo.remove();
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
-  fondo.querySelector(".bw-criar-cerrar").addEventListener("click", cerrar);
+  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
 
-  for (const b of fondo.querySelectorAll(".bw-criar")) {
+  for (const b of fondo.querySelectorAll(".bw-criar-op")) {
     b.addEventListener("click", async () => {
       if (!enviarAccion) return;
       b.disabled = true;
@@ -2178,20 +2180,33 @@ function css() {
     .bw-envio-op:disabled { opacity:.5; cursor:default; }
     .bw-envio-cerrar { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:800;
                        cursor:pointer; border:none; background:#12100e; color:#f4ecdd; }
-    /* Criadero: una fila por monstruo, con su imagen, lo que ataca y el coste */
-    .bw-criar-lista { display:flex; flex-direction:column; gap:8px; }
-    .bw-criar {
-      display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
-      padding:8px 10px; border-radius:9px; text-align:left; cursor:pointer;
-      border:1px solid rgba(18,16,14,.25); background:#fff; color:#12100e;
+    /* Lista de opciones en columna con nuestro botón gris de UI */
+    .bw-modal-lista {
+      display:flex; flex-direction:column; gap:10px;
+      width:min(340px,90vw); z-index:3;
+      max-height:calc(100vh - 190px); overflow-y:auto; padding:2px;
     }
-    .bw-criar:active { background:#d6dee5; }
-    .bw-criar:disabled { opacity:.45; cursor:not-allowed; }
-    .bw-criar-img { width:34px; height:48px; display:flex; align-items:flex-end; justify-content:center; }
-    .bw-criar-img img { max-width:100%; max-height:100%; }
-    .bw-criar-nombre { display:block; font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; }
-    .bw-criar-sub { display:block; font:400 11px/1.3 ui-sans-serif, system-ui, sans-serif; color:#5b5347; }
-    .bw-criar-coste { font:800 12px/1.2 ui-monospace, SFMono-Regular, monospace; text-align:right; color:#7a1010; }
+    .bw-modal-lista .bw-modal-usar {
+      width:100%; display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding:11px 16px; text-align:left;
+      font-family:ui-serif, serif; font-weight:700; font-size:14px;
+    }
+    .bw-modal-titulo { font:700 18px/1.2 ui-serif, serif; color:#f4ecdd; text-align:center; }
+    .bw-modal-pie {
+      margin:0; max-width:min(340px,90vw); text-align:center;
+      font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
+    }
+    /* Criadero: imagen, nombre y, a la derecha, las monedas */
+    .bw-criar-fila { display:flex; align-items:center; gap:9px; min-width:0; }
+    .bw-criar-fila img { width:26px; height:36px; object-fit:contain; flex:0 0 auto; }
+    .bw-criar-texto { display:flex; flex-direction:column; min-width:0; }
+    .bw-criar-nombre { font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; }
+    .bw-criar-sub { font:400 11px/1.3 ui-sans-serif, system-ui, sans-serif; color:#4a4339; }
+    .bw-criar-mon {
+      display:flex; align-items:center; gap:4px;
+      font:800 14px/1 ui-monospace, SFMono-Regular, monospace;
+    }
+    .bw-criar-mon img { width:15px; height:15px; }
   </style>`;
 }
 
