@@ -1149,8 +1149,6 @@ const BESTIARIO_UI = [
   { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "Defiende tu base con 2 de fuerza y ataca con 2. Se mueve una casilla por turno." },
   { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "Defiende tu base con 3 de fuerza y ataca con 3. Se mueve una casilla por turno." },
   { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Defiende tu base con 5 de fuerza y ataca con 5. Se mueve una casilla por turno." },
-  /* El nivel 7 no sale del criadero: la carta se ve, pero nunca se puede criar. */
-  { nivel: 7, nombre: "Devorador de cumbres", puntos: 7, coste: 3, noCriable: true, texto: "No se cría: solo llega con la carta de Destino o al subir de rango un monstruo." },
 ];
 
 /* Box al que va la cría. Se predefine al abrir el criadero desde un hueco,
@@ -1180,9 +1178,7 @@ function abrirCriadero(boxInicial = null) {
   const max = nivelMaxCriadero(criaderoMesa || 1);
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const monedasDe = (m) => Math.max(0, m.coste - barato);
-  /* Las cinco cartas del bestiario: las que el criadero ya permite criar y,
-     siempre al final, la del nivel 7 que nunca sale de aquí. */
-  const lista = BESTIARIO_UI.filter(m => m.noCriable || m.nivel <= max);
+  const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
   const libre = libresEnBox(boxCriadero) > 0;
 
   /* Igual que la pantalla de descartar: cartas de papel para elegir una y, abajo,
@@ -1190,7 +1186,7 @@ function abrirCriadero(boxInicial = null) {
      lo que hace el monstruo. */
   const celda = (m) => {
     const monedas = monedasDe(m);
-    const puede = !m.noCriable && monedas <= energiaMesa && libre;
+    const puede = monedas <= energiaMesa && libre;
     return `
       <button type="button" class="bw-desc-celda" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>
         <div class="bw-carta-grande">
@@ -1210,9 +1206,9 @@ function abrirCriadero(boxInicial = null) {
   fondo.innerHTML = `
     <div class="bw-modal bw-desc-modal" role="dialog" aria-modal="true" aria-label="Criadero">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
-      <div class="bw-desc-tit">Criadero ${criaderoMesa || 1}</div>
+      <div class="bw-desc-tit">Criadero ${ROMANOS[criaderoMesa || 1] || (criaderoMesa || 1)}</div>
       <div class="bw-criar-toggle">
-        ${[0, 1].map((b) => `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">A la jaula ${b + 1}<span>${libresEnBox(b)} ${libresEnBox(b) === 1 ? "libre" : "libres"}</span></button>`).join("")}
+        ${[0, 1].map((b) => { const n = libresEnBox(b); return `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">Jaula ${ROMANOS[b + 1]}<span>(${n} ${n === 1 ? "libre" : "libres"})</span></button>`; }).join("")}
       </div>
       <div class="bw-criar-grid">${lista.map(celda).join("")}</div>
       <p class="bw-desc-nota"></p>
@@ -1229,11 +1225,10 @@ function abrirCriadero(boxInicial = null) {
     const m = sel ? lista.find(x => x.nivel === Number(sel.dataset.nivel)) : null;
     ok.disabled = !m;
     ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
+    /* La jaula elegida ya se ve en el toggle: aquí solo lo que no se ve. */
     nota.textContent = !libre
-      ? `La jaula ${boxCriadero + 1} está llena: cambia de jaula o saca un monstruo.`
-      : m
-        ? `Va a la jaula ${boxCriadero + 1}.`
-        : `Elige un monstruo. Tienes ${energiaMesa} monedas.`;
+      ? `La jaula ${ROMANOS[boxCriadero + 1]} está llena: cambia de jaula o saca un monstruo.`
+      : m ? "" : `Elige un monstruo. Tienes ${energiaMesa} monedas.`;
   };
   marcar();
 
@@ -2148,13 +2143,15 @@ function css() {
       width:100%; pointer-events:none; animation:none;
       box-shadow:0 10px 24px rgba(0,0,0,.72);
     }
-    .bw-desc-celda.sel .bw-carta-grande { outline:2px solid #e0a33f; outline-offset:2px; }
+    .bw-desc-celda.sel .bw-carta-grande { outline:1px solid #e0a33f; outline-offset:1px; }
+    /* La marca de la carta elegida: el check de tinta negra sobre el papel. */
     .bw-desc-celda.sel::after {
-      content:"✓"; position:absolute; top:-7px; right:-7px;
-      width:22px; height:22px; border-radius:50%;
-      background:#e0a33f; color:#20140a;
-      display:grid; place-items:center; font-size:13px; font-weight:900;
-      box-shadow:0 2px 6px rgba(0,0,0,.6);
+      content:"✓"; position:absolute; top:-6px; right:-6px;
+      width:20px; height:20px; border-radius:50%;
+      background:#f7f1e4; color:#12161a;
+      border:1px solid #12161a;
+      display:grid; place-items:center; font-size:12px; font-weight:900;
+      box-shadow:0 1px 4px rgba(0,0,0,.5);
     }
     .bw-desc-celda .bw-carta-coste-grande { top:calc(3.5% - 2px); }
     .bw-desc-nota {
@@ -2252,9 +2249,10 @@ function css() {
     }
     /* Criadero: toggle de jaula y cartas de papel para elegir el monstruo */
     .bw-criar-toggle { display:flex; gap:8px; width:100%; }
+    /* Jaula y huecos libres en la misma línea: el toggle no crece de alto. */
     .bw-criar-toggle .bw-criar-box {
-      flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-      padding:8px 4px; border-radius:9px; cursor:pointer;
+      flex:1; display:flex; flex-direction:row; align-items:baseline; justify-content:center; gap:4px;
+      padding:6px 6px; border-radius:9px; cursor:pointer; white-space:nowrap;
       font:700 13px/1.1 ui-sans-serif, system-ui, sans-serif;
       color:#cfc4ad; background:rgba(244,236,221,.10);
       border:1px solid rgba(244,236,221,.25);
@@ -2265,13 +2263,17 @@ function css() {
       color:#12161a; border-color:transparent;
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
-    /* Tres cartas arriba y dos abajo, con anchos en % del modal (nada fijo):
-       tres huecos de un tercio menos los dos huecos de separación. */
+    /* Dos cartas arriba y dos abajo, con anchos en % del modal (nada fijo):
+       dos huecos de medio ancho menos la separación, y la fila de abajo más
+       despegada para que se lean como dos filas. */
     .bw-criar-grid {
       display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start;
-      gap:3%; width:100%; margin:0 auto;
+      column-gap:3%; row-gap:0; width:100%; margin:0 auto;
     }
-    .bw-criar-grid .bw-desc-celda { flex:0 0 calc((100% - 6%) / 3); width:calc((100% - 6%) / 3); }
+    .bw-criar-grid .bw-desc-celda { flex:0 0 calc((100% - 3%) / 2); width:calc((100% - 3%) / 2); }
+    /* La separación entre las dos filas va en % del ancho (el row-gap en % de
+       un contenedor de alto automático se queda en 0). */
+    .bw-criar-grid .bw-desc-celda:nth-child(n+3) { margin-top:5%; }
     /* Carta que no se puede criar (sin monedas o jaula llena): apagada y sin toque */
     .bw-desc-celda:disabled { opacity:.42; cursor:not-allowed; }
     .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.65); }
