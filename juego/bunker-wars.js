@@ -747,7 +747,7 @@ function faseEnergia(e, jugadorId, evs) {
   j.energia = energiaTotal(j);
   j.accionesRestantes = accionesTotal(j);
   j.cartasJugadasEsteTurno = 0;
-  evs.push({ tipo: "energia", texto: `${j.nombre}: ${j.energia} energía, ${j.accionesRestantes} acciones.`, a: jugadorId });
+  evs.push({ tipo: "energia", texto: `${j.nombre}: ${j.energia} monedas, ${j.accionesRestantes} decretos.`, a: jugadorId });
   e.fase = "acciones";
   return { estado: e, eventos: evs };
 }
@@ -807,7 +807,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.energia -= coste;
       j.accionesRestantes--;
       j.box[boxIdx] = { id: uid("m"), tipo: "monstruo", nivel, dueno: j.id };
-      evs.push({ tipo: "crear", texto: `${j.nombre} crea monstruo nivel ${nivel} en box ${boxDeIndice(boxIdx) + 1}.`, a: jugadorId });
+      evs.push({ tipo: "crear", texto: `${j.nombre} crea monstruo ${nivel} en box ${boxDeIndice(boxIdx) + 1} (1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}).`, a: jugadorId });
       break;
     }
 
@@ -1159,7 +1159,8 @@ function legalesAcciones(e, jugadorId) {
       const coste = costeMonstruoJ(nv, j);
       if (j.energia >= coste) {
         acc.push({ tipo: "crear_monstruo", nivel: nv, boxIdx,
-                   texto: `Crear monstruo ${nv} en box ${boxIdx + 1} (${coste}e)` });
+                   /* Criar gasta 1 decreto y, además, las monedas del nivel. */
+                   texto: `Crear monstruo ${nv} en box ${boxIdx + 1} · 1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}` });
       }
     }
   }
@@ -1203,10 +1204,10 @@ function legalesAcciones(e, jugadorId) {
         const f = s.posiciones[POS_DESPLIEGUE];
         if (!f) {
           acc.push({ tipo: "mover_a_sendero", monstruoId: m.id, sendero: s.id, posicion: POS_DESPLIEGUE,
-                     texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 (1e)` });
+                     texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 (1 moneda)` });
         } else if (f.tipo === "atacante") {
           acc.push({ tipo: "mover_a_sendero", monstruoId: m.id, sendero: s.id, posicion: POS_DESPLIEGUE,
-                     texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 · atacar atacante ${f.nivel} (1e)` });
+                     texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 · atacar atacante ${f.nivel} (1 moneda)` });
         }
       }
     }
@@ -1226,8 +1227,8 @@ function legalesAcciones(e, jugadorId) {
           acc.push({
             tipo: "avanzar_monstruo", monstruoId: m.id, sendero: s.id, posicion: destino,
             texto: f
-              ? `Monstruo ${m.nivel} ataca atacante ${f.nivel} en E${s.id} peldaño ${destino + 1} (1e)`
-              : `Monstruo ${m.nivel} avanza a C${s.id} peldaño ${destino + 1} (1e)`,
+              ? `Monstruo ${m.nivel} ataca atacante ${f.nivel} en E${s.id} peldaño ${destino + 1} (1 moneda)`
+              : `Monstruo ${m.nivel} avanza a C${s.id} peldaño ${destino + 1} (1 moneda)`,
           });
         }
       });

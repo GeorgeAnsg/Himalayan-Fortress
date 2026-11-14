@@ -1096,9 +1096,9 @@ function notaCriadero() {
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const costes = Object.keys(COSTE_MONSTRUO_UI).map(Number)
     .filter(nv => nv <= max)
-    .map(nv => `nv ${nv} = ${Math.max(0, COSTE_MONSTRUO_UI[nv] - barato)}e`)
+    .map(nv => `nv ${nv} = ${Math.max(0, COSTE_MONSTRUO_UI[nv] - barato)} mon.`)
     .join(" · ");
-  return `🩸 Criadero ${lab} · crea hasta nivel ${max}${costes ? ` · ${costes}` : ""}`;
+  return `🩸 Criadero ${lab} · crea hasta nivel ${max} · 1 decreto por monstruo${costes ? ` · ${costes}` : ""}`;
 }
 
 function pintarAcciones() {
