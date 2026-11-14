@@ -1783,17 +1783,24 @@ function abrirCiencia() {
       </div>`;
   };
 
+  /* Dos huecos fijos, siempre: el que no tiene ciencia queda punteado, como
+     los huecos del box, para que se vea que caben dos y cuál está libre. */
+  const huecos = Array.from({ length: SLOTS_CIENCIA }, (_, i) => {
+    const c = cartas[i];
+    return c ? celda(c) : `<div class="bw-ciencia-hueco" title="Hueco de ciencia libre">
+        <span aria-hidden="true">+</span><em>libre</em>
+      </div>`;
+  }).join("");
+
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-ciencia";
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
-    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Ciencia instalada">
+    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Ciencia del búnker">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
-      <div class="bw-ciencia-fila${cartas.length > 1 ? " dos" : ""}">
-        ${cartas.length
-          ? cartas.map(celda).join("")
-          : `<p class="bw-modal-nota">Todavía no tienes ninguna ciencia instalada.</p>`}
-      </div>
+      <div class="bw-desc-tit">Ciencia</div>
+      <div class="bw-ciencia-fila dos">${huecos}</div>
+      ${cartas.length ? "" : `<p class="bw-modal-nota">Aquí se guardan las ciencias que se quedan en el búnker. Se instalan al usar sus cartas (las de ciencia, no las inmediatas).</p>`}
     </div>`;
   document.body.appendChild(fondo);
 
@@ -2150,6 +2157,21 @@ function css() {
        estrechan para que quepan de sobra en el móvil. */
     .bw-ciencia-fila { display: flex; align-items: center; justify-content: center; gap: 12px; }
     .bw-ciencia-fila.dos .bw-carta-grande { width: min(42vw, 172px); }
+    /* Hueco de ciencia sin carta: la misma carta punteada, como los huecos del
+       box, con el + de los sitios libres. */
+    .bw-ciencia-hueco {
+      width:min(42vw,172px); aspect-ratio:1024/1536;
+      border:2px dashed rgba(244,236,221,.38);
+      border-radius:9px;
+      background:rgba(0,0,0,.3);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:6px; color:rgba(244,236,221,.6);
+      font:700 30px/1 ui-monospace,monospace;
+    }
+    .bw-ciencia-hueco em {
+      font:600 10px/1 ui-sans-serif,system-ui,sans-serif; font-style:normal;
+      letter-spacing:.08em; text-transform:uppercase;
+    }
     .bw-carta-coste-grande {
       position:absolute; top:calc(3.5% - 5px); left:50%; transform:translateX(-50%);
       width:16%; aspect-ratio:1;
