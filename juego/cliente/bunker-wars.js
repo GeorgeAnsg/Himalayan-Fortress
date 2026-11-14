@@ -2786,9 +2786,6 @@ function cssAdicional() {
       background:radial-gradient(closest-side, rgba(0,0,0,.5), transparent);
     }
     .ficha:active { filter:brightness(1.15) }
-    /* TEMPORAL: marco la caja de la ficha y la de la imagen. */
-    .ficha { outline:1px solid rgba(0,255,102,.95); background:rgba(0,255,102,.22); }
-    .ficha-img { outline:1px solid rgba(255,0,204,.95); background:rgba(255,0,204,.18); }
     /* Mismo estilo que el número de calle: mono, blanco y sin borde.
        Centrado vertical en la ficha y desplazado a la derecha unos 30 px
        (8,5 * var(--u) a 390 px de ancho de mundo). */
