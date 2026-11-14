@@ -2807,6 +2807,9 @@ function cssAdicional() {
       position:relative;
       width:100%;
       container-type:inline-size;
+      /* Todo el mapa (castillo, caminos, círculos y tablero) sube 30 px a 400 px
+         de ancho: 7.5u en proporción. */
+      margin-top:calc(-7.5 * var(--u));
       /* Vista arriba: el mapa entero se ve un 15 % más grande (--zoom-mapa lo
          pone el parallax). Escala desde arriba, así el castillo se agranda
          hacia abajo sin mover nada de sitio. */
