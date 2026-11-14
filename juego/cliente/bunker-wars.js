@@ -3248,8 +3248,10 @@ function cssAdicional() {
        crezca hacia arriba. Los 100 px de más la subían hasta la mitad del mapa,
        así que se quedó en su altura original. */
     .capa-bottom-fog {
-      /* 20 px más alta que el 40 % (5.1u a 390 px de ancho de mundo). */
-      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u));
+      /* 20 px más alta que el 40 % (5.1u a 390 px de ancho de mundo), menos los
+         80 px que subió al recortar el suelo: su borde de arriba vuelve a caer
+         sobre el mismo punto del dibujo (la fila de huecos del tablero). */
+      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u) - 80px);
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
       background-position:center bottom;
