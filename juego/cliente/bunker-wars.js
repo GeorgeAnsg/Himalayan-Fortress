@@ -572,34 +572,53 @@ function abrirLanzar(ops) {
     if (r?.error) aviso(r.error, { error: true });
   };
 
-  /* Peldaños de una escalera, del 4 (junto a la fortaleza) al 1 (abajo). */
-  const casillas = (s) => {
-    const p = s?.posiciones ?? [];
-    return [3, 2, 1, 0].map(k => {
-      const f = p[k];
-      if (!f) return `<i class="bw-lz-cas"></i>`;
-      const at = f.tipo === "atacante";
-      return `<i class="bw-lz-cas${at ? " at" : ""}" title="Peldaño ${k + 1}: ${at ? "atacante" : "suyo"} nivel ${f.nivel}">${f.nivel}</i>`;
+  /* Un rival visto como su fortaleza, en la misma orientación que la tuya: las
+     torres arriba con su nivel, las tres escaleras bajando hacia la lanzadera
+     y lo que hay en cada peldaño (rojo si es suyo, morado si es tuyo). */
+  const tableroRival = (id, { elegir = false } = {}) => {
+    const r = jugadoresMesa.find(x => x.id === id) ?? {};
+    const torres = r.bunker?.torres ?? [];
+    const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+    const dos = lanzaderasMesa.filter(Boolean).length > 1;
+
+    /* De arriba abajo: el peldaño 4 es el que pega con la fortaleza y el 1 el
+       que queda junto a la lanzadera. */
+    const peldanos = (s) => [3, 2, 1, 0].map(k => {
+      const f = s?.posiciones?.[k];
+      if (!f) return `<i class="bw-lz-cas" title="Peldaño ${k + 1}: libre"></i>`;
+      const mio = f.tipo === "atacante";
+      return `<i class="bw-lz-cas ${mio ? "at" : "suyo"}" title="Peldaño ${k + 1}: ${mio ? "tu monstruo" : "suyo"} de nivel ${f.nivel}">${f.nivel}</i>`;
     }).join("");
+
+    const columnas = (r.senderos ?? []).map(s => {
+      const suyas = elegir ? ops.filter(a => a.rivalId === id && a.sendero === s.id) : [];
+      const dentro = `
+        <span class="bw-lz-cid" title="Escalera ${s.id}: la ${escaleraDe(s.id)}">${s.id}</span>
+        ${peldanos(s)}
+        ${suyas.map(a => {
+          const mon = lanzaderasMesa[a.lanzadera] ?? null;
+          const txt = dos ? `M${mon?.nivel ?? "?"} · L${a.lanzadera + 1}` : "Lanzar";
+          return `<button type="button" class="bw-lz-lanzar" data-op="${accionesMesa.indexOf(a)}" title="Lanzar por la escalera ${s.id} (la ${escaleraDe(s.id)})">${txt}</button>`;
+        }).join("")}`;
+      return `<span class="bw-lz-calle${elegir && !suyas.length ? " apagada" : ""}">${dentro}</span>`;
+    }).join("");
+
+    return `
+      <div class="bw-lz-cab">
+        <b>${esc(r.nombre ?? "Rival")}</b>
+        <span class="bw-lz-vida">❤ ${vida} / 20</span>
+      </div>
+      <div class="bw-lz-fort">
+        ${[0, 1, 2].map(i => `<span class="bw-lz-torre${torres[i]?.nivel ? " tiene" : ""}" title="Torre ${i + 1}${torres[i]?.nivel ? `: nivel ${torres[i].nivel}` : ": vacía"}">${torres[i]?.nivel ? `T${torres[i].nivel}` : "—"}</span>`).join("")}
+      </div>
+      <div class="bw-lz-mapa">${columnas}</div>`;
   };
 
   const listaRivales = () => [...new Set(ops.map(a => a.rivalId))].map(id => {
     const r = jugadoresMesa.find(x => x.id === id) ?? {};
-    const torres = r.bunker?.torres ?? [];
     return `
       <button type="button" class="bw-lz-rival" data-rival="${esc(id)}" title="Lanzar a ${esc(r.nombre ?? "rival")}">
-        <span class="bw-lz-cab">
-          <b>${esc(r.nombre ?? "Rival")}</b>
-          <span class="bw-lz-vida">❤ ${r.puntosMonsters ?? 0} / 20</span>
-        </span>
-        <span class="bw-lz-calles">
-          ${(r.senderos ?? []).map(s => `
-            <span class="bw-lz-calle">
-              <span class="bw-lz-cid" title="Escalera ${s.id}: la ${escaleraDe(s.id)}">${s.id}</span>
-              ${casillas(s)}
-              <span class="bw-lz-torre">${torres[s.id - 1]?.nivel ? `T${torres[s.id - 1].nivel}` : "·"}</span>
-            </span>`).join("")}
-        </span>
+        ${tableroRival(id)}
       </button>`;
   }).join("");
 
@@ -621,26 +640,16 @@ function abrirLanzar(ops) {
 
   const pasoCaminos = (rivalId) => {
     const rival = jugadoresMesa.find(x => x.id === rivalId) ?? {};
-    const suyas = ops
-      .filter(a => a.rivalId === rivalId)
-      .sort((a, b) => a.sendero - b.sendero || a.lanzadera - b.lanzadera);
-    const dos = lanzaderasMesa.filter(Boolean).length > 1;
     fondo.innerHTML = `
       <div class="bw-lz">
         <div class="bw-lz-tit">¿Por qué camino de ${esc(rival.nombre ?? "el rival")}?</div>
-        <div class="bw-lz-lista">
-          ${suyas.map(a => {
-            const mon = lanzaderasMesa[a.lanzadera] ?? null;
-            return `<button type="button" class="bw-lz-camino" data-op="${accionesMesa.indexOf(a)}">
-              Camino ${a.sendero}${dos ? ` · M${mon?.nivel ?? "?"} (L${a.lanzadera + 1})` : ""}
-            </button>`;
-          }).join("")}
-        </div>
+        <p class="bw-lz-sub">Toca «Lanzar» bajo la escalera a la que quieres mandarlo.</p>
+        <div class="bw-lz-lista solo">${tableroRival(rivalId, { elegir: true })}</div>
         <div class="bw-lz-pie">
           <button type="button" class="bw-lz-atras">Atrás</button>
         </div>
       </div>`;
-    for (const b of fondo.querySelectorAll(".bw-lz-camino")) {
+    for (const b of fondo.querySelectorAll(".bw-lz-lanzar")) {
       b.addEventListener("click", () => enviar(accionesMesa[Number(b.dataset.op)], b));
     }
     fondo.querySelector(".bw-lz-atras").addEventListener("click", pasoRivales);
@@ -2349,32 +2358,53 @@ function css() {
     }
     .bw-lz-tit { font:800 16px/1.2 ui-serif,serif; text-align:center; }
     .bw-lz-sub { margin:0; font-size:12px; color:#b7a992; text-align:center; }
-    .bw-lz-lista { display:flex; flex-direction:column; gap:8px; }
+    .bw-lz-lista { display:flex; flex-wrap:wrap; gap:10px; }
+    .bw-lz-lista > .bw-lz-rival { flex:1 1 148px; min-width:0; }
+    .bw-lz-lista.solo { display:block; }
     .bw-lz-rival {
       display:flex; flex-direction:column; gap:6px; text-align:left;
-      padding:10px; border-radius:10px; cursor:pointer; font:inherit;
+      padding:8px; border-radius:10px; cursor:pointer; font:inherit;
       background:rgba(244,236,221,.06); border:1px solid rgba(244,236,221,.16);
       color:#f4ecdd;
     }
     .bw-lz-rival:active { background:rgba(244,236,221,.18); }
-    .bw-lz-cab { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:14px; }
-    .bw-lz-vida { font-size:12px; color:#e0533f; }
-    .bw-lz-calles { display:flex; flex-direction:column; gap:4px; }
-    .bw-lz-calle { display:flex; align-items:center; gap:4px; }
-    .bw-lz-cid { font-size:10px; font-weight:800; color:#8b7e6b; width:18px; }
+    /* Sin encogerse: si el modal se queda justo de alto, el cuadrado del
+       tablero perdía lado y las casillas no se veían. */
+    .bw-lz-rival > * { flex:0 0 auto; }
+    .bw-lz-lista.solo > .bw-lz-cab,
+    .bw-lz-lista.solo > .bw-lz-fort,
+    .bw-lz-lista.solo > .bw-lz-mapa { padding:0 8px; }
+    .bw-lz-cab { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; }
+    .bw-lz-vida { font-size:11px; color:#e0533f; }
+    /* Torres arriba, en fila, como la fortaleza del jugador */
+    .bw-lz-fort { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; width:100%; }
+    .bw-lz-torre {
+      text-align:center; padding:3px 0; border-radius:4px;
+      font:800 10px/1 ui-monospace,monospace;
+      background:rgba(0,0,0,.35); color:#7f7466;
+      border:1px solid rgba(244,236,221,.14);
+    }
+    .bw-lz-torre.tiene { color:#f0cf5a; border-color:rgba(201,162,39,.55); background:rgba(201,162,39,.12); }
+    /* El tablero cuadrado: tres escaleras bajando, cuatro peldaños cada una */
+    .bw-lz-mapa { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; width:100%; aspect-ratio:1; }
+    .bw-lz-calle { display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .bw-lz-calle.apagada { opacity:.45; }
+    .bw-lz-cid { font-size:9px; font-weight:800; color:#8b7e6b; }
     .bw-lz-cas {
-      width:18px; height:18px; border-radius:4px; font-style:normal;
+      /* Ancho que alto (1,5:1): cuatro peldaños caben en la altura de tres
+       columnas y el tablero sale cuadrado, no estirado. */
+      width:100%; aspect-ratio:1.5/1; border-radius:4px; font-style:normal;
       display:grid; place-items:center; font-size:10px; font-weight:800;
       background:rgba(0,0,0,.35); border:1px dashed rgba(244,236,221,.18); color:#7f7466;
     }
+    .bw-lz-cas.suyo { border-style:solid; border-color:rgba(168,60,48,.75); background:rgba(122,16,16,.38); color:#ffd9d0; }
     .bw-lz-cas.at { border-style:solid; border-color:#8a5cd6; background:rgba(138,92,214,.3); color:#e6dcff; }
-    .bw-lz-torre { margin-left:auto; font-size:10px; font-weight:800; color:#c9a227; }
-    .bw-lz-pie { display:flex; justify-content:center; gap:10px; }
-    .bw-lz-camino {
-      padding:12px; border-radius:8px; border:none; cursor:pointer;
-      font:800 13px/1 ui-serif,serif;
+    .bw-lz-lanzar {
+      width:100%; margin-top:2px; padding:5px 0; border-radius:5px; border:none; cursor:pointer;
+      font:800 10px/1 ui-monospace,monospace;
       background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
     }
+    .bw-lz-pie { display:flex; justify-content:center; gap:10px; }
     .bw-lz-atras {
       padding:0 20px; min-height:36px; border-radius:5px; cursor:pointer;
       font:800 13px/1 ui-serif,serif; border:none;
@@ -3420,7 +3450,7 @@ function cssAdicional() {
     /* La carta de Destino se queda fuera del bloqueo: sale justo al acabar el
        avance y el bloqueo dura un par de segundos más, así que si no, su
        «Entendido» no responde y la carta se queda en pantalla sin salida. */
-    body.bw-avanzando .bw-modal-fondo:not(#bw-modal-destino) { pointer-events:none !important; }
+    body.bw-avanzando .bw-modal-fondo:not(#bw-modal-destino):not(#bw-modal-lanzar) { pointer-events:none !important; }
 
     .num-calle {
       /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde
