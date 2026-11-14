@@ -3395,7 +3395,10 @@ function cssAdicional() {
     body.bw-avanzando .bw-panel,
     body.bw-avanzando #bw-nav-global,
     body.bw-avanzando #barra,
-    body.bw-avanzando .bw-modal-fondo { pointer-events:none !important; }
+    /* La carta de Destino se queda fuera del bloqueo: sale justo al acabar el
+       avance y el bloqueo dura un par de segundos más, así que si no, su
+       «Entendido» no responde y la carta se queda en pantalla sin salida. */
+    body.bw-avanzando .bw-modal-fondo:not(#bw-modal-destino) { pointer-events:none !important; }
 
     .num-calle {
       /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde
