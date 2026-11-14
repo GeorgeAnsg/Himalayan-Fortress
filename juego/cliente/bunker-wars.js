@@ -40,6 +40,13 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   turnoMesa = turnoActual ?? null;
   yoMesa = tu ?? null;
 
+  /* El repintado reconstruye todo el HTML del contenedor y eso devolvía la
+     vista arriba del todo. Se guarda dónde estaba mirando el jugador (el que
+     scrollea es #pantalla, no el contenedor) para dejarlo otra vez ahí, salvo
+     cuando toca bajar al tablero a ver el avance. */
+  const pantallaScroll = document.getElementById("pantalla");
+  const scrollPrevio = pantallaScroll?.scrollTop ?? 0;
+
   contenedor.innerHTML = `
     ${css()}
     ${cssAdicional()}
@@ -82,6 +89,10 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     bloquearPorAvance(true);
   } else if (!rondaDeMonstruos) {
     bloquearPorAvance(false);
+  }
+  /* Ni el aviso de turno ni la ronda mueven la vista: se queda donde estaba. */
+  if (!rondaDeMonstruos && !estrenaTurno && scrollPrevio > 0 && pantallaScroll && pantallaScroll.scrollTop !== scrollPrevio) {
+    pantallaScroll.scrollTop = scrollPrevio;
   }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */

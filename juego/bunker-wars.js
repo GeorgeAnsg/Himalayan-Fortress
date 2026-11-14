@@ -840,9 +840,13 @@ function faseAcciones(e, jugadorId, accion, evs) {
       /* El box se elige; si el cliente no lo manda (partidas o bots viejos),
          se usa el primer hueco libre como antes. */
       const boxPedido = accion.boxIdx === 0 || accion.boxIdx === 1 ? accion.boxIdx : null;
-      const boxIdx = boxPedido === null
-        ? j.box.findIndex(s => s === null)
-        : Array.from({ length: BOX_TAM }, (_, k) => boxPedido * BOX_TAM + k).find((i) => !j.box[i]) ?? -1;
+      /* Primero el hueco de DELANTE de la jaula (el de abajo, el más cercano al
+         jugador) y después el del fondo: el monstruo nuevo tiene que salir a la
+         vista, no escondido detrás del que ya estaba. */
+      const orden = boxPedido === null
+        ? [1, 0, 3, 2]
+        : boxPedido === 0 ? [1, 0] : [3, 2];
+      const boxIdx = orden.find((i) => !j.box[i]) ?? -1;
       if (boxIdx < 0 || !NIVELES.includes(nivel) || nivel > nivelMaxLab(j)) break;
       const coste = costeMonstruoJ(nivel, j);
       if (j.energia < coste) break;
