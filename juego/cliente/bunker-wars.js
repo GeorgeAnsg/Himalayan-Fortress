@@ -2925,7 +2925,14 @@ function cssAdicional() {
     }
 
     /* ── Escena ── */
-    .escena { position:relative; z-index:1; padding-bottom:0; }
+    .escena {
+      position:relative; z-index:1; padding-bottom:0;
+      /* El zoom del mundo (hasta 1,15) agranda la caja y el contenedor de
+         scroll contaba ese sobrante como scroll de más: se podía bajar hasta
+         dejar el mapa cortado y ver el negro por debajo. Recortado aquí, el
+         scroll nunca pasa del contenido. */
+      overflow:hidden;
+    }
 
     /* ── Claro ── */
     .mundo {
@@ -3249,15 +3256,15 @@ function cssAdicional() {
        crezca hacia arriba. Los 100 px de más la subían hasta la mitad del mapa,
        así que se quedó en su altura original. */
     .capa-bottom-fog {
-      /* Bruma solo del borde de abajo, 200 px más baja que antes (así empieza
-         por debajo del final de la escalera y no tapa la fila de huecos).
-         Todo en u, no en px, para que escale con el ancho: 40 % del suelo
-         + los 5,1 u del ajuste original − 21,3 u (los 80 px que subió al
-         recortar el suelo) − 53,3 u (los 200 px que se baja ahora). */
+      /* Alto natural del arte (1214 × 765 = 63,01 u del ancho): entra entera,
+         sin recortes. Su borde de arriba es transparente —así que la niebla
+         aparece como un degradado, no como una franja cortada— y su borde de
+         abajo, que es el opaco, cae justo en el final del mapa, pegado a la
+         barra de las cartas. */
       position:absolute; bottom:0; left:0; right:0;
-      height:calc(40% + 5.1 * var(--u) - 21.3 * var(--u) - 53.3 * var(--u));
+      height:calc(63.01 * var(--u));
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
-      background-size:cover;
+      background-size:100% auto;
       /* El parallax mueve la foto dentro de su caja, no la caja: así el borde
          de abajo queda siempre tapado por la parte opaca de la niebla y no
          asoma ninguna franja. Al bajar, la niebla sube un poco. */
