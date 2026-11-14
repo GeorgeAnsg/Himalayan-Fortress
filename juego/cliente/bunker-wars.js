@@ -94,9 +94,19 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   } else if (!rondaDeMonstruos) {
     bloquearPorAvance(false);
   }
-  /* Ni el aviso de turno ni la ronda mueven la vista: se queda donde estaba. */
-  if (!rondaDeMonstruos && !estrenaTurno && scrollPrevio > 0 && pantallaScroll && pantallaScroll.scrollTop !== scrollPrevio) {
-    pantallaScroll.scrollTop = scrollPrevio;
+  /* Ni el aviso de turno ni la ronda mueven la vista: se queda donde estaba.
+     Se repone tres veces porque al principio la escena mide menos —las
+     imágenes del mapa aún no tienen alto— y el navegador recorta el scroll:
+     eso era lo que subía la vista al hacer cualquier acción. */
+  if (!rondaDeMonstruos && !estrenaTurno && scrollPrevio > 0 && pantallaScroll) {
+    const reponer = () => {
+      if (pantallaScroll.scrollTop !== scrollPrevio) pantallaScroll.scrollTop = scrollPrevio;
+    };
+    reponer();
+    requestAnimationFrame(() => { reponer(); requestAnimationFrame(reponer); });
+    contenedor.querySelectorAll("img").forEach((img) => {
+      if (!img.complete) img.addEventListener("load", reponer, { once: true });
+    });
   }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */
@@ -277,7 +287,17 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   /* Criadero del mapa y huecos libres del box: abren la lista de monstruos. */
   contenedor.querySelectorAll('[data-edif="criadero"]').forEach((el) => el.addEventListener("click", abrirCriadero));
   contenedor.querySelectorAll(".fort-slot").forEach((el) => {
-    if (el.classList.contains("fort-slot-lleno")) return;
+    if (el.classList.contains("fort-slot-lleno")) {
+      /* Con monstruo dentro, el hueco abre sus jugadas: mandarlo a la
+         lanzadera de su jaula o a la casilla 4 de sus dos caminos (ataca si
+         hay un atacante en ella). Solo salen las que el motor dé por legales
+         en este momento, así que si no queda decreto o moneda, no aparece. */
+      el.addEventListener("click", () => {
+        const mon = boxActual.find((m) => m?.id === el.dataset.monId);
+        if (mon) abrirEnvio(mon);
+      });
+      return;
+    }
     el.addEventListener("click", () => abrirCriadero(Number(el.dataset.box) || 0));
   });
 
@@ -997,6 +1017,9 @@ function pintarMiBunker(j, priv, fase) {
       const mismaCalle = !!antes && antes.calle === i;
           const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
+      /* Un monstruo recién bajado a la casilla 4 entra desde atrás (ver
+         .ficha-despliegue): aparece fundido y se asienta en su sitio. */
+      const despliega = !antes && paso === 3;
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
@@ -1007,7 +1030,7 @@ function pintarMiBunker(j, priv, fase) {
       const imgFrontal = `${BASE_IMG}/monstruos/m1-f.png`;
       const imgTrasera = `${BASE_IMG}/monstruos/m1-t.png`;
       const img = esAtacante ? imgTrasera : imgFrontal;
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      return `<div class="ficha ${cls}${despliega ? " ficha-despliegue" : ""}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
@@ -1063,7 +1086,7 @@ function pintarMiBunker(j, priv, fase) {
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}" style="left:${pos.l};top:${pos.t}">${
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}"${mon ? ` data-mon-id="${esc(mon.id ?? "")}"` : ""} style="left:${pos.l};top:${pos.t}">${
       mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
@@ -1841,28 +1864,58 @@ function abrirEnvio(mon) {
     return;
   }
 
+  /* El nombre del bicho en vez del nivel, y el sitio al que va en claro. La
+     escalera 1 es la izquierda, la 2 la del centro y la 3 la derecha. */
+  const nombre = nombreMonstruo(mon.nivel);
+  const etiqueta = (a) => {
+    if (a.tipo === "mover_a_lanzadera") return "Llevar a la lanzadera";
+    if (a.tipo === "mover_a_sendero") {
+      const cual = a.sendero === 2 ? "central" : a.sendero === 1 ? "izquierda" : "derecha";
+      const pelea = /atacar/.test(a.texto ?? "") ? " · atacar" : "";
+      return `Defender en escalera ${cual}${pelea}`;
+    }
+    return a.texto ?? "Mover";
+  };
+
+  /* Al moverlo, la jaula se queda vacía de golpe: se deja un clon del monstruo
+     en su sitio que se desvanece en un segundo, mientras en el destino entra
+     la ficha con su propio fundido. */
+  const desvanecerJaula = () => {
+    const slot = document.querySelector(`.fort-slot-lleno[data-mon-id="${mon.id ?? ""}"]`);
+    const img = slot?.querySelector("img");
+    if (!img) return;
+    const r = img.getBoundingClientRect();
+    const fantasma = img.cloneNode();
+    fantasma.className = "bw-fantasma-mon";
+    fantasma.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:60;pointer-events:none;`;
+    document.body.appendChild(fantasma);
+    setTimeout(() => fantasma.remove(), 1000);
+  };
+
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-envio";
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
     <div class="bw-envio">
-      <div class="bw-envio-titulo">Monstruo ${mon.nivel}</div>
+      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
+      <div class="bw-envio-titulo">Mover ${esc(nombre)}</div>
       <div class="bw-envio-opciones">
-        ${opciones.map((a, i) => `<button type="button" class="bw-envio-op" data-i="${i}">${esc(a.texto ?? "Mover")}</button>`).join("")}
+        ${opciones.map((a, i) => `<button type="button" class="bw-envio-op" data-i="${i}">${esc(etiqueta(a))}</button>`).join("")}
       </div>
-      <button type="button" class="bw-envio-cerrar">Cerrar</button>
     </div>
   `;
   document.body.appendChild(fondo);
 
-  fondo.querySelector(".bw-envio-cerrar").addEventListener("click", () => fondo.remove());
-  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) fondo.remove(); });
+  const cerrarEnvio = () => fondo.remove();
+  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrarEnvio);
+  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrarEnvio(); });
 
   for (const b of fondo.querySelectorAll(".bw-envio-op")) {
     b.addEventListener("click", async () => {
       const accion = opciones[Number(b.dataset.i)];
       if (!accion || !enviarAccion) return;
       b.disabled = true;
+      desvanecerJaula();
       const r = await enviarAccion(accion);
       if (r?.error) {
         aviso(r.error, { error: true });
@@ -2145,6 +2198,10 @@ function css() {
     /* Modal carta ampliada */
     .bw-modal-fondo {
       position:fixed; inset:0; background:rgba(0,0,0,.65);
+      /* Cualquier modal del juego difumina lo que hay detrás: el aviso de
+         turno, las cartas, el criadero, la lanzadera y el descarte usan esta
+         misma capa. */
+      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
       display:flex; align-items:center; justify-content:center;
       z-index:1000; padding:20px;
     }
@@ -2439,21 +2496,39 @@ function css() {
       color:#b7a992;
     }
 
-    .bw-envio { width:min(340px,92vw); background:#f4ecdd; color:#12100e;
-                border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:12px;
-                box-shadow:0 18px 50px rgba(0,0,0,.45);
-                /* Con muchas jugadas (16 en un turno) la lista no cabe: el
-                   modal scrollea por dentro y los botones no se salen. */
+    /* Sin fondo: el título y los botones van sueltos sobre el juego velado. */
+    .bw-envio { width:min(340px,92vw); background:transparent;
+                padding:18px; display:flex; flex-direction:column; gap:12px;
+                /* Con muchas jugadas la lista no cabe: el modal scrollea por
+                   dentro y los botones no se salen. */
                 max-height:calc(100vh - 32px); overflow-y:auto; }
-    .bw-envio-titulo { font-size:17px; font-weight:800; text-align:center; }
+    /* El título, en el crema de la UI y en la serif de las cartas. */
+    .bw-envio-titulo {
+      font:800 18px/1.2 ui-serif, Georgia, "Times New Roman", serif;
+      color:#f4ecdd; text-align:center;
+      text-shadow:0 2px 6px rgba(0,0,0,.85);
+    }
     .bw-envio-opciones { display:flex; flex-direction:column; gap:7px; }
-    .bw-envio-op { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:700;
-                   cursor:pointer; border:1px solid rgba(18,16,14,.25);
-                   background:#fff; color:#12100e; text-align:left; }
-    .bw-envio-op:hover { background:#d6dee5; }
+    /* Las jugadas, en negro con un poco de transparencia y borde negro; texto
+       centrado y en la sans de la UI, no en la serif del título. */
+    .bw-envio-op { padding:12px 14px; border-radius:9px; font-size:14px; font-weight:700;
+                   cursor:pointer; border:1px solid #000; text-align:center;
+                   background:rgba(0,0,0,.78); color:#f4ecdd;
+                   font-family:ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif; }
+    .bw-envio-op:hover { background:rgba(0,0,0,.9); }
     .bw-envio-op:disabled { opacity:.5; cursor:default; }
-    .bw-envio-cerrar { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:800;
-                       cursor:pointer; border:none; background:#12100e; color:#f4ecdd; }
+
+    /* El clon que se queda en la jaula mientras el monstruo se va: 1 s de
+       fundido a negro de opacidad y se borra. */
+    .bw-fantasma-mon { animation: bwDesvanecerMon 1s ease-in both; }
+    @keyframes bwDesvanecerMon { from { opacity:1 } to { opacity:0 } }
+    /* Y la ficha que baja a la casilla 4 entra desde 40 px atrás, fundiéndose
+       mientras se asienta en su sitio. */
+    .ficha.ficha-despliegue .ficha-img { animation: bwDespliegueFicha 1s ease-out both; }
+    @keyframes bwDespliegueFicha {
+      from { opacity:0; transform:translate(-50%, calc(-50% - 40px)) scale(.94); }
+      to   { opacity:1; transform:translate(-50%, -50%) scale(1); }
+    }
     /* Lista de opciones en columna con nuestro botón gris de UI */
     .bw-modal-lista {
       display:flex; flex-direction:column; gap:10px;
@@ -3456,9 +3531,12 @@ function cssAdicional() {
     }
     .lanzadera-img {
       position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:calc(5.6 * var(--u)); height:auto; pointer-events:none;
+      /* Mismo tamaño que la lámina de las calles (.ficha-img, 8.5u): el
+         monstruo de la lanzadera no puede verse más pequeño que el del
+         tablero, del que es hermano. */
+      width:calc(8.5 * var(--u)); height:auto; pointer-events:none;
       filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
-      animation: bwLlegadaLzImg .55s ease-out both;
+      animation: bwLlegadaLzImg 1s ease-out both;
     }
     .lanzadera-nv {
       position:absolute; top:50%; right:calc(-1.1 * var(--u));
@@ -3469,9 +3547,10 @@ function cssAdicional() {
       font:700 calc(1.8 * var(--u))/1 ui-monospace,monospace;
       animation: bwLlegadaLzNv .55s ease-out both;
     }
+    /* En la lanzadera no se desplaza: aparece en su sitio con un fundido. */
     @keyframes bwLlegadaLzImg {
-      from { opacity:0; transform:translate(-50%, 40%) scale(.8); }
-      to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+      from { opacity:0; }
+      to   { opacity:1; }
     }
     @keyframes bwLlegadaLzNv {
       from { opacity:0; transform:translateY(-50%) scale(.8); }
