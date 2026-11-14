@@ -63,13 +63,21 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     && fase === "acciones" && sinGastar && claveDestino(destino) !== destinoVisto;
   const esperaCarta = saleDestino && DESTINO_ESCALERAS.has(destino.tipo);
 
-  const { ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta });
+  /* El estreno del turno: la primera vez que te llega en esta luna se te avisa
+     con un modal y la vista NO baja al tablero hasta que pulsas «Empezar
+     turno». A partir de ahí, ese turno ya no vuelve a bajar solo. */
+  const claveTurno = `${luna}:${turnoActual}`;
+  const estrenaTurno = teToca && fase === "acciones" && claveTurno !== turnoEmpezado;
+
+  const { ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta || estrenaTurno });
   const ajenasAhora = contenedor.querySelectorAll(".ficha.atacante, .ficha.ajena").length;
   const aparecen = ajenasPrevias !== null && ajenasAhora > ajenasPrevias;
   ajenasPrevias = ajenasAhora;
   const rondaDeMonstruos = ajenasMovidas > 0 || aparecen;
   avanceRetenido = esperaCarta && rondaDeMonstruos ? reproducir : null;
-  if (rondaDeMonstruos && !esperaCarta) {
+  if (estrenaTurno) {
+    avisarTurnoNuevo(claveTurno, reproducir);
+  } else if (rondaDeMonstruos && !esperaCarta) {
     bajarAlTablero();
     bloquearPorAvance(true);
   } else if (!rondaDeMonstruos) {
@@ -246,6 +254,62 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     el.addEventListener("click", () => abrirCriadero(Number(el.dataset.box) || 0));
   });
 
+  /* Torres: el hueco con el + abre construir y la torre abre mejorarla. El
+     nivel 3 es el máximo y para subir hace falta la armería del nivel nuevo. */
+  for (const el of contenedor.querySelectorAll("[data-pos-torre]")) {
+    el.addEventListener("click", async () => {
+      const pos = Number(el.dataset.posTorre);
+      const torres = yo?.bunker?.torres ?? [];
+      const t = torres[pos - 1] ?? null;
+      const armeria = yo?.bunker?.armeria ?? 0;
+      if (faseMesa !== "acciones" || !tocaMesa) {
+        aviso("Las torres se construyen en tu fase de decretos.", { error: true });
+        return;
+      }
+      if (accionesRestantesMesa <= 0) {
+        aviso("Ya no te quedan decretos este turno.", { error: true });
+        return;
+      }
+      if (!t) {
+        if (energiaMesa < 1) { aviso("Construir una torre cuesta 1 moneda.", { error: true }); return; }
+        const r = await modal({
+          titulo: "Torre",
+          texto: `Escalera ${pos}. Construir una torre de nivel 1 cuesta 1 moneda y 1 decreto.`,
+          botones: [
+            { texto: "Cancelar", estilo: "secundario", valor: null },
+            { texto: "Construir", estilo: "principal", valor: "ok" },
+          ],
+        });
+        if (r !== "ok" || !enviarAccion) return;
+        const res = await enviarAccion({ tipo: "construir_torreta", posicion: pos });
+        if (res?.error) aviso(res.error, { error: true });
+        return;
+      }
+      const nv = t.nivel ?? 1;
+      const siguiente = nv + 1;
+      const alTope = nv >= 3;
+      const faltaArmeria = !alTope && siguiente > armeria;
+      const puedeSubir = !alTope && !faltaArmeria && energiaMesa >= 1;
+      const motivo = alTope
+        ? "Ya está en el nivel máximo (3)."
+        : faltaArmeria
+          ? `Para subir al nivel ${siguiente} necesitas armería ${siguiente} (tienes ${armeria}).`
+          : energiaMesa < 1
+            ? "Subir de nivel cuesta 1 moneda y no te queda ninguna."
+            : `Subir al nivel ${siguiente} cuesta 1 moneda y 1 decreto.`;
+      const botones = [{ texto: "Cerrar", estilo: "secundario", valor: null }];
+      if (puedeSubir) botones.push({ texto: `Subir a nivel ${siguiente}`, estilo: "principal", valor: "ok" });
+      const r = await modal({
+        titulo: `Torre nivel ${nv}`,
+        texto: `Escalera ${pos}. Dispara a su propia escalera con ${nv} de daño (1 menos en las demás). ${motivo}`,
+        botones,
+      });
+      if (r !== "ok" || !enviarAccion) return;
+      const res = await enviarAccion({ tipo: "evolucionar_torreta", posicion: pos });
+      if (res?.error) aviso(res.error, { error: true });
+    });
+  }
+
   /* Tabs de navegación inferior */
   function activarTab(id) {
     tabMesa = id;
@@ -392,6 +456,39 @@ function bajarAlTablero() {
      repintado, ajusta por si la escena ha cambiado de alto. */
   pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" });
   requestAnimationFrame(() => pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" }));
+}
+
+/* Turno cuyo aviso de «Es tu turno» ya se ha aceptado. Se guarda en el propio
+   navegador para que, si cierras la app a mitad de turno y vuelves, no se repita
+   ni el aviso ni el desplazamiento: la clave lleva la luna y el jugador, así que
+   en el turno siguiente vuelve a salir. */
+const LS_TURNO = "bw-turno-empezado";
+const leerTurnoEmpezado = () => { try { return localStorage.getItem(LS_TURNO); } catch { return null; } };
+function guardarTurnoEmpezado(clave) { try { localStorage.setItem(LS_TURNO, clave); } catch { /* sin almacenamiento */ } }
+let turnoEmpezado = leerTurnoEmpezado();
+
+/* Aviso de turno nuevo: se ve como el resto de modales de la app, con el texto
+   arriba y un solo botón. Al pulsarlo se cierra y solo entonces la vista baja
+   al tablero para ver la ronda de monstruos. */
+function avisarTurnoNuevo(clave, reproducir) {
+  /* Si hay otro modal encima (carta de Destino, aviso de la mesa) no se pisa:
+     ya saldrá en el siguiente repintado. */
+  if (document.querySelector(".bw-modal-fondo")) return;
+  const capa = document.getElementById("capa");
+  if (capa && !capa.hidden) return;
+  modal({
+    titulo: "Es tu turno",
+    texto: "Tienes la mesa hasta que termines tus decretos.",
+    botones: [{ texto: "Empezar turno", estilo: "principal", valor: "ok" }],
+    obligatorio: true,
+  }).then(() => {
+    turnoEmpezado = clave;
+    guardarTurnoEmpezado(clave);
+    bajarYDespues(() => {
+      reproducir?.();
+      bloquearPorAvance(true);
+    });
+  });
 }
 
 /* Mientras dura la fase de avance ninguna acción del usuario responde: no se
@@ -851,10 +948,11 @@ function pintarMiBunker(j, priv, fase) {
     if (!t || !t.nivel)
       /* El + sube un 1,8 % del alto del tablero respecto al centro de la
          torre: en % para que la distancia crezca con el mapa. */
-      return `<div class="hueco" style="left:${pos.l}%;top:calc(${pos.t}% - 1.8%)">+</div>`;
+      /* Hueco de torre: el mismo círculo borgoña con el + que las jaulas. */
+      return `<div class="hueco" data-pos-torre="${i + 1}" style="left:${pos.l}%;top:calc(${pos.t}% - 1.8%)"><span class="hueco-mas">+</span></div>`;
     const nv = t.nivel;
     return `
-      <div class="torre nv${nv}${t.inhabilitada ? " bloqueada" : ""}" style="left:${pos.l}%;top:${pos.t}%">
+      <div class="torre nv${nv}${t.inhabilitada ? " bloqueada" : ""}" data-pos-torre="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">
         <div class="anillo"><span></span></div>
         <div class="planta"></div>
         <div class="alzado"></div>
@@ -2882,21 +2980,23 @@ function cssAdicional() {
       transform:translate(-50%,-50%);
       width:calc(7.7 * var(--u)); height:calc(7.7 * var(--u));
       border-radius:5px;
-      /* Hueco libre: punteado fino y translúcido, con aspa blanca en el centro.
-         Se toca para criar desde el criadero. */
-      background:rgba(0,0,0,.28);
-      border:1px dashed rgba(255,255,255,.5);
-      box-shadow:0 0 10px rgba(0,0,0,.5), inset 0 0 6px rgba(0,0,0,.3);
+      /* Hueco libre: sin marco, solo el círculo borgoña con el + en el centro
+         (el mismo de los decretos del HUD). Se toca para criar. */
+      background:transparent;
+      border:0;
       cursor:pointer;
     }
-    .fort-slot-x {
+    /* Círculo de signo: igual que la pastilla de fuerza de un monstruo
+       (borgoña, mono, blanco). Lo usan las jaulas vacías y los huecos de torre. */
+    .fort-slot-x,
+    .hueco-mas {
       position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:max(11px, calc(3.1 * var(--u)));
-      height:max(11px, calc(3.1 * var(--u)));
-      border-radius:50%;
-      background:#fff; color:#12100e;
-      display:grid; place-items:center;
-      font:800 max(13px, calc(3.2 * var(--u)))/1 ui-sans-serif, system-ui, sans-serif;
+      width:calc(4.4 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(122,16,16,.8); border:0;
+      display:flex; align-items:center; justify-content:center;
+      box-sizing:border-box; padding:calc(.5 * var(--u)) 0 0; text-align:center;
+      font-weight:700; font-family:ui-monospace,monospace;
+      font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
     }
     [data-edif="criadero"] { cursor:pointer; }
     .fort-slot.fort-slot-lleno {
@@ -3001,7 +3101,8 @@ function cssAdicional() {
        crezca hacia arriba. Los 100 px de más la subían hasta la mitad del mapa,
        así que se quedó en su altura original. */
     .capa-bottom-fog {
-      position:absolute; bottom:0; left:0; right:0; height:40%;
+      /* 20 px más alta que el 40 % (5.1u a 390 px de ancho de mundo). */
+      position:absolute; bottom:0; left:0; right:0; height:calc(40% + 5.1 * var(--u));
       background-image:url('${BASE_IMG}/mapas/nieve/bottom-fog.png');
       background-size:cover;
       background-position:center bottom;
@@ -3175,18 +3276,14 @@ function cssAdicional() {
     .torre.nv3 .anillo span  { background:#b9c3cc; border-color:#b9c3cc }
     .torre.nv3 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
 
-    /* hueco de torre */
+    /* hueco de torre: solo el círculo borgoña con el + */
     .hueco {
       position:absolute; width:calc(11.2 * var(--u)); aspect-ratio:2/1;
       margin:calc(-2.8 * var(--u)) 0 0 calc(-5.6 * var(--u));
-      border-radius:50%;
-      border:2px dashed rgba(255,255,255,.75);
-      background:rgba(255,255,255,.12);
-      color:rgba(255,255,255,.75); display:grid; place-items:center;
-      font-weight:300; font-size:calc(3.5 * var(--u)); line-height:1;
+      border:0; background:transparent;
       z-index:3; cursor:pointer;
     }
-    .hueco:active { background:rgba(255,255,255,.22); }
+    .hueco:active .hueco-mas { background:rgba(122,16,16,.95); }
 
     /* lanzaderas */
     .lanzadera {
@@ -3210,7 +3307,9 @@ function cssAdicional() {
     body.bw-avanzando .bw-modal-fondo { pointer-events:none !important; }
 
     .num-calle {
-      position:absolute; margin:calc(-2.48 * var(--u)) 0 0 calc(-2.48 * var(--u));
+      /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde
+         el centro, así que queda en +0.07u. */
+      position:absolute; margin:calc(.07 * var(--u)) 0 0 calc(-2.48 * var(--u));
       /* Círculo un 20 % mayor (4.13 → 4.95u) y letra un punto más. */
       width:calc(4.95 * var(--u)); aspect-ratio:1; border-radius:50%;
       /* Fondo negro y el número blanco a plena opacidad (el monstruo se queda
