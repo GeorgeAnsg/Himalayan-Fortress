@@ -163,8 +163,15 @@ function alSinMesa() {
 
 /* ── Pantallas ─────────────────────────────────────────────────────────── */
 
+/* Dónde miraba el jugador antes de vaciar la pantalla. El tablero se borra y se
+   vuelve a pintar en la misma tacada; sin esto, cualquier repintado (una
+   acción, un empujón de la mesa) devolvía la vista al principio. */
+let scrollRecordado = 0;
+
 function limpiar() {
-  $pantalla().innerHTML = "";
+  const p = $pantalla();
+  scrollRecordado = p.scrollTop || 0;
+  p.innerHTML = "";
 }
 
 function pintarEntrada({ codigo = null, error = null } = {}) {
@@ -243,7 +250,8 @@ function pintarMesa() {
 }
 
 function pintarCon(modulo, props) {
-  modulo.pintar($pantalla(), props);
+  /* El juego recibe dónde estaba la vista para devolverla tras repintar. */
+  modulo.pintar($pantalla(), { ...props, scroll: scrollRecordado });
 }
 
 /* ── Acciones de cuenta y mesa ─────────────────────────────────────────── */

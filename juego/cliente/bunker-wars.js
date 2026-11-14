@@ -2,7 +2,7 @@
 
 import { esc, avatarSVG, modal } from "../../app/ui.js";
 
-export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, alAccion, alSalir }) {
+export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll }) {
   if (!publica) { contenedor.innerHTML = "Cargando…"; return; }
 
   const { luna, fase, turnoActual, jugadores: tableros } = publica;
@@ -45,7 +45,9 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      scrollea es #pantalla, no el contenedor) para dejarlo otra vez ahí, salvo
      cuando toca bajar al tablero a ver el avance. */
   const pantallaScroll = document.getElementById("pantalla");
-  const scrollPrevio = pantallaScroll?.scrollTop ?? 0;
+  /* La app vacía #pantalla antes de pedir este repintado, así que su
+     scrollTop ya vale 0: el sitio donde miraba el jugador llega en `scroll`. */
+  const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
   contenedor.innerHTML = `
     ${css()}
@@ -87,6 +89,8 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   } else if (rondaDeMonstruos && !esperaCarta) {
     bajarAlTablero();
     bloquearPorAvance(true);
+    /* El movimiento va primero y, cuando acaba, sale la carta de Destino. */
+    setTimeout(soltarTrasAvance, MS_AVANCE);
   } else if (!rondaDeMonstruos) {
     bloquearPorAvance(false);
   }
@@ -359,7 +363,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      movimiento de las fichas empieza cuando la vista está abajo del todo. */
   if (saleDestino) {
     destinoVisto = claveDestino(destino);
-    abrirDestino(destino, {
+    const abrir = () => abrirDestino(destino, {
       alCerrar: () => {
         const retenido = avanceRetenido;
         avanceRetenido = null;
@@ -368,6 +372,12 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
         bajarYDespues(retenido);
       },
     });
+    /* La carta de Destino es POSTERIOR a la ronda de monstruos: si las fichas
+       están avanzando (o esperan a que se acepte el aviso de turno), la carta
+       sale cuando terminan de moverse. Solo las cartas de escaleras se
+       adelantan, porque son las que cuentan lo que va a pasar en el tablero. */
+    if (esperaCarta || (!rondaDeMonstruos && !estrenaTurno)) abrir();
+    else trasAvance = abrir;
   }
 
   /* Fase LANZAR: el rival se elige en un modal, no en la lista de acciones. */
@@ -466,6 +476,16 @@ const DESTINO_ESCALERAS = new Set([
 /* Avance retenido a la espera de que se cierre la carta de Destino. */
 let avanceRetenido = null;
 
+/* Lo que se suelta cuando termina la ronda de monstruos (2 s de deslizamiento):
+   ahora mismo, la carta de Destino del turno. */
+const MS_AVANCE = 2100;
+let trasAvance = null;
+function soltarTrasAvance() {
+  const f = trasAvance;
+  trasAvance = null;
+  f?.();
+}
+
 /* Ronda de monstruos: la vista baja sola hasta el tablero, que es donde ocurre
    el avance, para no perderse la animación de 2 s. */
 function bajarAlTablero() {
@@ -507,8 +527,13 @@ function avisarTurnoNuevo(clave, reproducir) {
     turnoEmpezado = clave;
     guardarTurnoEmpezado(clave);
     bajarYDespues(() => {
+      const mueve = typeof reproducir === "function";
       reproducir?.();
       bloquearPorAvance(true);
+      /* Con movimiento, la carta de Destino del turno espera a que acabe; sin
+         él, sale en cuanto se cierra este aviso. */
+      if (mueve) setTimeout(soltarTrasAvance, MS_AVANCE);
+      else soltarTrasAvance();
     });
   });
 }
@@ -947,7 +972,7 @@ function pintarMiBunker(j, priv, fase) {
          en otra calle (o es la primera vez que se ve), se pinta ya en su
          casilla: nunca se la ve cruzar el tablero de una calle a otra. */
       const mismaCalle = !!antes && antes.calle === i;
-      const movida = mismaCalle && antes.paso !== paso;
+          const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
@@ -986,7 +1011,13 @@ function pintarMiBunker(j, priv, fase) {
   /* Lanzaderas */
   const lanzHtml = [{l:"37.1",t:"77.7"},{l:"63.3",t:"77.9"}].map((pos, i) => {
     const l = lanzaderas[i];
-    return `<div class="lanzadera" style="left:${pos.l}%;top:${pos.t}%">${l ? nivelDe(l)+"▲" : ""}</div>`;
+    /* Con monstruo dentro se ve como en el tablero: la lámina de frente y la
+       pastilla con su fuerza, entrando desde la escalera. Antes era un texto
+       oscuro sobre un círculo transparente, o sea, nada. */
+    const dentro = l
+      ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
+      : "";
+    return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
   }).join("");
 
   /* Losas */
@@ -3324,6 +3355,35 @@ function cssAdicional() {
       border:2px dashed rgba(255,255,255,.75);
       background:rgba(255,255,255,.12);
       z-index:2;
+    }
+    /* Con monstruo: el círculo se cierra y dentro va la ficha, que entra
+       deslizándose como si llegara desde su escalera. */
+    .lanzadera-llena {
+      border-style:solid; border-color:rgba(255,255,255,.3);
+      background:rgba(0,0,0,.28);
+    }
+    .lanzadera-img {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:calc(5.6 * var(--u)); height:auto; pointer-events:none;
+      filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
+      animation: bwLlegadaLzImg .55s ease-out both;
+    }
+    .lanzadera-nv {
+      position:absolute; top:50%; right:calc(-1.1 * var(--u));
+      transform:translateY(-50%);
+      width:calc(3.4 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(23,148,148,.9); color:#fff;
+      display:flex; align-items:center; justify-content:center;
+      font:700 calc(1.8 * var(--u))/1 ui-monospace,monospace;
+      animation: bwLlegadaLzNv .55s ease-out both;
+    }
+    @keyframes bwLlegadaLzImg {
+      from { opacity:0; transform:translate(-50%, 40%) scale(.8); }
+      to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    }
+    @keyframes bwLlegadaLzNv {
+      from { opacity:0; transform:translateY(-50%) scale(.8); }
+      to   { opacity:1; transform:translateY(-50%) scale(1); }
     }
 
     /* número de calle */

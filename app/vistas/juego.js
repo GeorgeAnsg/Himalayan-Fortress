@@ -8,7 +8,12 @@
 
 import { h, esc, avatarSVG, modal, aviso } from "../ui.js";
 
-export function pintar(raiz, { mesa, alAccion, alSalir }) {
+/* Tableros ya importados, por juego. Con el módulo en memoria el repintado es
+   síncrono: la app vacía #pantalla y el juego vuelve a pintar en la misma
+   tacada, sin que llegue a verse el hueco negro entre una cosa y otra. */
+const tableros = new Map();
+
+export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
   const turno = mesa.jugadores.find((j) => j.id === mesa.turno);
   const ronda = mesa.publica?.ronda;
   const maxRondas = mesa.publica?.maxRondas;
@@ -28,30 +33,41 @@ export function pintar(raiz, { mesa, alAccion, alSalir }) {
     </section>
   `);
 
-  cargarTablero(nodo.querySelector("#tablero"), mesa, { alAccion, alSalir });
-
+  const contenedor = nodo.querySelector("#tablero");
+  const opciones = { alAccion, alSalir, scroll };
+  const cache = tableros.get(mesa.juego?.id);
   raiz.append(nodo);
+  /* El nodo ya cuelga del documento antes de pintar el tablero: el juego mide
+     sus posiciones al pintar y en un nodo suelto mediría todo a cero. */
+  if (cache) pintarTablero(cache, contenedor, mesa, opciones);
+  else cargarTablero(contenedor, mesa, opciones);
   return nodo;
+}
+
+function pintarTablero(mod, contenedor, mesa, { alAccion, alSalir, scroll }) {
+  contenedor.innerHTML = "";
+  mod.pintar(contenedor, {
+    publica: mesa.publica,
+    privada: mesa.privada,
+    jugadores: mesa.jugadores,
+    tu: mesa.tu,
+    acciones: mesa.acciones,
+    alAccion,
+    alSalir,
+    scroll,
+  });
 }
 
 /* Se importa el tablero del juego. Si falla (juego sin interfaz, sin red), se
    queda un tablero genérico y la partida sigue siendo jugable. */
-async function cargarTablero(contenedor, mesa, { alAccion, alSalir }) {
+async function cargarTablero(contenedor, mesa, opciones) {
   const id = mesa.juego?.id;
   const url = new URL(`../juego/cliente/${encodeURIComponent(id)}.js`, document.baseURI).href;
   try {
     const mod = await import(url);
     if (typeof mod.pintar === "function") {
-      contenedor.innerHTML = "";
-      mod.pintar(contenedor, {
-        publica: mesa.publica,
-        privada: mesa.privada,
-        jugadores: mesa.jugadores,
-        tu: mesa.tu,
-        acciones: mesa.acciones,
-        alAccion,
-        alSalir,
-      });
+      tableros.set(id, mod);
+      pintarTablero(mod, contenedor, mesa, opciones);
       return;
     }
     throw new Error("el juego no trae pintar()");
