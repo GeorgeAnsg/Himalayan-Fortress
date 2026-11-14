@@ -13,7 +13,7 @@ import * as sesion from "./sesion.js";
 import * as avisos from "./avisos.js";
 import * as versionMod from "./version.js";
 import { Conexion } from "./socket.js";
-import { aviso, modal, avatarSVG, iconoUsuario, esc } from "./ui.js";
+import { aviso, modal, avatarSVG, esc } from "./ui.js";
 import * as vistaEntrada from "./vistas/entrada.js";
 import * as vistaInicio from "./vistas/inicio.js";
 import * as vistaVestibulo from "./vistas/vestibulo.js";
@@ -326,13 +326,6 @@ function actualizarBarra() {
   if (!barra) return;
   barra.hidden = !estado.usuario;
   if (!estado.usuario) return;
-  const cuenta = document.getElementById("cuenta");
-  if (cuenta) cuenta.innerHTML = iconoUsuario(20);
-  const campana = document.getElementById("campana");
-  if (campana) {
-    campana.classList.toggle("on", avisos.estadoCampana());
-    campana.title = avisos.estadoCampana() ? "Avisos encendidos" : "Avisos";
-  }
   const red = $red();
   if (red && !red.className.includes("on") && !red.className.includes("off")) {
     red.classList.toggle("on", estado.redAntes);
@@ -373,13 +366,68 @@ function pintarCabeceraJuego() {
   }
 }
 
-/* Los botones de la barra se atan una sola vez. */
-document.getElementById("campana")?.addEventListener("click", () => {
-  avisos.abrirPanel();
-  setTimeout(actualizarBarra, 100);
-});
+/* Ajustes: un solo botón en la barra con la conexión, los avisos y la cuenta
+   dentro del mismo modal. */
+function abrirAjustes() {
+  if (!estado.usuario) return;
+  const conectado = estado.redAntes;
+  const prefs = avisos.preferencias();
 
-document.getElementById("cuenta")?.addEventListener("click", async () => {
+  const cerrado = modal({
+    titulo: "Ajustes",
+    html: `
+      <div class="ajustes">
+        <div class="ajustes-fila">
+          <span class="ajustes-etq">Conexión</span>
+          <span class="ajustes-val ${conectado ? "bien" : "mal"}">${conectado ? "Conectado" : "Sin conexión"}</span>
+        </div>
+        <label class="ajustes-fila">
+          <span class="ajustes-etq">Avisarme del turno y del final</span>
+          <input id="aj-on" type="checkbox" ${prefs.on ? "checked" : ""} />
+        </label>
+        <label class="ajustes-fila">
+          <span class="ajustes-etq">Con timbre</span>
+          <input id="aj-sonido" type="checkbox" ${prefs.sonido ? "checked" : ""} />
+        </label>
+        ${avisos.pushSoportado()
+          ? `<button class="ajustes-boton" id="aj-push" type="button">Activar avisos con la app cerrada</button>`
+          : ""}
+        <div class="ajustes-fila">
+          <span class="ajustes-etq">Cuenta</span>
+          <span class="ajustes-val">${esc(estado.usuario.nombre)}</span>
+        </div>
+      </div>`,
+    botones: [
+      { texto: "Tu cuenta", valor: "cuenta" },
+      { texto: "Cerrar", valor: null, estilo: "secundario" },
+    ],
+  });
+
+  /* Los controles se atan en cuanto el modal está en el DOM (modal() lo pinta
+     antes de devolver la promesa). */
+  const caja = document.getElementById("capa");
+  caja?.querySelector("#aj-on")?.addEventListener("change", (e) => {
+    avisos.activar(e.target.checked);
+    actualizarBarra();
+  });
+  caja?.querySelector("#aj-sonido")?.addEventListener("change", (e) => avisos.activarSonido(e.target.checked));
+  caja?.querySelector("#aj-push")?.addEventListener("click", async (e) => {
+    const boton = e.currentTarget;
+    boton.disabled = true;
+    boton.textContent = "Activando…";
+    const r = await avisos.activarPush();
+    boton.disabled = false;
+    boton.textContent = r.ok ? "Avisos activados" : "Activar avisos con la app cerrada";
+    if (r.error) aviso(r.error, { error: true });
+    else aviso("Listo: te avisaremos aunque cierres la app.");
+  });
+
+  cerrado.then((r) => { if (r === "cuenta") abrirCuenta(); });
+}
+
+document.getElementById("ajustes")?.addEventListener("click", abrirAjustes);
+
+async function abrirCuenta() {
   if (!estado.usuario) return;
   const r = await modal({
     titulo: estado.usuario.nombre,
@@ -394,7 +442,7 @@ document.getElementById("cuenta")?.addEventListener("click", async () => {
     ],
   });
   if (r === "salir") cerrarSesion();
-});
+}
 
 /* ── Vamos ─────────────────────────────────────────────────────────────── */
 

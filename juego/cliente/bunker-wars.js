@@ -2597,11 +2597,20 @@ function cssAdicional() {
       width: 100% !important;
       height: 34px !important; min-height: 34px !important;
       padding-bottom: 0 !important;
-      /* Negro total, sin transparencia ni desenfoque detras */
-      background: #000 !important;
+      /* Crema ocre, el mismo de la barra de arriba de la app: los dos extremos
+         de la pantalla quedan a juego. */
+      background: linear-gradient(to bottom, #f1e4c6, #ddc9a2) !important;
+      border-top: 1px solid rgba(90, 66, 32, 0.35) !important;
       backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     }
-    body.bw-himalaya .bw-nav-tab { padding: 0 !important; gap: 0 !important; font-size: 11px !important; }
+    body.bw-himalaya .bw-nav-tab {
+      padding: 0 !important; gap: 0 !important; font-size: 11px !important;
+      /* Tinta oscura sobre el crema; la pestaña abierta, más marcada. */
+      color: rgba(59, 42, 21, 0.55) !important;
+    }
+    body.bw-himalaya .bw-nav-tab.activo { color: #2f2110 !important; }
+    body.bw-himalaya .bw-nav-tab.activo::after { background: #7a1010 !important; }
+    body.bw-himalaya .bw-nav-tab:hover { color: rgba(59, 42, 21, 0.8) !important; }
     /* 34 px = alto del menú (antes 56, con iconos): si no se mide, la mano se
        queda justo encima de él en vez de flotar 22 px más arriba. */
     body.bw-himalaya .bw-mano-wrap { bottom: var(--alto-nav, 34px) !important; }

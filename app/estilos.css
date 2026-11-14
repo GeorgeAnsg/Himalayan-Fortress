@@ -139,10 +139,20 @@ a { color: var(--plata); }
   gap: 8px;
   /* 8 px arriba y abajo: antes el contenido iba pegado al borde de la barra. */
   padding: 8px 12px;
-  background: linear-gradient(to bottom, rgba(18, 16, 14, 0.96), rgba(18, 16, 14, 0.78));
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--borde);
+  /* Crema ocre, como el pergamino de las cartas. */
+  background: linear-gradient(to bottom, #f1e4c6, #ddc9a2);
+  color: #3b2a15;
+  border-bottom: 1px solid rgba(90, 66, 32, 0.35);
+  /* Un 20 % más alta que antes (31 px → 37): el contenido sigue centrado y el
+     juego mide este alto solo para colgar el mapa. */
+  min-height: 37px;
 }
+
+/* Con el fondo claro, los adornos de la marca van en ocre oscuro. */
+.barra .marca { color: #5b4426; }
+.barra .marca::before { background: linear-gradient(90deg, transparent, rgba(91, 68, 38, 0.55)); }
+.barra .marca::after { background: linear-gradient(90deg, transparent, rgba(91, 68, 38, 0.55)); }
+
 
 .marca {
   grid-column: 2;
@@ -183,19 +193,19 @@ a { color: var(--plata); }
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--plata-claro);
+  color: #3b2a15;
   white-space: nowrap;
 }
 .barra-recursos {
   display: flex; align-items: center; gap: 9px;
-  margin-right: 2px;
+  margin-right: 6px;
 }
 .barra-rec { display: inline-flex; align-items: center; gap: 3px; }
 .barra-rec img { width: 17px; height: 17px; object-fit: contain; }
 .barra-rec b {
   /* Cifras de ancho fijo: al bajar de 10 a 9 no baila el hueco. */
   font: 700 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--plata-claro);
+  color: #3b2a15;
   font-variant-numeric: tabular-nums;
 }
 
@@ -248,20 +258,50 @@ a { color: var(--plata); }
 }
 .yo svg { width: 20px; height: 20px; display: block; }
 
-/* Los tres iconos de la derecha: tres círculos grises iguales y pequeños, con
-   el punto de conexión, la campana y el usuario dentro. La fila de recursos de
-   la partida se queda fuera: no es un icono, es un grupo con sus números. */
+/* Ajustes: un solo botón redondo a la derecha, con el punto de conexión
+   pegado en su esquina. Dentro van la conexión, los avisos y la cuenta. */
 .barra-der > :not(.barra-recursos) {
   box-sizing: border-box;
   width: 22px; height: 22px;
   display: grid; place-items: center;
   padding: 0;
-  border: 1px solid rgba(206, 214, 222, 0.18);
+  border: 1px solid rgba(58, 42, 21, 0.28);
   border-radius: 50%;
-  background: rgba(206, 214, 222, 0.10);
-  color: var(--tinta-suave);
+  background: rgba(255, 252, 244, 0.55);
+  color: #4a3519;
   cursor: pointer;
+  position: relative;
 }
+
+/* El punto de conexión, en la esquina del botón de ajustes. */
+#ajustes .red {
+  position: absolute; top: -2px; right: -2px;
+  width: 9px; height: 9px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #f1e4c6;
+}
+#ajustes .red::after { width: 6px; height: 6px; }
+
+/* Modal de ajustes: filas de etiqueta y valor. */
+.ajustes { display: grid; gap: 8px; margin-bottom: 4px; }
+.ajustes-fila {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 9px 12px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ajustes-etq { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.ajustes-val { font-size: 14px; font-weight: 700; }
+.ajustes input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: #7a1010; flex: 0 0 auto; }
+.ajustes-boton {
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  font: 600 13px/1.2 inherit; text-align: left;
+  background: rgba(255, 255, 255, 0.1); color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.ajustes-val.bien { color: #8fbf7a; }
+.ajustes-val.mal { color: #e0533f; }
 .barra-der > .red { cursor: default; }
 .barra-der > * svg { width: 14px; height: 14px; display: block; }
 
