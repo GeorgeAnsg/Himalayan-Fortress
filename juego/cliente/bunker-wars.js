@@ -231,7 +231,8 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
 
   /* Box: el monstruo se manda desde su hueco; el hueco libre abre el criadero. */
   boxPanel.addEventListener("click", (ev) => {
-    if (ev.target.closest(".bw-box-slot.vacio")) { abrirCriadero(); return; }
+    const vacio = ev.target.closest(".bw-box-slot.vacio");
+    if (vacio) { abrirCriadero(Number(vacio.dataset.box) || 0); return; }
     const slot = ev.target.closest(".bw-box-slot[data-mon-id]");
     if (!slot) return;
     const mon = boxActual.find((m) => m?.id === slot.dataset.monId);
@@ -242,7 +243,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   contenedor.querySelectorAll('[data-edif="criadero"]').forEach((el) => el.addEventListener("click", abrirCriadero));
   contenedor.querySelectorAll(".fort-slot").forEach((el) => {
     if (el.classList.contains("fort-slot-lleno")) return;
-    el.addEventListener("click", abrirCriadero);
+    el.addEventListener("click", () => abrirCriadero(Number(el.dataset.box) || 0));
   });
 
   /* Tabs de navegación inferior */
@@ -884,7 +885,7 @@ function pintarMiBunker(j, priv, fase) {
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i}" style="left:${pos.l};top:${pos.t}">${
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}" style="left:${pos.l};top:${pos.t}">${
       mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
@@ -1044,8 +1045,8 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" title="Monstruo ${m.nivel} (box ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
-        : `<div class="bw-box-slot vacio" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (box ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
+        : `<div class="bw-box-slot vacio" data-box="${b}" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     const caminos = b === 0 ? "1 y 2" : "2 y 3";
     return `
@@ -1144,16 +1145,21 @@ function abrirModalAcciones() {
 
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
-  { nivel: 1, nombre: "Rastreador",     puntos: 1, coste: 0, texto: "Ataca con 1 de fuerza" },
-  { nivel: 2, nombre: "Carroñero",      puntos: 2, coste: 1, texto: "Ataca con 2 de fuerza" },
-  { nivel: 3, nombre: "Yeti",           puntos: 3, coste: 2, texto: "Ataca con 3 de fuerza" },
-  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Ataca con 5 de fuerza" },
+  { nivel: 1, nombre: "Rastreador",      puntos: 1, coste: 0, texto: "Defiende tu base con 1 de fuerza y ataca con 1. Se mueve una casilla por turno." },
+  { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "Defiende tu base con 2 de fuerza y ataca con 2. Se mueve una casilla por turno." },
+  { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "Defiende tu base con 3 de fuerza y ataca con 3. Se mueve una casilla por turno." },
+  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Defiende tu base con 5 de fuerza y ataca con 5. Se mueve una casilla por turno." },
 ];
 
-/* Modal del criadero: lista los monstruos que el criadero ya permite criar y
-   marca los que no llegan con las monedas de ahora. Al criar, el motor pone
-   el monstruo en el primer hueco libre (box 1 y luego box 2). */
-function abrirCriadero() {
+/* Box al que va la cría. Se predefine al abrir el criadero desde un hueco,
+   pero el jugador puede cambiarlo en el propio modal. */
+let boxCriadero = 0;
+
+/* Modal del criadero: una cartita por monstruo permitido, con su imagen, lo
+   que cuesta en monedas, lo que hace y un botón grande de criar. Arriba, el
+   toggle de box (predefinido si se entra desde un hueco del box). */
+function abrirCriadero(boxInicial = null) {
+  if (boxInicial === 0 || boxInicial === 1) boxCriadero = boxInicial;
   document.getElementById("bw-modal-criadero")?.remove();
   if (!tocaMesa || faseMesa !== "acciones") {
     aviso("Solo se cría en tu fase de decretos.", { error: true });
@@ -1172,20 +1178,24 @@ function abrirCriadero() {
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const monedasDe = (m) => Math.max(0, m.coste - barato);
   const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
+  const libresEnBox = (b) => (boxActual ?? []).slice(b * 2, b * 2 + 2).filter((m) => !m).length;
+  const huecoEnBox = libresEnBox(boxCriadero) > 0;
 
-  const filas = lista.map((m) => {
+  const tarjetas = lista.map((m) => {
     const monedas = monedasDe(m);
     const alcanza = monedas <= energiaMesa;
-    return `<button type="button" class="bw-modal-usar bw-criar-op" data-nivel="${m.nivel}"${alcanza ? "" : " disabled"}>
-        <span class="bw-criar-fila">
+    const puede = alcanza && huecoEnBox;
+    return `<div class="bw-criar-card" data-nivel="${m.nivel}">
+        <div class="bw-criar-cabeza">
           <img src="${BASE_IMG}/monstruos/m1-f.png" alt="">
-          <span class="bw-criar-texto">
-            <span class="bw-criar-nombre">${esc(m.nombre)} · nv ${m.nivel}</span>
-            <span class="bw-criar-sub">${esc(m.texto)}${alcanza ? "" : " · no te llega"}</span>
-          </span>
-        </span>
-        <span class="bw-criar-mon"><img src="${BASE_IMG}/iconos/monedas.png" alt="">${monedas}</span>
-      </button>`;
+          <div class="bw-criar-datos">
+            <div class="bw-criar-tit">${esc(m.nombre)} · nv ${m.nivel}</div>
+            <div class="bw-criar-coste"><img src="${BASE_IMG}/iconos/monedas.png" alt="">${monedas} ${monedas === 1 ? "moneda" : "monedas"}</div>
+          </div>
+        </div>
+        <p class="bw-criar-desc">${esc(m.texto)}</p>
+        <button type="button" class="bw-modal-usar bw-criar-op" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>Crear</button>
+      </div>`;
   }).join("");
 
   const fondo = document.createElement("div");
@@ -1194,9 +1204,12 @@ function abrirCriadero() {
   fondo.innerHTML = `
     <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Criadero">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
-      <div class="bw-modal-titulo">Criadero ${criaderoMesa || 1} · hasta nivel ${max}</div>
-      <div class="bw-modal-lista">${filas}</div>
-      <p class="bw-modal-pie">Tienes ${energiaMesa} monedas. El monstruo sale en el primer hueco libre.</p>
+      <div class="bw-modal-titulo">Criadero ${criaderoMesa || 1}</div>
+      <div class="bw-criar-toggle">
+        ${[0, 1].map((b) => `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">Al box ${b + 1}<span>${libresEnBox(b)} ${libresEnBox(b) === 1 ? "libre" : "libres"}</span></button>`).join("")}
+      </div>
+      <div class="bw-criar-grid">${tarjetas}</div>
+      <p class="bw-modal-pie">Tienes ${energiaMesa} monedas${huecoEnBox ? "" : ` · el box ${boxCriadero + 1} está lleno`}.</p>
     </div>`;
   document.body.appendChild(fondo);
 
@@ -1204,12 +1217,20 @@ function abrirCriadero() {
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
   fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
 
+  /* Toggle de box: se puede cambiar siempre, también si se entró por un hueco. */
+  for (const tb of fondo.querySelectorAll(".bw-criar-box")) {
+    tb.addEventListener("click", () => {
+      const b = Number(tb.dataset.box);
+      if (b === boxCriadero) return;
+      abrirCriadero(b);
+    });
+  }
+
   for (const b of fondo.querySelectorAll(".bw-criar-op")) {
     b.addEventListener("click", async () => {
       if (!enviarAccion) return;
       b.disabled = true;
-      /* Sin boxIdx: el motor elige el primer hueco libre, de box 1 a box 2. */
-      const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(b.dataset.nivel) });
+      const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(b.dataset.nivel), boxIdx: boxCriadero });
       if (r?.error) {
         aviso(r.error, { error: true });
         b.disabled = false;
@@ -2196,17 +2217,46 @@ function css() {
       margin:0; max-width:min(340px,90vw); text-align:center;
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
-    /* Criadero: imagen, nombre y, a la derecha, las monedas */
-    .bw-criar-fila { display:flex; align-items:center; gap:9px; min-width:0; }
-    .bw-criar-fila img { width:26px; height:36px; object-fit:contain; flex:0 0 auto; }
-    .bw-criar-texto { display:flex; flex-direction:column; min-width:0; }
-    .bw-criar-nombre { font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; }
-    .bw-criar-sub { font:400 11px/1.3 ui-sans-serif, system-ui, sans-serif; color:#4a4339; }
-    .bw-criar-mon {
-      display:flex; align-items:center; gap:4px;
-      font:800 14px/1 ui-monospace, SFMono-Regular, monospace;
+    /* Criadero: toggle de box y una cartita por monstruo */
+    .bw-criar-toggle { display:flex; gap:8px; width:min(340px,90vw); }
+    .bw-criar-toggle .bw-criar-box {
+      flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:8px 4px; border-radius:9px; cursor:pointer;
+      font:700 13px/1.1 ui-sans-serif, system-ui, sans-serif;
+      color:#cfc4ad; background:rgba(244,236,221,.10);
+      border:1px solid rgba(244,236,221,.25);
     }
-    .bw-criar-mon img { width:15px; height:15px; }
+    .bw-criar-toggle .bw-criar-box span { font-weight:400; font-size:10px; color:#8b7e6b; }
+    .bw-criar-toggle .bw-criar-box.activo {
+      background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1);
+      color:#12161a; border-color:transparent;
+    }
+    .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
+    .bw-criar-grid {
+      display:flex; flex-direction:column; gap:10px;
+      width:min(340px,90vw); max-height:calc(100vh - 250px);
+      overflow-y:auto; padding:2px;
+    }
+    .bw-criar-card {
+      display:flex; flex-direction:column; gap:8px;
+      padding:10px 12px; border-radius:12px;
+      background:rgba(18,16,14,.92);
+      border:1px solid rgba(244,236,221,.18);
+    }
+    .bw-criar-cabeza { display:flex; align-items:center; gap:10px; }
+    .bw-criar-cabeza img { width:38px; height:52px; object-fit:contain; flex:0 0 auto; }
+    .bw-criar-datos { display:flex; flex-direction:column; gap:4px; min-width:0; }
+    .bw-criar-tit { font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; color:#f4ecdd; }
+    .bw-criar-coste {
+      display:flex; align-items:center; gap:5px;
+      font:800 13px/1 ui-monospace, SFMono-Regular, monospace; color:#e8d9b8;
+    }
+    .bw-criar-coste img { width:15px; height:15px; }
+    .bw-criar-desc { margin:0; font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#cfc4ad; }
+    .bw-criar-card .bw-criar-op {
+      width:100%; padding:13px; font-size:15px;
+      font-family:ui-serif, serif; font-weight:700;
+    }
   </style>`;
 }
 
