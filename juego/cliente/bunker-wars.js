@@ -2538,9 +2538,12 @@ function cssAdicional() {
       position: relative !important; top: auto !important;
       left: auto !important; right: auto !important; bottom: auto !important;
       flex: 0 0 auto !important; width: 100% !important;
-      /* El mismo aire arriba y abajo (más el notch, si lo hay), y el alto de
-         siempre: 7 + 22 + 7 + el borde = 37 px. */
-      padding: calc(7px + env(safe-area-inset-top, 0px)) 12px !important;
+      /* Alto fijo: 37 px de barra útil más el notch del móvil, si lo hay. Ni el
+         avatar, ni el ribete, ni nada de dentro puede estirarla. */
+      height: calc(37px + env(safe-area-inset-top, 0px)) !important;
+      min-height: 0 !important;
+      padding: 0 12px !important;
+      padding-top: env(safe-area-inset-top, 0px) !important;
     }
     /* El ribete de piedra del menú, también debajo de la barra: los dos
        extremos de la pantalla se cierran con el mismo adorno. */
@@ -2611,20 +2614,11 @@ function cssAdicional() {
       width: 100% !important;
       height: 34px !important; min-height: 34px !important;
       padding-bottom: 0 !important;
-      /* Crema ocre, el mismo de la barra de arriba de la app: los dos extremos
-         de la pantalla quedan a juego. */
-      background: linear-gradient(to bottom, #f1e4c6, #ddc9a2) !important;
-      border-top: 1px solid rgba(90, 66, 32, 0.35) !important;
+      /* Negro total, sin transparencia ni desenfoque detrás. */
+      background: #000 !important;
       backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     }
-    body.bw-himalaya .bw-nav-tab {
-      padding: 0 !important; gap: 0 !important; font-size: 11px !important;
-      /* Tinta oscura sobre el crema; la pestaña abierta, más marcada. */
-      color: rgba(59, 42, 21, 0.55) !important;
-    }
-    body.bw-himalaya .bw-nav-tab.activo { color: #2f2110 !important; }
-    body.bw-himalaya .bw-nav-tab.activo::after { background: #7a1010 !important; }
-    body.bw-himalaya .bw-nav-tab:hover { color: rgba(59, 42, 21, 0.8) !important; }
+    body.bw-himalaya .bw-nav-tab { padding: 0 !important; gap: 0 !important; font-size: 11px !important; }
     /* 34 px = alto del menú (antes 56, con iconos): si no se mide, la mano se
        queda justo encima de él en vez de flotar 22 px más arriba. */
     body.bw-himalaya .bw-mano-wrap { bottom: var(--alto-nav, 34px) !important; }
