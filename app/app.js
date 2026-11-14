@@ -371,7 +371,7 @@ function pintarCabeceraJuego() {
 function abrirAjustes() {
   if (!estado.usuario) return;
   const conectado = estado.redAntes;
-  const prefs = avisos.preferencias();
+  const avisosOn = avisos.estadoCampana();
 
   const cerrado = modal({
     titulo: "Ajustes",
@@ -381,17 +381,9 @@ function abrirAjustes() {
           <span class="ajustes-etq">Conexión</span>
           <span class="ajustes-val ${conectado ? "bien" : "mal"}">${conectado ? "Conectado" : "Sin conexión"}</span>
         </div>
-        <label class="ajustes-fila">
-          <span class="ajustes-etq">Avisarme del turno y del final</span>
-          <input id="aj-on" type="checkbox" ${prefs.on ? "checked" : ""} />
-        </label>
-        <label class="ajustes-fila">
-          <span class="ajustes-etq">Con timbre</span>
-          <input id="aj-sonido" type="checkbox" ${prefs.sonido ? "checked" : ""} />
-        </label>
-        ${avisos.pushSoportado()
-          ? `<button class="ajustes-boton" id="aj-push" type="button">Activar avisos con la app cerrada</button>`
-          : ""}
+        <button class="ajustes-boton" id="aj-avisos" type="button">
+          ${avisosOn ? "Desactivar notificaciones" : "Activar notificaciones"}
+        </button>
         <div class="ajustes-fila">
           <span class="ajustes-etq">Cuenta</span>
           <span class="ajustes-val">${esc(estado.usuario.nombre)}</span>
@@ -406,20 +398,27 @@ function abrirAjustes() {
   /* Los controles se atan en cuanto el modal está en el DOM (modal() lo pinta
      antes de devolver la promesa). */
   const caja = document.getElementById("capa");
-  caja?.querySelector("#aj-on")?.addEventListener("change", (e) => {
-    avisos.activar(e.target.checked);
-    actualizarBarra();
-  });
-  caja?.querySelector("#aj-sonido")?.addEventListener("change", (e) => avisos.activarSonido(e.target.checked));
-  caja?.querySelector("#aj-push")?.addEventListener("click", async (e) => {
+  caja?.querySelector("#aj-avisos")?.addEventListener("click", async (e) => {
     const boton = e.currentTarget;
-    boton.disabled = true;
-    boton.textContent = "Activando…";
-    const r = await avisos.activarPush();
-    boton.disabled = false;
-    boton.textContent = r.ok ? "Avisos activados" : "Activar avisos con la app cerrada";
-    if (r.error) aviso(r.error, { error: true });
-    else aviso("Listo: te avisaremos aunque cierres la app.");
+    /* Solo dos cosas: encender o apagar. Encender pide permiso al navegador
+       si hace falta; apagar no pide nada. */
+    if (avisos.estadoCampana()) {
+      avisos.activar(false);
+      boton.textContent = "Activar notificaciones";
+      actualizarBarra();
+      return;
+    }
+    if (avisos.permiso() !== "granted") {
+      const dado = typeof Notification === "undefined" ? "denied" : await Notification.requestPermission();
+      if (dado !== "granted") {
+        aviso("Este navegador no permite activar las notificaciones.", { error: true });
+        return;
+      }
+    }
+    avisos.activar(true);
+    boton.textContent = "Desactivar notificaciones";
+    actualizarBarra();
+    aviso("Listo: te avisaremos del turno y del final.");
   });
 
   cerrado.then((r) => { if (r === "cuenta") abrirCuenta(); });
