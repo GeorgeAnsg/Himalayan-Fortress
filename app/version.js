@@ -64,7 +64,7 @@ export function avisarNueva(versionServidor) {
   });
 }
 
-/* Vigila: al arrancar, cada 40 s y cada vez que la pestaña vuelve al frente
+/* Vigila: al arrancar, cada 15 s y cada vez que la pestaña vuelve al frente
    (es cuando de verdad importa: el móvil estuvo guardado en el bolsillo). */
 export function vigilar() {
   if (temporizador) return;
@@ -73,7 +73,7 @@ export function vigilar() {
     const { datos } = await api.version();
     if (datos?.version) avisarNueva(datos.version);
   };
-  temporizador = setInterval(mirar, 40_000);
+  temporizador = setInterval(mirar, 15_000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) mirar();
   });

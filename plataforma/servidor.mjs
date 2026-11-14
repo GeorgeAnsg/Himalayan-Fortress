@@ -36,6 +36,11 @@ const RAIZ = path.resolve(AQUI, "..");
 const PUERTO = Number(process.env.PORT) || 3000;
 const { version: VERSION, arte: ARTE } = versiones();
 
+/* La versión se recalcula cuando cambia algún fichero (ver version.mjs), así
+   que la app detecta una actualización sin reiniciar el servidor. */
+const versionAhora = () => versiones().version;
+const arteAhora = () => versiones().arte;
+
 console.log(`[madrigueras] versión ${VERSION} · arte ${ARTE} · ${os.hostname()}`);
 
 /* ── Utilidades HTTP ───────────────────────────────────────────────────── */
@@ -112,7 +117,7 @@ function usuarioDePeticion(req) {
 const conexiones = new Map(); /* codigo → Set<socket> */
 
 const mesas = new Mesas({
-  version: VERSION,
+  version: versionAhora(),
   difundir: (sala) => difundir(sala),
   avisar: (usuarioId, aviso) => avisar(usuarioId, aviso),
 });
@@ -144,7 +149,7 @@ function vistaPara(sala, usuarioId) {
   if (sala.fase === "vestibulo") {
     return {
       tipo: "vestibulo",
-      version: VERSION,
+      version: versionAhora(),
       codigo: sala.codigo,
       juego: { id: sala.juego, nombre: juego?.nombre ?? sala.juego },
       min: juego?.min ?? 2,
@@ -195,7 +200,7 @@ function vistaPara(sala, usuarioId) {
 
   return {
     tipo: "vista",
-    version: VERSION,
+    version: versionAhora(),
     codigo: sala.codigo,
     juego: { id: sala.juego, nombre: juego?.nombre ?? sala.juego },
     fase: sala.fase,
@@ -255,7 +260,7 @@ const httpServidor = http.createServer(async (req, res) => {
 
   /* ── API ── */
   if (ruta === "/api/version") {
-    return json(res, 200, { version: VERSION, arte: ARTE });
+    return json(res, 200, { version: versionAhora(), arte: arteAhora() });
   }
 
   if (ruta === "/api/juegos") {
@@ -433,8 +438,8 @@ io.on("connection", (socket) => {
   const usuario = socket.data.usuario;
 
   /* Si la app está desfasada, se le dice ya: el cliente enseña el modal. */
-  if (socket.data.version !== VERSION) {
-    socket.emit("version", { version: VERSION });
+  if (socket.data.version !== versionAhora()) {
+    socket.emit("version", { version: versionAhora() });
   }
 
   const sala = mesas.deUsuario(usuario.id);
@@ -451,8 +456,8 @@ io.on("connection", (socket) => {
   /* Envoltorio: cualquier acción de juego exige la versión del servidor y una
      mesa donde estés sentado. */
   const conMesa = (fn) => (datos, acuse) => {
-    if (socket.data.version !== VERSION) {
-      socket.emit("version", { version: VERSION });
+    if (socket.data.version !== versionAhora()) {
+      socket.emit("version", { version: versionAhora() });
       return responder(acuse, { error: "Tu app es de otra versión. Actualiza para seguir." });
     }
     const actual = mesas.deUsuario(usuario.id);
@@ -482,8 +487,8 @@ io.on("connection", (socket) => {
   };
 
   socket.on("crear", ({ juego } = {}, acuse) => {
-    if (socket.data.version !== VERSION) {
-      socket.emit("version", { version: VERSION });
+    if (socket.data.version !== versionAhora()) {
+      socket.emit("version", { version: versionAhora() });
       return responder(acuse, { error: "Actualiza la app para jugar." });
     }
     const r = mesas.crear(usuario, juego);
@@ -493,8 +498,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("unirse", ({ codigo } = {}, acuse) => {
-    if (socket.data.version !== VERSION) {
-      socket.emit("version", { version: VERSION });
+    if (socket.data.version !== versionAhora()) {
+      socket.emit("version", { version: versionAhora() });
       return responder(acuse, { error: "Actualiza la app para jugar." });
     }
     const r = mesas.unirse(usuario, codigo);

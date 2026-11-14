@@ -47,10 +47,28 @@ function huella(dirs) {
   return h.digest("hex").slice(0, 10);
 }
 
+/* Lo último que se tocó en esos directorios. Si cambia, se vuelve a calcular
+   la huella: así la app se entera de una actualización sin reiniciar el
+   servidor (antes la versión se quedaba clavada en el arranque y, si se
+   editaba el código con el servidor vivo, el aviso no salía nunca). */
+function ultimaEscritura(dirs) {
+  let t = 0;
+  for (const dir of dirs) {
+    for (const f of ficheros(path.join(RAIZ, dir))) {
+      try { t = Math.max(t, fs.statSync(f).mtimeMs); } catch { /* borrado a medias */ }
+    }
+  }
+  return t;
+}
+
+const VIGILADOS = ["app", "juego", "plataforma"];
 let sello = null;
+let visto = 0;
 
 export function versiones() {
-  if (!sello) {
+  const t = ultimaEscritura(VIGILADOS);
+  if (!sello || t > visto) {
+    visto = t;
     /* El motor y la app juntos: si cambia el servidor pero no la app, no hace
        falta recargar la pestaña; si cambia la app, sí. */
     sello = {
