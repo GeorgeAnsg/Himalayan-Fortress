@@ -362,7 +362,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      Si la carta habla de las escaleras, al cerrarla se baja al tablero y el
      movimiento de las fichas empieza cuando la vista está abajo del todo. */
   if (saleDestino) {
-    destinoVisto = claveDestino(destino);
+    marcarDestinoVisto(claveDestino(destino));
     const abrir = () => abrirDestino(destino, {
       alCerrar: () => {
         const retenido = avanceRetenido;
@@ -741,7 +741,17 @@ function abrirDescarte() {
 
 /* ── Modal de la carta de Destino del turno ───────────────────────────────── */
 
-let destinoVisto = null;
+/* La carta ya leída se apunta en el navegador, no solo en memoria: si la app se
+   recarga (o el móvil se la come en segundo plano) la carta del turno no vuelve
+   a saltar, que era lo que pasaba al repintar o al volver a abrir. */
+const LS_DESTINO = "bw-destino-visto";
+const leerDestinoVisto = () => { try { return localStorage.getItem(LS_DESTINO); } catch { return null; } };
+let destinoVisto = leerDestinoVisto();
+
+function marcarDestinoVisto(clave) {
+  destinoVisto = clave;
+  try { localStorage.setItem(LS_DESTINO, clave); } catch { /* sin almacenamiento */ }
+}
 
 function claveDestino(d) {
   return [d?.luna, d?.jugadorId, d?.tipo, d?.nivel, d?.cantidad].join("|");
@@ -3447,10 +3457,10 @@ function cssAdicional() {
     body.bw-avanzando .bw-panel,
     body.bw-avanzando #bw-nav-global,
     body.bw-avanzando #barra,
-    /* La carta de Destino se queda fuera del bloqueo: sale justo al acabar el
-       avance y el bloqueo dura un par de segundos más, así que si no, su
-       «Entendido» no responde y la carta se queda en pantalla sin salida. */
-    body.bw-avanzando .bw-modal-fondo:not(#bw-modal-destino):not(#bw-modal-lanzar) { pointer-events:none !important; }
+    /* Los modales no se bloquean nunca: el bloqueo del avance es para que no se
+       toque el tablero mientras se mueven las fichas, pero un modal es una
+       decisión ya tomada y, si se queda sin responder, encierra al jugador
+       (pasaba con la carta de Destino y con el de lanzar). */
 
     .num-calle {
       /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde

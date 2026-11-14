@@ -40,6 +40,10 @@ const { version: VERSION, arte: ARTE } = versiones();
    que la app detecta una actualización sin reiniciar el servidor. */
 const versionAhora = () => versiones().version;
 const arteAhora = () => versiones().arte;
+/* Última versión que se ha anunciado por el socket: si la huella cambia, se
+   avisa a todos los conectados en cuanto alguien pregunta por ella. Así el
+   modal de «nueva versión» no depende de que cada pestaña llegue a sondear. */
+let versionAnunciada = VERSION;
 
 console.log(`[madrigueras] versión ${VERSION} · arte ${ARTE} · ${os.hostname()}`);
 
@@ -260,7 +264,12 @@ const httpServidor = http.createServer(async (req, res) => {
 
   /* ── API ── */
   if (ruta === "/api/version") {
-    return json(res, 200, { version: versionAhora(), arte: arteAhora() });
+    const v = versionAhora();
+    if (v !== versionAnunciada) {
+      versionAnunciada = v;
+      io.emit("version", { version: v });
+    }
+    return json(res, 200, { version: v, arte: arteAhora() });
   }
 
   if (ruta === "/api/juegos") {
