@@ -202,14 +202,18 @@ function accionesTotal(j) {
   }, 0);
 }
 
-/* Nivel máximo de monstruo que permite crear el laboratorio:
-   laboratorio 1 → 1 · 2 → 2 · 3 → 3 · 4 → 5. El nivel 7 nunca sale del
-   laboratorio (solo llega por el mazo de Destino o por subidas de rango).
-   Con el laboratorio recién puesto solo se crean monstruos de nivel 1: para
-   el 2 hace falta la carta LABORATORIO 2, como dice su texto. */
+/* Nivel máximo de monstruo que permite crear el criadero:
+   criadero 1 → 1 · 2 → 2 · 3 → 3 · 4 (y siguientes) → 5.
+   El nivel 5 es el techo del criadero aunque llegue a nivel 7 de edificio:
+   el Devorador de cumbres (nivel 7) nunca se crea, solo llega por el mazo de
+   Destino o por subidas de rango. Cada nivel pide además su energía al
+   crearlo (0, 1, 2 y 3), así que con poca energía solo sale el de nivel 1. */
+const NIVEL_MAX_CRIADERO = 5;
+
 function nivelMaxLab(j) {
-  const nivLab = j.bunker.laboratorio;
-  return nivLab >= 4 ? 5 : nivLab >= 3 ? 3 : nivLab >= 2 ? 2 : 1;
+  const nivLab = j.bunker.laboratorio ?? 1;
+  if (nivLab >= 4) return NIVEL_MAX_CRIADERO;
+  return Math.max(1, nivLab);
 }
 
 /* Ciencia permanente: dos huecos. Para una tercera hay que pagarla y elegir

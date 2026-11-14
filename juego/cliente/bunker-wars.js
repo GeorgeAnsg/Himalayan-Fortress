@@ -30,6 +30,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   faseMesa = fase ?? null;
   tocaMesa = teToca;
   cienciasMesa = yo?.bunker?.ciencia ?? [];
+  criaderoMesa = yo?.bunker?.laboratorio ?? 0;
   nivelEnemigoMesa = publica.nivelEnemigo ?? 1;
   lunaMesa = publica.luna ?? 1;
   /* Una línea por jugador en la barra; la tuya siempre la primera. */
@@ -1079,6 +1080,27 @@ function pintarBox(priv) {
 /* ── Panel de acciones ─────────────────────────────────────────────────
    Todas las acciones legales de ahora mismo, una por botón. */
 
+/* Espejo de nivelMaxLab del motor, solo para el aviso del panel. */
+const NIVEL_MAX_CRIADERO_UI = 5;
+const COSTE_MONSTRUO_UI = { 1: 0, 2: 1, 3: 2, 5: 3 };
+function nivelMaxCriadero(n) {
+  return n >= 4 ? NIVEL_MAX_CRIADERO_UI : Math.max(1, n);
+}
+
+/* Lo que el criadero deja criar ahora mismo y lo que cuesta cada nivel. Sin
+   esto, los niveles que no salen por falta de energía parecen un fallo del
+   criadero. */
+function notaCriadero() {
+  const lab = criaderoMesa || 1;
+  const max = nivelMaxCriadero(lab);
+  const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
+  const costes = Object.keys(COSTE_MONSTRUO_UI).map(Number)
+    .filter(nv => nv <= max)
+    .map(nv => `nv ${nv} = ${Math.max(0, COSTE_MONSTRUO_UI[nv] - barato)}e`)
+    .join(" · ");
+  return `🩸 Criadero ${lab} · crea hasta nivel ${max}${costes ? ` · ${costes}` : ""}`;
+}
+
 function pintarAcciones() {
   /* Lanzar y no lanzar se eligen en su propio modal: aquí solo estorban. */
   const lista = (accionesMesa ?? []).filter(a => a.tipo !== "lanzar" && a.tipo !== "no_lanzar");
@@ -1098,6 +1120,7 @@ function pintarAcciones() {
   return `
     <div class="bw-panel-label">▶ Acciones <span class="bw-panel-sub">${lista.length}</span></div>
     ${cuerpo}
+    <div class="bw-slot-sub" style="margin-top:6px">${esc(notaCriadero())}</div>
     <div class="bw-slot-sub" style="margin-top:6px">Toca una acción para hacerla. Las cartas se juegan desde la mano.</div>
   `;
 }
@@ -1245,6 +1268,7 @@ let turnoMesa = null;
 let yoMesa = null;
 let tabMesa = "cartas";
 let energiaMesa = 0;
+let criaderoMesa = 0;
 let accionesRestantesMesa = 0;
 
 const BASE_IMG   = "/app/juegos/bunker-wars/img";
