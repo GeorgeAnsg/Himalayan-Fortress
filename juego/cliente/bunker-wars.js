@@ -135,36 +135,11 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   boxPanel.innerHTML = pintarBox(privada);
   document.body.appendChild(boxPanel);
 
-  /* Panel de acciones: mismo prototipo que el del box, con todas las que
-     puedes hacer ahora mismo. */
-  const accPanel = document.createElement("div");
-  accPanel.className = "bw-panel acciones-panel oculto";
-  accPanel.innerHTML = pintarAcciones();
-  document.body.appendChild(accPanel);
-
   /* Manuscritos: la referencia de reglas, para consultar sin salir de la mesa */
   const manPanel = document.createElement("div");
   manPanel.className = "bw-panel manuscritos-panel oculto";
   manPanel.innerHTML = pintarManuscritos();
   document.body.appendChild(manPanel);
-
-  accPanel.addEventListener("click", async (ev) => {
-    const b = ev.target.closest(".bw-accion-item");
-    if (!b || !enviarAccion) return;
-    const accion = accionesMesa[Number(b.dataset.i)];
-    if (!accion) return;
-    /* «Terminar decretos» cierra el panel: la ronda de monstruos que viene
-       detrás se ve en el tablero, no debajo del panel. Se cambia de
-       pestaña (y no solo se oculta) para que no vuelva a abrirse al repintar. */
-    if (accion.tipo === "pasar") activarTab("box");
-    const items = [...accPanel.querySelectorAll(".bw-accion-item")];
-    items.forEach(x => { x.disabled = true; });
-    const r = await enviarAccion(accion);
-    if (r?.error) {
-      aviso(r.error, { error: true });
-      items.forEach(x => { x.disabled = false; });
-    }
-  });
 
   /* Parallax: el contenedor de scroll en el motor es #pantalla, no window */
   const pantalla = document.getElementById("pantalla");
@@ -254,13 +229,20 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   /* Ciencia del HUD: al tocarla, sus cartas instaladas. */
   contenedor.querySelector(".bw-edif-ciencia")?.addEventListener("click", abrirCiencia);
 
-  /* Box: clic en monstruo para mandarlo */
-  const boxEl = contenedor.querySelector(".bw-box");
-  boxEl?.addEventListener("click", (ev) => {
+  /* Box: el monstruo se manda desde su hueco; el hueco libre abre el criadero. */
+  boxPanel.addEventListener("click", (ev) => {
+    if (ev.target.closest(".bw-box-slot.vacio")) { abrirCriadero(); return; }
     const slot = ev.target.closest(".bw-box-slot[data-mon-id]");
     if (!slot) return;
     const mon = boxActual.find((m) => m?.id === slot.dataset.monId);
     if (mon) abrirEnvio(mon);
+  });
+
+  /* Criadero del mapa y huecos libres del box: abren la lista de monstruos. */
+  contenedor.querySelectorAll('[data-edif="criadero"]').forEach((el) => el.addEventListener("click", abrirCriadero));
+  contenedor.querySelectorAll(".fort-slot").forEach((el) => {
+    if (el.classList.contains("fort-slot-lleno")) return;
+    el.addEventListener("click", abrirCriadero);
   });
 
   /* Tabs de navegación inferior */
@@ -268,12 +250,15 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     tabMesa = id;
     navEl2.querySelectorAll(".bw-nav-tab").forEach(t => t.classList.toggle("activo", t.dataset.tab === id));
     boxPanel.classList.toggle("oculto", id !== "box");
-    accPanel.classList.toggle("oculto", id !== "acciones");
     manPanel.classList.toggle("oculto", id !== "manuscritos");
     manoWrap.classList.toggle("oculto", id !== "cartas");
   }
   navEl2.querySelectorAll(".bw-nav-tab").forEach(tab => {
-    tab.addEventListener("click", () => activarTab(tab.dataset.tab));
+    tab.addEventListener("click", () => {
+      /* Las acciones no son un panel: se eligen en su propio modal. */
+      if (tab.dataset.tab === "acciones") { abrirModalAcciones(); return; }
+      activarTab(tab.dataset.tab);
+    });
   });
   /* Se recuerda la pestaña abierta entre repintados (el servidor empuja estado
      a menudo y no queremos que el panel se cierre solo). */
@@ -899,8 +884,8 @@ function pintarMiBunker(j, priv, fase) {
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l};top:${pos.t}">${
-      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : ""
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i}" style="left:${pos.l};top:${pos.t}">${
+      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">✕</span>`
     }</div>`;
   }).join("");
 
@@ -908,8 +893,8 @@ function pintarMiBunker(j, priv, fase) {
      pastilla borgoña con un hueco por nivel, y debajo la imagen del edificio
      dentro de su caja. La imagen se pinta siempre: si el nivel es 0 se usa el
      arte del nivel 1, para poder colocar el edificio antes de construirlo. */
-  const edificioFortaleza = (izq, arriba, nivel, max, archivo, topPastilla = null) => `
-              <div class="fort-circulo fort-circulo-edif" style="left:${izq};top:${arriba}">
+  const edificioFortaleza = (izq, arriba, nivel, max, archivo, topPastilla = null, clave = null) => `
+              <div class="fort-circulo fort-circulo-edif"${clave ? ` data-edif="${clave}"` : ""} style="left:${izq};top:${arriba}">
                 <div class="fort-nivel"${topPastilla == null ? "" : ` style="top:${topPastilla}"`}>${dots(nivel, max)}</div>
                 <img src="${BASE_IMG}/edificios/${archivo}" class="fort-edif-img" alt="">
               </div>`;
@@ -940,7 +925,7 @@ function pintarMiBunker(j, priv, fase) {
                   <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt=""${quedan.decretos > 0 ? "" : ` style="visibility:hidden"`}>
                 </div>
               </div>
-              ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
+              ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`, null, "criadero")}
               ${edificioFortaleza("49.9%", "50.9%",  cien, 2, "laboratorio.png", "0")}
               ${edificioFortaleza("24.2%", "42.47%", arm,  3, `armeria${arm > 0 ? arm : 1}.png`)}
               ${slotsHtml}
@@ -1002,8 +987,8 @@ function pintarHud(j, priv) {
         </div>`;
   /* Un hueco de la fila de abajo: icono, nombre y, o los puntos de nivel, o
      un valor de texto (los huecos libres del box). */
-  const edificio = (icono, nombre, nivel, max = 4, valor = null) => `
-        <div class="bw-edif" title="${nivel == null ? nombre : `${nombre} a nivel ${nivel}`}">
+  const edificio = (icono, nombre, nivel, max = 4, valor = null, clave = null) => `
+        <div class="bw-edif"${clave ? ` data-edif="${clave}"` : ""} title="${nivel == null ? nombre : `${nombre} a nivel ${nivel}`}">
           ${icono ? `<img src="${ICONO(icono)}" alt="">` : ""}
           <span class="bw-edif-nombre">${nombre}</span>
           ${valor ?? `<span class="bw-edif-puntos">${puntos(nivel, max)}</span>`}
@@ -1042,7 +1027,7 @@ function pintarHud(j, priv) {
               <span class="bw-edif-nombre">Ciencia</span>
               <span class="bw-edif-puntos">${puntos(ciencia, SLOTS_CIENCIA)}</span>
             </button>
-            ${edificio(null, "Criadero", criadero, 4)}
+            ${edificio(null, "Criadero", criadero, 4, null, "criadero")}
           </div>
         </div>
       </div>
@@ -1060,7 +1045,7 @@ function pintarBox(priv) {
       const m = box[i];
       return m
         ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" title="Monstruo ${m.nivel} (box ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
-        : `<div class="bw-box-slot vacio" title="Box ${b + 1}, hueco ${k + 1} libre">${k + 1}</div>`;
+        : `<div class="bw-box-slot vacio" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">✕</span></div>`;
     }).join("");
     const caminos = b === 0 ? "1 y 2" : "2 y 3";
     return `
@@ -1073,12 +1058,13 @@ function pintarBox(priv) {
   return `
     <div class="bw-panel-label">📦 Box <span class="bw-panel-sub">${box.filter(Boolean).length} / 6</span></div>
     <div class="bw-cajas">${caja(0)}${caja(1)}</div>
-    <div class="bw-slot-sub" style="margin-top:6px">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja.</div>
+    <div class="bw-slot-sub" style="margin-top:6px">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja. Un hueco con aspa abre el criadero.</div>
   `;
 }
 
-/* ── Panel de acciones ─────────────────────────────────────────────────
-   Todas las acciones legales de ahora mismo, una por botón. */
+/* ── Acciones y criadero ───────────────────────────────────────────────
+   Las jugadas legales se eligen en un modal (fondo gris, botones uno debajo
+   de otro) y se cierra al hacer una. El criadero usa el mismo formato. */
 
 /* Espejo de nivelMaxLab del motor, solo para el aviso del panel. */
 const NIVEL_MAX_CRIADERO_UI = 5;
@@ -1101,28 +1087,135 @@ function notaCriadero() {
   return `🩸 Criadero ${lab} · crea hasta nivel ${max} · 1 decreto por monstruo${costes ? ` · ${costes}` : ""}`;
 }
 
-function pintarAcciones() {
-  /* Lanzar y no lanzar se eligen en su propio modal: aquí solo estorban. */
+function motivoSinAcciones() {
+  return !tocaMesa
+    ? "Esperando tu turno."
+    : faseMesa === "descartar"
+      ? "Ahora toca descartar: elige una carta de la mano."
+      : "No te queda ninguna acción este turno.";
+}
+
+function cerrarModalAcciones() {
+  document.getElementById("bw-modal-acciones")?.remove();
+}
+
+/* Modal de acciones: el mismo fondo gris de las cartas y una fila por jugada.
+   Al ejecutar una, el modal se cierra (la siguiente se abre otra vez). */
+function abrirModalAcciones() {
+  cerrarModalAcciones();
   const lista = (accionesMesa ?? []).filter(a => a.tipo !== "lanzar" && a.tipo !== "no_lanzar");
-  let cuerpo;
-  if (lista.length) {
-    cuerpo = `<div class="bw-acciones">${lista.map((a) =>
-      `<button type="button" class="bw-accion-item" data-i="${accionesMesa.indexOf(a)}">${esc(a.etiqueta ?? a.texto ?? "Acción")}</button>`
-    ).join("")}</div>`;
-  } else {
-    const nota = !tocaMesa
-      ? "Esperando tu turno."
-      : faseMesa === "descartar"
-        ? "Ahora toca descartar: elige una carta de la mano."
-        : "No te queda ninguna acción este turno.";
-    cuerpo = `<div class="bw-slot-sub">${nota}</div>`;
+  const cuerpo = lista.length
+    ? `<div class="bw-envio-opciones">${lista.map(a =>
+        `<button type="button" class="bw-envio-op bw-acc-op" data-i="${accionesMesa.indexOf(a)}">${esc(a.etiqueta ?? a.texto ?? "Acción")}</button>`
+      ).join("")}</div>`
+    : `<p class="bw-modal-nota">${esc(motivoSinAcciones())}</p>`;
+
+  const fondo = document.createElement("div");
+  fondo.id = "bw-modal-acciones";
+  fondo.className = "bw-modal-fondo";
+  fondo.innerHTML = `
+    <div class="bw-envio" role="dialog" aria-modal="true" aria-label="Acciones">
+      <div class="bw-envio-titulo">Acciones · ${lista.length}</div>
+      ${cuerpo}
+      <p class="bw-slot-sub" style="margin:0">${esc(notaCriadero())}</p>
+      <button type="button" class="bw-envio-cerrar bw-acc-cerrar">Cerrar</button>
+    </div>`;
+  document.body.appendChild(fondo);
+
+  const cerrar = () => fondo.remove();
+  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
+  fondo.querySelector(".bw-acc-cerrar").addEventListener("click", cerrar);
+
+  for (const b of fondo.querySelectorAll(".bw-acc-op")) {
+    b.addEventListener("click", async () => {
+      const accion = accionesMesa[Number(b.dataset.i)];
+      if (!accion || !enviarAccion) return;
+      b.disabled = true;
+      const r = await enviarAccion(accion);
+      if (r?.error) {
+        aviso(r.error, { error: true });
+        b.disabled = false;
+        return;
+      }
+      cerrar();
+    });
   }
-  return `
-    <div class="bw-panel-label">▶ Acciones <span class="bw-panel-sub">${lista.length}</span></div>
-    ${cuerpo}
-    <div class="bw-slot-sub" style="margin-top:6px">${esc(notaCriadero())}</div>
-    <div class="bw-slot-sub" style="margin-top:6px">Toca una acción para hacerla. Las cartas se juegan desde la mano.</div>
-  `;
+}
+
+/* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
+const BESTIARIO_UI = [
+  { nivel: 1, nombre: "Rastreador",     puntos: 1, coste: 0, texto: "Ataca con 1 de fuerza" },
+  { nivel: 2, nombre: "Carroñero",      puntos: 2, coste: 1, texto: "Ataca con 2 de fuerza" },
+  { nivel: 3, nombre: "Yeti",           puntos: 3, coste: 2, texto: "Ataca con 3 de fuerza" },
+  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "Ataca con 5 de fuerza" },
+];
+
+/* Modal del criadero: lista los monstruos que el criadero ya permite criar y
+   marca los que no llegan con las monedas de ahora. Al criar, el motor pone
+   el monstruo en el primer hueco libre (box 1 y luego box 2). */
+function abrirCriadero() {
+  document.getElementById("bw-modal-criadero")?.remove();
+  if (!tocaMesa || faseMesa !== "acciones") {
+    aviso("Solo se cría en tu fase de decretos.", { error: true });
+    return;
+  }
+  if (accionesRestantesMesa <= 0) {
+    aviso("Ya no te quedan decretos este turno.", { error: true });
+    return;
+  }
+  if (!(boxActual ?? []).some((m) => !m)) {
+    aviso("El box está lleno: manda un monstruo o gasta uno antes de criar.", { error: true });
+    return;
+  }
+
+  const max = nivelMaxCriadero(criaderoMesa || 1);
+  const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
+  const monedasDe = (m) => Math.max(0, m.coste - barato);
+  const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
+
+  const filas = lista.map((m) => {
+    const monedas = monedasDe(m);
+    const alcanza = monedas <= energiaMesa;
+    return `<button type="button" class="bw-criar" data-nivel="${m.nivel}"${alcanza ? "" : " disabled"}>
+        <span class="bw-criar-img"><img src="${BASE_IMG}/monstruos/m1-f.png" alt=""></span>
+        <span>
+          <span class="bw-criar-nombre">${esc(m.nombre)} · nv ${m.nivel}</span>
+          <span class="bw-criar-sub">${esc(m.texto)} · ${monedas} ${monedas === 1 ? "moneda" : "monedas"}${alcanza ? "" : " · no te llega"}</span>
+        </span>
+        <span class="bw-criar-coste">1 decreto</span>
+      </button>`;
+  }).join("");
+
+  const fondo = document.createElement("div");
+  fondo.id = "bw-modal-criadero";
+  fondo.className = "bw-modal-fondo";
+  fondo.innerHTML = `
+    <div class="bw-envio" role="dialog" aria-modal="true" aria-label="Criadero">
+      <div class="bw-envio-titulo">Criadero ${criaderoMesa || 1} · crea hasta nivel ${max}</div>
+      <div class="bw-criar-lista">${filas}</div>
+      <p class="bw-slot-sub" style="margin:0">Tienes ${energiaMesa} monedas y ${accionesRestantesMesa} decretos. El monstruo sale en el primer hueco libre.</p>
+      <button type="button" class="bw-envio-cerrar bw-criar-cerrar">Cerrar</button>
+    </div>`;
+  document.body.appendChild(fondo);
+
+  const cerrar = () => fondo.remove();
+  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
+  fondo.querySelector(".bw-criar-cerrar").addEventListener("click", cerrar);
+
+  for (const b of fondo.querySelectorAll(".bw-criar")) {
+    b.addEventListener("click", async () => {
+      if (!enviarAccion) return;
+      b.disabled = true;
+      /* Sin boxIdx: el motor elige el primer hueco libre, de box 1 a box 2. */
+      const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(b.dataset.nivel) });
+      if (r?.error) {
+        aviso(r.error, { error: true });
+        b.disabled = false;
+        return;
+      }
+      cerrar();
+    });
+  }
 }
 
 /* ── Manuscritos: la referencia de reglas del juego ─────────────────────── */
@@ -1721,6 +1814,20 @@ function css() {
     .bw-box-slot.lleno { border-style:solid; border-color:#4a90d9;
                          background:rgba(74,144,217,.22); color:#8dc0f0; cursor:pointer; }
     .bw-box-slot.lleno:hover { background:rgba(74,144,217,.38); }
+    /* Hueco libre: punteado de 1 px, translúcido y con un aspa blanca en el
+       centro. Se toca para criar. */
+    .bw-box-slot.vacio {
+      border:1px dashed rgba(244,236,221,.42);
+      background:rgba(0,0,0,.14);
+      cursor:pointer;
+    }
+    .bw-box-slot.vacio:hover { background:rgba(244,236,221,.12); }
+    .bw-box-x {
+      width:17px; height:17px; border-radius:50%;
+      display:grid; place-items:center;
+      background:#fff; color:#12100e;
+      font:800 11px/1 ui-sans-serif, system-ui, sans-serif;
+    }
 
     /* Mano de cartas */
     .bw-mano-wrap {
@@ -2068,6 +2175,20 @@ function css() {
     .bw-envio-op:disabled { opacity:.5; cursor:default; }
     .bw-envio-cerrar { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:800;
                        cursor:pointer; border:none; background:#12100e; color:#f4ecdd; }
+    /* Criadero: una fila por monstruo, con su imagen, lo que ataca y el coste */
+    .bw-criar-lista { display:flex; flex-direction:column; gap:8px; }
+    .bw-criar {
+      display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
+      padding:8px 10px; border-radius:9px; text-align:left; cursor:pointer;
+      border:1px solid rgba(18,16,14,.25); background:#fff; color:#12100e;
+    }
+    .bw-criar:active { background:#d6dee5; }
+    .bw-criar:disabled { opacity:.45; cursor:not-allowed; }
+    .bw-criar-img { width:34px; height:48px; display:flex; align-items:flex-end; justify-content:center; }
+    .bw-criar-img img { max-width:100%; max-height:100%; }
+    .bw-criar-nombre { display:block; font:800 14px/1.15 ui-sans-serif, system-ui, sans-serif; }
+    .bw-criar-sub { display:block; font:400 11px/1.3 ui-sans-serif, system-ui, sans-serif; color:#5b5347; }
+    .bw-criar-coste { font:800 12px/1.2 ui-monospace, SFMono-Regular, monospace; text-align:right; color:#7a1010; }
   </style>`;
 }
 
@@ -2655,10 +2776,23 @@ function cssAdicional() {
       transform:translate(-50%,-50%);
       width:calc(7.7 * var(--u)); height:calc(7.7 * var(--u));
       border-radius:5px;
-      background:rgba(0,0,0,.7);
-      border:2px dashed rgba(255,255,255,.85);
-      box-shadow:0 0 10px rgba(0,0,0,.8), inset 0 0 6px rgba(0,0,0,.5);
+      /* Hueco libre: punteado fino y translúcido, con aspa blanca en el centro.
+         Se toca para criar desde el criadero. */
+      background:rgba(0,0,0,.28);
+      border:1px dashed rgba(255,255,255,.5);
+      box-shadow:0 0 10px rgba(0,0,0,.5), inset 0 0 6px rgba(0,0,0,.3);
+      cursor:pointer;
     }
+    .fort-slot-x {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:max(11px, calc(3.1 * var(--u)));
+      height:max(11px, calc(3.1 * var(--u)));
+      border-radius:50%;
+      background:#fff; color:#12100e;
+      display:grid; place-items:center;
+      font:800 max(8px, calc(2 * var(--u)))/1 ui-sans-serif, system-ui, sans-serif;
+    }
+    [data-edif="criadero"] { cursor:pointer; }
     .fort-slot.fort-slot-lleno {
       border-style:solid; border-color:#4a90d9;
       background:rgba(74,144,217,.35); color:#8dc0f0;
