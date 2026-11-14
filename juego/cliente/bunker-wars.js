@@ -896,7 +896,11 @@ function pintarMiBunker(j, priv, fase) {
   const slotsHtml = slotPos.map((pos, i) => {
     const mon = box[i];
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l};top:${pos.t}">${mon ? `M${mon.nivel ?? "?"}` : ""}</div>`;
+    /* Un monstruo en el box se pinta como en el tablero: imagen de frente
+       (defendiendo) y la pastilla con su fuerza a la derecha. */
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : ""}" style="left:${pos.l};top:${pos.t}">${
+      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : ""
+    }</div>`;
   }).join("");
 
   /* Los tres edificios de la fortaleza, con el mismo modelo: arriba la
@@ -926,13 +930,13 @@ function pintarMiBunker(j, priv, fase) {
               <div class="fort-plat energia" style="left:20.5%;top:25.5%">
                 <div class="fort-cifra">${quedan.monedas}</div>
                 <div class="fort-pila-caja coins">
-                  ${quedan.monedas > 0 ? `<img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt="">` : ""}
+                  <img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt=""${quedan.monedas > 0 ? "" : ` style="visibility:hidden"`}>
                 </div>
               </div>
               <div class="fort-plat vida" style="left:80.5%;top:25.4%">
                 <div class="fort-cifra">${quedan.decretos}</div>
                 <div class="fort-pila-caja decrees">
-                  ${quedan.decretos > 0 ? `<img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt="">` : ""}
+                  <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt=""${quedan.decretos > 0 ? "" : ` style="visibility:hidden"`}>
                 </div>
               </div>
               ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`)}
@@ -1250,10 +1254,11 @@ const CARD_BG    = `${BASE_IMG}/card.png`;
 /* Las pilas van 1:1 con la cifra (7 imágenes como tope). Antes las monedas se
    repartían sobre el máximo de producción (14), así que 4 monedas enseñaban la
    pila de 2: al pasar a «lo que queda» el dibujo tiene que ser el número. */
-/* Montones de 0 a 7: con 0 no hay imagen (antes el max(1) pintaba el montón
-   de uno aunque no tuvieras nada). */
-function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(0, n))}.png`; }
-function pilaDecrees(n) { return `${ASSETS_IMG}/decrees_${Math.min(7, Math.max(0, n))}.png`; }
+/* Montones de 1 a 7. Con 0 se sigue pidiendo la imagen del montón de uno,
+   pero oculta (visibility:hidden): así la caja conserva su alto y el número
+   no se cae hacia abajo. */
+function pilaCoins(n)   { return `${ASSETS_IMG}/coins_${Math.min(7, Math.max(1, n))}.png`; }
+function pilaDecrees(n) { return `${ASSETS_IMG}/decrees_${Math.min(7, Math.max(1, n))}.png`; }
 const SLOTS_CIENCIA = 2;
 
 function defsCarta(c) {
@@ -2633,8 +2638,21 @@ function cssAdicional() {
     .fort-slot.fort-slot-lleno {
       border-style:solid; border-color:#4a90d9;
       background:rgba(74,144,217,.35); color:#8dc0f0;
+    }
+    /* El monstruo del box, como en el tablero: lámina de frente y pastilla de
+       fuerza a su derecha. */
+    .fort-slot-img {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:calc(5.6 * var(--u)); height:auto; pointer-events:none;
+      filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
+    }
+    .fort-slot-nv {
+      position:absolute; top:50%; right:calc(-1.1 * var(--u));
+      transform:translateY(-50%);
+      width:calc(3.4 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(23,148,148,.9); color:#fff;
       display:flex; align-items:center; justify-content:center;
-      font:800 calc(2.05 * var(--u))/1 ui-monospace,monospace;
+      font:700 calc(1.8 * var(--u))/1 ui-monospace,monospace;
     }
 
     /* nubes */
@@ -2788,6 +2806,8 @@ function cssAdicional() {
       background:radial-gradient(closest-side, rgba(0,0,0,.5), transparent);
     }
     .ficha:active { filter:brightness(1.15) }
+    /* Atacante en rojo; aliado que defiende tu búnker en turquesa. */
+    .ficha.mia .ficha-nv { background:rgba(23,148,148,.85); }
     /* Mismo estilo que el número de calle: mono, blanco y sin borde.
        Centrado vertical en la ficha y desplazado a la derecha unos 30 px
        (8,5 * var(--u) a 390 px de ancho de mundo). */
