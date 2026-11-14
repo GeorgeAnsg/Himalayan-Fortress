@@ -83,7 +83,7 @@ jugador = {
     { id: 3, posiciones: [null,null,null,null], torreta: null },
   ],
 
-  // 2 cajas de BOX, 3 huecos cada una (6 en total)
+  // 2 cajas de BOX, 2 huecos cada una (4 en total)
   // caja 1 → caminos 1 y 2 · caja 2 → caminos 2 y 3
   box: [null, null, null,  null, null, null],
   // cada slot: null | { id, nivel }
@@ -162,7 +162,7 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
 
 ## Movimiento de monstruos
 
-Desde BOX (2 cajas de 3 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos 2 y 3):
+Desde BOX (2 cajas de 2 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos 2 y 3):
 - **BOX → lanzadera:** 1 decreto, sin monedas. Cualquier nivel, y solo a la
   lanzadera de su propio box: del box 1 a la lanzadera 1, del box 2 a la 2.
 - **BOX → casilla 4 del camino:** 1 decreto + 1 moneda. Sale a la casilla 4

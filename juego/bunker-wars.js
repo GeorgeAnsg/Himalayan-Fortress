@@ -234,10 +234,10 @@ function costeMonstruoJ(nivel, j) {
   return c;
 }
 
-/* El box son dos cajas de 3 huecos: la caja 1 toca los caminos 1 y 2; la
-   caja 2, los caminos 2 y 3. Desde una caja solo se puede soltar en esos
-   caminos, y solo en su casilla de inicio. */
-const BOX_TAM = 3;
+/* El box son dos cajas de 2 huecos (4 en total): la caja 1 toca los caminos 1
+   y 2; la caja 2, los caminos 2 y 3. Desde una caja solo se puede soltar en
+   esos caminos, y solo en su casilla de inicio. */
+const BOX_TAM = 2;
 const caminosDeBox = (b) => (b === 0 ? [1, 2] : [2, 3]);
 const boxDeIndice = (i) => (i < BOX_TAM ? 0 : 1);
 /* Casilla a la que sale un monstruo del box: la 4 (posición 3), la que está
@@ -334,6 +334,19 @@ function migrarNombres(e) {
    quien manda en ese tablero, y los atacantes lanzados por un jugador guardan
    quién los mandó. Los de carta de Destino no llevan dueño: son del juego. Un
    monstruo es defensor en su tablero y atacante en cuanto sale a otro. */
+/* Dos huecos por box, cuatro en total. Las partidas guardadas con el box de
+   tres huecos se recortan aquí: los monstruos se compactan al principio y los
+   que ya no caben se pierden (solo pasa en partidas viejas). */
+function normalizarBox(e) {
+  const total = BOX_TAM * 2;
+  for (const j of Object.values(e.jugadores ?? {})) {
+    const box = j.box ?? [];
+    if (box.length === total) continue;
+    const monos = box.filter(Boolean).slice(0, total);
+    j.box = Array.from({ length: total }, (_, i) => monos[i] ?? null);
+  }
+}
+
 function normalizarDuenos(e) {
   for (const [id, j] of Object.entries(e.jugadores ?? {})) {
     for (const s of j.senderos ?? []) {
@@ -348,6 +361,7 @@ function sincronizarTorres(e) {
   migrarNombres(e);
   sincronizarTextosCartas(e);
   normalizarDuenos(e);
+  normalizarBox(e);
   for (const j of Object.values(e.jugadores ?? {})) {
     normalizarTorres(j);
     normalizarLanzaderas(j);

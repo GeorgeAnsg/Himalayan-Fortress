@@ -885,7 +885,7 @@ function pintarMiBunker(j, priv, fase) {
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
     return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i}" style="left:${pos.l};top:${pos.t}">${
-      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">✕</span>`
+      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
 
@@ -1040,12 +1040,12 @@ function pintarBox(priv) {
   const box = priv?.box ?? [];
 
   const caja = (b) => {
-    const slots = Array.from({ length: 3 }, (_, k) => {
-      const i = b * 3 + k;
+    const slots = Array.from({ length: 2 }, (_, k) => {
+      const i = b * 2 + k;
       const m = box[i];
       return m
         ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" title="Monstruo ${m.nivel} (box ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
-        : `<div class="bw-box-slot vacio" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">✕</span></div>`;
+        : `<div class="bw-box-slot vacio" title="Box ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     const caminos = b === 0 ? "1 y 2" : "2 y 3";
     return `
@@ -1056,7 +1056,7 @@ function pintarBox(priv) {
   };
 
   return `
-    <div class="bw-panel-label">📦 Box <span class="bw-panel-sub">${box.filter(Boolean).length} / 6</span></div>
+    <div class="bw-panel-label">📦 Box <span class="bw-panel-sub">${box.filter(Boolean).length} / 4</span></div>
     <div class="bw-cajas">${caja(0)}${caja(1)}</div>
     <div class="bw-slot-sub" style="margin-top:6px">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja. Un hueco con aspa abre el criadero.</div>
   `;
@@ -1807,7 +1807,7 @@ function css() {
     .bw-cajas { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
     .bw-caja-label { font-size:10px; font-weight:800; letter-spacing:.06em;
                      text-transform:uppercase; color:#b7a992; margin-bottom:5px; }
-    .bw-box { display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; }
+    .bw-box { display:grid; grid-template-columns:repeat(2, 1fr); gap:5px; }
     .bw-box-slot { height:34px; border-radius:8px; display:flex; align-items:center;
                    justify-content:center; font-size:11px; font-weight:800;
                    border:1px dashed rgba(244,236,221,.16); color:#8b7e6b; }
@@ -1826,7 +1826,7 @@ function css() {
       width:17px; height:17px; border-radius:50%;
       display:grid; place-items:center;
       background:#fff; color:#12100e;
-      font:800 11px/1 ui-sans-serif, system-ui, sans-serif;
+      font:800 15px/1 ui-sans-serif, system-ui, sans-serif;
     }
 
     /* Mano de cartas */
@@ -2165,7 +2165,10 @@ function css() {
 
     .bw-envio { width:min(340px,92vw); background:#f4ecdd; color:#12100e;
                 border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:12px;
-                box-shadow:0 18px 50px rgba(0,0,0,.45); }
+                box-shadow:0 18px 50px rgba(0,0,0,.45);
+                /* Con muchas jugadas (16 en un turno) la lista no cabe: el
+                   modal scrollea por dentro y los botones no se salen. */
+                max-height:calc(100vh - 32px); overflow-y:auto; }
     .bw-envio-titulo { font-size:17px; font-weight:800; text-align:center; }
     .bw-envio-opciones { display:flex; flex-direction:column; gap:7px; }
     .bw-envio-op { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:700;
@@ -2790,12 +2793,13 @@ function cssAdicional() {
       border-radius:50%;
       background:#fff; color:#12100e;
       display:grid; place-items:center;
-      font:800 max(8px, calc(2 * var(--u)))/1 ui-sans-serif, system-ui, sans-serif;
+      font:800 max(13px, calc(3.2 * var(--u)))/1 ui-sans-serif, system-ui, sans-serif;
     }
     [data-edif="criadero"] { cursor:pointer; }
     .fort-slot.fort-slot-lleno {
-      border-style:solid; border-color:#4a90d9;
-      background:rgba(74,144,217,.35); color:#8dc0f0;
+      /* Con monstruo no hay marco: solo la lámina y su pastilla */
+      border:0; background:transparent; box-shadow:none;
+      color:#8dc0f0;
     }
     /* El monstruo del box, como en el tablero: lámina de frente y pastilla de
        fuerza a su derecha. */
@@ -2805,7 +2809,8 @@ function cssAdicional() {
       filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
     }
     .fort-slot-nv {
-      position:absolute; top:50%; right:calc(-1.1 * var(--u));
+      /* 10 px más a la derecha (2.6 % del ancho del mundo ≈ 10 px en móvil) */
+      position:absolute; top:50%; right:calc(-3.7 * var(--u));
       transform:translateY(-50%);
       width:calc(3.4 * var(--u)); aspect-ratio:1; border-radius:50%;
       background:rgba(23,148,148,.9); color:#fff;
@@ -2919,6 +2924,10 @@ function cssAdicional() {
       mask-image:linear-gradient(0deg, transparent 0%, rgba(0,0,0,.35) 34%, #000 62%);
     }
     .tablero {
+      /* Capa de fichas sobre la fortaleza: no debe tragarse los toques de los
+         huecos, edificios ni plataformas de debajo. Solo sus fichas son
+         interactivas. */
+      pointer-events:none;
       position:absolute; left:0; right:0; bottom:var(--aire-escalera);
       /* Mismo ancla que los caminos: el alto de la escalera, salga el ancho que
          salga. El bottom descuenta el aire de debajo de la escalera para que
@@ -2926,6 +2935,7 @@ function cssAdicional() {
       top:var(--tope-castillo);
       height:auto; z-index:2;
     }
+    .tablero > * { pointer-events:auto; }
     .caminos .lecho { fill:none; stroke:transparent; stroke-width:calc(14 * var(--u)); vector-effect:non-scaling-stroke }
 
     .bw-layer { position:absolute; inset:0; pointer-events:none }
