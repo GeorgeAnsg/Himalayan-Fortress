@@ -2785,6 +2785,8 @@ function cssAdicional() {
       background:radial-gradient(closest-side, rgba(0,0,0,.5), transparent);
     }
     .ficha:active { filter:brightness(1.15) }
+    /* TEMPORAL: marco la caja de la ficha para ver dónde cae de verdad. */
+    .ficha { outline:1px solid rgba(0,255,102,.95); background:rgba(0,255,102,.22); }
     .ficha-nv {
       position:absolute; left:50%; bottom:calc(14 * var(--u));
       transform:translateX(-50%);
