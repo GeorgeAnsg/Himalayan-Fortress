@@ -220,7 +220,7 @@ a { color: var(--plata); }
   margin-right: 6px;
 }
 .barra-rec { display: inline-flex; align-items: center; gap: 3px; }
-.barra-rec img { width: 17px; height: 17px; object-fit: contain; }
+.barra-rec img { width: 19px; height: 19px; object-fit: contain; }
 .barra-rec b {
   /* Cifras de ancho fijo: al bajar de 10 a 9 no baila el hueco. */
   font: 700 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
