@@ -33,7 +33,7 @@ Cualquier duda sobre mecánica se resuelve aquí primero.
 ```js
 estado = {
   luna: 1,                    // ronda actual (1–25)
-  fase: "avance",             // avance | lanzar | carta | energia | acciones | descartar | fin
+  fase: "avance",             // avance | lanzar | carta | energia (monedas) | acciones (decretos) | descartar | fin
   orden: ["id1", "id2"],      // orden de turno
   turnoIdx: 0,                // índice en orden del jugador activo
   mazoDestino: [],            // mazo compartido barajado (objetos carta)
@@ -63,8 +63,8 @@ jugador = {
     ciencia: [],              // cartas de ciencia permanentes (sin duplicados)
   },
 
-  energia: 0,                 // energía disponible este turno
-  accionesRestantes: 0,
+  energia: 0,                 // monedas disponibles este turno (el campo sigue llamándose energia)
+  accionesRestantes: 0,       // decretos disponibles (el campo sigue llamándose accionesRestantes)
 
   // Convención de nombres en la interfaz y en el habla:
   //   caminos 1, 2, 3 · lanzaderas 1 y 2 · casillas del camino 1–4
@@ -104,11 +104,11 @@ jugador = {
 
 | Nivel | Puntos/daño | Coste crear (laboratorio) | Fichas en juego |
 |-------|-------------|-------------------|-----------------|
-| 1     | 1           | 0 energía         | 20              |
-| 2     | 2           | 1 energía         | 16              |
-| 3     | 3           | 2 energía         | 20              |
-| 5     | 5           | 3 energía         | 10              |
-| 7     | 7           | 3 energía         | 4               |
+| 1     | 1           | 0 monedas         | 20              |
+| 2     | 2           | 1 moneda          | 16              |
+| 3     | 3           | 2 monedas         | 20              |
+| 5     | 5           | 3 monedas         | 10              |
+| 7     | 7           | 3 monedas         | 4               |
 
 Nivel máximo que se puede crear = nivel de laboratorio:
 Lab 1 → hasta nivel 1 · Lab 2 → hasta nivel 2 · Lab 3 → hasta nivel 3 · Lab 4 → hasta nivel 5
@@ -121,9 +121,9 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
 
 | Nivel | Coste construir | Daño máximo | Coste por punto de daño |
 |-------|-----------------|-------------|-------------------------|
-| 1     | 1 energía       | 1           | 1 energía/punto         |
-| 2     | 2 energía       | 2           | 1 energía/punto         |
-| 3     | 3 energía       | 3           | 1 energía/punto         |
+| 1     | 1 moneda        | 1           | 1 moneda/punto          |
+| 2     | 2 monedas       | 2           | 1 moneda/punto          |
+| 3     | 3 monedas       | 3           | 1 moneda/punto          |
 
 - **Las torres se construyen en las posiciones de torre del BÚNKER** (3 posiciones,
   una por calle: la posición N es del camino N). No van sobre el sendero.
@@ -131,8 +131,8 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
   pero hace **1 menos de daño** en las calles que no son la suya: nivel 3 → 3 de daño
   en su calle y 2 en las demás (nivel 1 → 0 en las demás).
 - Daño máximo = nivel de la torre; puede disparar menos.
-- **Coste de ataque = daño ocasionado** (1 energía por punto). Ej.: torre nivel 3
-  haciendo 2 de daño paga 2 energía.
+- **Coste de ataque = daño ocasionado** (1 moneda por punto). Ej.: torre nivel 3
+  haciendo 2 de daño paga 2 monedas.
 - Coste de evolución = diferencia entre el coste del nivel nuevo y el actual.
 - **Inhabilitada** mientras la casilla 4 (posición 3) de **su** camino esté ocupada
   por un monstruo atacante; se reactiva sola al liberarse la casilla.
@@ -163,9 +163,9 @@ El nivel 7 nunca se crea en el laboratorio: solo llega por el mazo de Destino o 
 ## Movimiento de monstruos
 
 Desde BOX (2 cajas de 3 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos 2 y 3):
-- **BOX → lanzadera:** 1 acción, sin energía. Cualquier nivel, y solo a la
+- **BOX → lanzadera:** 1 decreto, sin monedas. Cualquier nivel, y solo a la
   lanzadera de su propio box: del box 1 a la lanzadera 1, del box 2 a la 2.
-- **BOX → casilla 4 del camino:** 1 acción + 1 energía. Sale a la casilla 4
+- **BOX → casilla 4 del camino:** 1 decreto + 1 moneda. Sale a la casilla 4
   (posición 3), la que toca al búnker, de cara a los atacantes, y solo a los dos
   caminos adyacentes a la caja del monstruo (box 1 → C1-4 o C2-4 · box 2 → C2-4 o
   C3-4); nunca a mitad de camino. Nivel máximo 5 (nivel 7 no puede).
@@ -175,10 +175,10 @@ Desde BOX (2 cajas de 3 huecos: la 1 toca los caminos 1 y 2 · la 2, los caminos
 
 En sendero propio:
 - Avanzan 1 posición por turno en la fase LANZAR, de la base al inicio (4→3→2→1),
-  sin coste de acción ni energía. Si el hueco de delante tiene un atacante, atacan:
+  sin gastar decreto ni monedas. Si el hueco de delante tiene un atacante, atacan:
   se resuelve por categorías como en la acción avanzar monstruo (el que se mueve
   ataca y gana los empates). Si tiene otro monstruo propio, esperan sin atacarse.
-- **Acción avanzar monstruo:** 1 acción + 1 energía. Mueve un monstruo las casillas
+- **Avanzar monstruo:** 1 decreto + 1 moneda. Mueve un monstruo las casillas
   que quieras hacia la casilla 1 (hacia los atacantes). Si el destino tiene un
   atacante, la acción es un ataque y se resuelve por categorías.
 - Si llega a posición 0 → pasa a lanzadera adyacente, bloqueado hasta el siguiente turno.
@@ -215,10 +215,10 @@ Desde lanzadera (hay dos, una por box):
 
 | Tipo         | Nivel | Efecto                                        | Coste |
 |--------------|-------|-----------------------------------------------|-------|
-| recursos     | 1     | +1 energía/turno                              | 1     |
-| recursos     | 2     | +2 energía y +1 acción/turno                  | 2     |
-| recursos     | 3     | +3 energía y +1 acción/turno                  | 3     |
-| recursos     | 4     | +4 energía y +2 acciones/turno                | 4     |
+| recursos     | 1     | +1 moneda/turno                               | 1     |
+| recursos     | 2     | +2 monedas y +1 decreto/turno                 | 2     |
+| recursos     | 3     | +3 monedas y +1 decreto/turno                 | 3     |
+| recursos     | 4     | +4 monedas y +2 decretos/turno                | 4     |
 | armeria      | 2     | torres hasta nivel 2                          | 2     |
 | armeria      | 3     | torres hasta nivel 3                          | 2     |
 | laboratorio  | 2     | monstruos hasta nivel 2                       | 2     |
@@ -248,8 +248,8 @@ Desde lanzadera (hay dos, una por box):
 
 | Efecto                                                                 | Coste |
 |------------------------------------------------------------------------|-------|
-| Disparar torretas cuesta 1 energía menos                               | 8     |
-| Crear monstruos cuesta 1 energía menos del valor del monstruo          | 8     |
+| Disparar torretas cuesta 1 moneda menos                                | 8     |
+| Crear monstruos cuesta 1 moneda menos del valor del monstruo           | 8     |
 | Tus torres hacen su daño de nivel en cualquier sendero                 | 8     |
 
 Notas de ciencia:
@@ -334,14 +334,14 @@ La distribución exacta de repeticiones en las 60 cartas se decidirá en el bala
 | T1       | ~17      |
 | T2       | ~15      |
 | T3       | ~10      |
-| Energía  | 40       |
+| Monedas  | 40       |
 
 ---
 
 ## Secuencia de turno (por jugador, en orden)
 
 Las fases 1, 3 y 4 no piden decisión: el motor las resuelve seguidas y el turno
-aterriza en ACCIONES. La fase 2 se resuelve sola salvo que haya un monstruo en
+aterriza en DECRETOS. La fase 2 se resuelve sola salvo que haya un monstruo en
 la lanzadera y algún camino rival libre: ahí el jugador elige a qué camino del
 rival se lanza (o "No lanzar").
 
@@ -366,24 +366,24 @@ rival se lanza (o "No lanzar").
    — Resolver su efecto (si antes de esta fase la luna cambió a roja,
      nivelEnemigo ya es 2 y la carta entra con su nivel real).
 
-4. ENERGÍA
-   — Recibir energía base (3) + suma de bonus de cartas de recursos en búnker.
-   — Restaurar acciones (2 base + bonus de recursos).
+4. MONEDAS
+   — Recibir monedas base (3) + suma de bonus de cartas de recursos en búnker.
+   — Restaurar decretos (2 base + bonus de recursos).
 
-5. ACCIONES
-   El jugador gasta acciones (y energía) en cualquier orden:
+5. DECRETOS
+   El jugador gasta decretos (y monedas) en cualquier orden:
    a) mejorar_bunker: jugar carta de mano en la zona correspondiente del búnker.
    b) crear_monstruo: colocar ficha en el BOX que elija el jugador (1 o 2) si tiene
-      hueco libre, pagando energía según nivel. Una acción por box disponible.
+      hueco libre: 1 decreto + las monedas del nivel (0, 1, 2 o 3). Un decreto por box.
    c) construir_torreta: torre nivel 1 en una posición de torre del búnker
-      (1 acción, 1 energía).
+      (1 decreto, 1 moneda).
    d) evolucionar_torreta: subir nivel de una torre (pagar diferencia de coste).
-   e) avanzar_monstruo: 1 acción + 1 energía, mueve el monstruo las casillas
+   e) avanzar_monstruo: 1 decreto + 1 moneda, mueve el monstruo las casillas
       deseadas (ataca si el destino es un atacante).
    f) atacar_monstruo: disparar con las torres del búnker a un atacante de
-      cualquier camino (pagar el daño en energía).
-   g) mover_a_lanzadera: BOX → lanzadera (1 acción, sin energía).
-   h) mover_a_sendero: BOX → casilla 4 del sendero (1 acción + 1 energía, no nivel 7).
+      cualquier camino (pagar el daño en monedas).
+   g) mover_a_lanzadera: BOX → lanzadera (1 decreto, sin monedas).
+   h) mover_a_sendero: BOX → casilla 4 del sendero (1 decreto + 1 moneda, no nivel 7).
 
 6. DESCARTAR
    — Si se han jugado cartas ese turno: descartar hasta 2 (o ninguna).
@@ -409,7 +409,7 @@ rival se lanza (o "No lanzar").
 { tipo: "atacar_monstruo",     sendero: 1, posicion: 3 }   // dispara la torre del búnker
 { tipo: "mover_a_lanzadera",   monstruoId: "m1" }
 { tipo: "mover_a_sendero",     monstruoId: "m1", sendero: 2, posicion: 3 }
-{ tipo: "pasar" }              // terminar fase de acciones
+{ tipo: "pasar" }              // terminar los decretos del turno
 
 // Acciones automáticas del sistema (no las elige el jugador):
 { tipo: "_entrar_monstruo",    enemigoId: "e3" }
@@ -432,4 +432,4 @@ rival se lanza (o "No lanzar").
 ## Pendiente (no bloquea empezar)
 
 - [ ] Distribución exacta de las 60 cartas de Destino.
-- [ ] Coste 8 de las cartas de Ciencia permanente — ¿es energía o puntos de victoria?
+- [ ] Coste 8 de las cartas de Ciencia permanente — ¿es en monedas o en puntos de victoria?

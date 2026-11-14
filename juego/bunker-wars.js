@@ -101,7 +101,7 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Te permite generar 1 moneda extra al comienzo de cada turno" },
   { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 acción extra cada turno." },
   { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 acción extra cada turno." },
-  { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 acciones extra cada turno." },
+  { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 decretos extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
   { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en el box." },
@@ -206,8 +206,8 @@ function accionesTotal(j) {
    criadero 1 → 1 · 2 → 2 · 3 → 3 · 4 (y siguientes) → 5.
    El nivel 5 es el techo del criadero aunque llegue a nivel 7 de edificio:
    el Devorador de cumbres (nivel 7) nunca se crea, solo llega por el mazo de
-   Destino o por subidas de rango. Cada nivel pide además su energía al
-   crearlo (0, 1, 2 y 3), así que con poca energía solo sale el de nivel 1. */
+   Destino o por subidas de rango. Cada nivel pide además sus monedas al
+   crearlo (0, 1, 2 y 3), así que con pocas monedas solo sale el de nivel 1. */
 const NIVEL_MAX_CRIADERO = 5;
 
 function nivelMaxLab(j) {
@@ -371,7 +371,7 @@ function dañoTorres(j, senderoId) {
   return (j.bunker.torres ?? []).reduce((s, t) => s + dañoMaxTorre(t, senderoId, j), 0);
 }
 
-/* Coste en energía de hacer `daño` puntos contra ese camino, o -1 si las
+/* Coste en monedas de hacer `daño` puntos contra ese camino, o -1 si las
    torres no llegan. El coste es igual al daño ocasionado. */
 function costeDisparo(j, senderoId, daño) {
   if (daño <= 0 || dañoTorres(j, senderoId) < daño) return -1;
@@ -429,8 +429,8 @@ const bunkerWars = {
     };
     for (const j of jugadores) e.jugadores[j.id] = jugadorInicial(j, e);
     e.mazoDestino = crearMazoDestino(jugadores.length, e);
-    /* El primer turno arranca ya en la fase de acciones (avance, lanzar y
-       carta de Destino se resuelven solos), con la energía y las acciones
+    /* El primer turno arranca ya en la fase de decretos (avance, lanzar y
+       carta de Destino se resuelven solos), con las monedas y los decretos
        base a la vista. */
     resolverAutomaticas(e, []);
     const primero = e.jugadores[e.orden[0]];
@@ -482,7 +482,7 @@ const bunkerWars = {
       default:         r = { estado: e, eventos: evs };
     }
     /* Tras cualquier acción, las fases automáticas siguen solas hasta que haya
-       algo que decidir (lanzar o las acciones del turno). */
+       algo que decidir (lanzar o los decretos del turno). */
     resolverAutomaticas(r.estado, evs);
     sincronizarTorres(r.estado);
     return r;
@@ -670,7 +670,7 @@ function avanzarMonstruosPropios(j, evs) {
 }
 
 /* Fases sin decisión (avance, lanzar sin monstruo en la lanzadera, carta de
-   Destino y energía) se resuelven solas. Solo se para en "lanzar" cuando hay
+   Destino y monedas) se resuelven solas. Solo se para en "lanzar" cuando hay
    un monstruo esperando y hay que elegir a quién se le manda. */
 const AVISO_LUNA_ROJA = "La luna blanca se ha vuelto roja: desde ahora los monstruos llegan con su nivel real.";
 
@@ -679,7 +679,7 @@ function resolverAutomaticas(e, evs) {
   while (!e.final && guardia++ < 30) {
     const id = e.orden[e.turnoIdx];
     /* Un jugador puede morir en el avance de su propio turno. Si no se salta,
-       la mesa se queda esperando acciones de un muerto y no hay forma de
+       la mesa se queda esperando jugadas de un muerto y no hay forma de
        seguir: nadie tiene jugadas legales. */
     if (!e.jugadores[id]?.vivo) {
       if (avanzarTurno(e)) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
@@ -741,7 +741,7 @@ function faseCarta(e, jugadorId, evs) {
   return { estado: e, eventos: evs };
 }
 
-// ── Fase ENERGÍA ──────────────────────────────────────────────────────────
+// ── Fase MONEDAS (interna: energia) ───────────────────────────────────────
 function faseEnergia(e, jugadorId, evs) {
   const j = e.jugadores[jugadorId];
   j.energia = energiaTotal(j);
@@ -752,7 +752,7 @@ function faseEnergia(e, jugadorId, evs) {
   return { estado: e, eventos: evs };
 }
 
-// ── Fase ACCIONES ─────────────────────────────────────────────────────────
+// ── Fase DECRETOS (interna: acciones) ─────────────────────────────────────
 function faseAcciones(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
 
@@ -778,7 +778,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
         if (!cual || (j.bunker[cual] ?? 0) >= tope) break;
       }
       /* Las ciencias que eligen objetivo no se cobran si la elección no vale:
-         antes se gastaba la energía y la carta desaparecía sin efecto. */
+         antes se gastaban las monedas y la carta desaparecía sin efecto. */
       if (carta.tipo === "ciencia_i" && !objetivoDe(e, j, carta.efecto, accion)) break;
       j.energia -= carta.coste;
       j.accionesRestantes--;
@@ -1011,7 +1011,7 @@ function legalesLanzar(e, jugadorId) {
 
 function legalesAcciones(e, jugadorId) {
   const j = e.jugadores[jugadorId];
-  const acc = [{ tipo: "pasar", texto: "Terminar acciones" }];
+  const acc = [{ tipo: "pasar", texto: "Terminar decretos" }];
   if (!j.accionesRestantes) return acc;
 
   for (const carta of j.mano) {
@@ -1175,7 +1175,7 @@ function legalesAcciones(e, jugadorId) {
     }
   });
   /* Disparar: las torres del búnker pueden parar a un atacante de cualquier
-     camino si suman su nivel en daño. Cuesta en energía el daño hecho. */
+     camino si suman su nivel en daño. Cuesta en monedas el daño hecho. */
   for (const s of j.senderos) {
     s.posiciones.forEach((f, i) => {
       if (f?.tipo !== "atacante") return;
@@ -1294,7 +1294,7 @@ function puedeJugarCarta(j, carta) {
   }
   if (carta.tipo === "ciencia_i") {
     /* Las subidas de nivel no se pueden jugar si ya están al tope: gastar 3 o
-       4 de energía para nada sería un botón trampa. */
+       4 monedas para nada sería un botón trampa. */
     if (carta.efecto === "subir_armeria") {
       return (j.bunker.armeria ?? 0) < TOPE_ARMERIA;
     }
@@ -1383,7 +1383,7 @@ const CIENCIAS_CON_OBJETIVO = new Set([
 
 /* Resuelve el objetivo de una ciencia instantánea: devuelve lo necesario para
    aplicarla, o null si la elección no vale. Se usa para no cobrar la carta
-   cuando el objetivo no existe (antes se perdía la energía y la carta). */
+   cuando el objetivo no existe (antes se perdían las monedas y la carta). */
 function objetivoDe(e, j, efecto, accion) {
   const o = accion?.objetivo ?? accion ?? {};
   switch (efecto) {
@@ -1613,7 +1613,7 @@ function avanzarTurno(e) {
     }
   }
   e.turnoIdx = sig;
-  /* Cada jugador arranca su turno con la energía y las acciones que le tocan. */
+  /* Cada jugador arranca su turno con las monedas y los decretos que le tocan. */
   const j = e.jugadores[e.orden[sig]];
   if (j) {
     j.energia = energiaTotal(j);

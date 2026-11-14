@@ -210,12 +210,12 @@ test("la acción aplicada es la que se pidió, no la primera del mismo tipo", ()
     { tipo: "mejorar_bunker", cartaId: "cb2", texto: "Jugar recursos 2" },
     { tipo: "crear_monstruo", nivel: 1, texto: "Crear monstruo 1 (0e)" },
     { tipo: "crear_monstruo", nivel: 5, texto: "Crear monstruo 5 (3e)" },
-    { tipo: "pasar", texto: "Terminar acciones" },
+    { tipo: "pasar", texto: "Terminar decretos" },
   ];
 
   assert.deepEqual(emparejarLegal(legales, { tipo: "mejorar_bunker", cartaId: "cb2" }), legales[1]);
   assert.deepEqual(emparejarLegal(legales, { tipo: "crear_monstruo", nivel: 5 }), legales[3]);
-  assert.deepEqual(emparejarLegal(legales, { tipo: "pasar", texto: "Terminar acciones" }), legales[4]);
+  assert.deepEqual(emparejarLegal(legales, { tipo: "pasar", texto: "Terminar decretos" }), legales[4]);
   assert.equal(emparejarLegal(legales, { tipo: "mejorar_bunker", cartaId: "nope" }), undefined);
   assert.equal(emparejarLegal(legales, { tipo: "crear_monstruo", nivel: 4 }), undefined);
 });

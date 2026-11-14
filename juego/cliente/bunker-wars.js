@@ -153,8 +153,8 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     if (!b || !enviarAccion) return;
     const accion = accionesMesa[Number(b.dataset.i)];
     if (!accion) return;
-    /* «Terminar acciones» cierra el panel: la ronda de monstruos que viene
-       detrás se ve en el tablero, no debajo de las acciones. Se cambia de
+    /* «Terminar decretos» cierra el panel: la ronda de monstruos que viene
+       detrás se ve en el tablero, no debajo del panel. Se cambia de
        pestaña (y no solo se oculta) para que no vuelva a abrirse al repintar. */
     if (accion.tipo === "pasar") activarTab("box");
     const items = [...accPanel.querySelectorAll(".bw-accion-item")];
@@ -215,7 +215,7 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     b.addEventListener("click", async () => {
       const accion = acciones[Number(b.dataset.i)];
       if (!accion || !enviarAccion) return;
-      /* «Terminar acciones» cierra el panel de acciones: lo que viene detrás (la
+      /* «Terminar decretos» cierra el panel de acciones: lo que viene detrás (la
          ronda de monstruos) hay que verlo en el tablero, no bajo el panel. Se
          cambia de pestaña para que tampoco vuelva a abrirse al repintar. */
       if (accion.tipo === "pasar") activarTab("box");
@@ -280,10 +280,10 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   activarTab(tabMesa);
 
   /* Carta de Destino: sale sola al empezar TU turno, una sola vez.
-     El motor resuelve «carta» y «energía» de golpe, así que la pista de que
-     estás al principio del turno es que no has gastado nada: energía y
-     acciones siguen en su tope. Con eso, si ya has jugado una carta o hecho
-     una acción, o refrescas la app después, la carta no vuelve a salir; y en
+     El motor resuelve «carta» y «monedas» de golpe, así que la pista de que
+     estás al principio del turno es que no has gastado nada: monedas y
+     decretos siguen en su tope. Con eso, si ya has jugado una carta o gastado
+     un decreto, o refrescas la app después, la carta no vuelve a salir; y en
      monstruos, avance o lanzadera tampoco, porque en esas fases ya se gastó.
 
      Si la carta habla de las escaleras, al cerrarla se baja al tablero y el
@@ -1088,7 +1088,7 @@ function nivelMaxCriadero(n) {
 }
 
 /* Lo que el criadero deja criar ahora mismo y lo que cuesta cada nivel. Sin
-   esto, los niveles que no salen por falta de energía parecen un fallo del
+   esto, los niveles que no salen por falta de monedas parecen un fallo del
    criadero. */
 function notaCriadero() {
   const lab = criaderoMesa || 1;
@@ -1388,8 +1388,8 @@ function abrirCarta(el) {
   const opciones = accionesMesa.filter(a => a.tipo === "mejorar_bunker" && a.cartaId === d.uid);
   const elecciones = !reemplazos && opciones.length > 1 ? opciones : null;
 
-  /* Motivo por el que no se puede jugar, para el pie del modal. La energía se
-     dice también aunque el coste ya vaya en rojo: nunca está de más el número. */
+  /* Motivo por el que no se puede jugar, para el pie del modal. Las monedas se
+     dicen también aunque el coste ya vaya en rojo: nunca está de más el número. */
   const CON_OBJETIVO = ["subir_rango", "avanzar_rival_1", "convertir_aliado", "bajar_nivel_enemigo",
     "evolucionar_torreta", "vuelo_seguro", "torreta2_gratis", "monstruo3_gratis", "subir_lab_o_arm"];
   const sinObjetivo = jugable && CON_OBJETIVO.includes(d.efecto) && opciones.length === 0;
@@ -1412,7 +1412,7 @@ function abrirCarta(el) {
         : accionesRestantesMesa <= 0
           ? "Ya no te quedan decretos este turno."
           : !tocaMesa || faseMesa !== "acciones"
-            ? "Solo se puede jugar en tu fase de acciones, cuando te toca."
+            ? "Solo se puede jugar en tu fase de decretos, cuando te toca."
             : "";
 
   const fondo = document.createElement("div");
@@ -1589,8 +1589,8 @@ function labelFase(fase) {
     avance:   "Avanzando monstruos",
     lanzar:   "Lanzar monstruo",
     carta:    "Carta de Destino",
-    energia:  "Recogiendo energía",
-    acciones: "Acciones",
+    energia:  "Recogiendo monedas",
+    acciones: "Decretos",
     descartar:"Descartar",
     fin:      "Partida terminada",
   }[fase] ?? fase ?? "—";
@@ -1842,7 +1842,7 @@ function css() {
       display:flex; align-items:center; justify-content:center;
       font:800 8.5cqw/1 ui-serif,serif; color:#7a1010;
     }
-    /* Sin energía para pagarla: el número de coste en rojo intenso con sombra */
+    /* Sin monedas para pagarla: el número de coste en rojo intenso con sombra */
     .bw-carta-coste-grande.sin-energia {
       color:#e81010;
       text-shadow:0 0 4px #000, 0 1px 3px #000, 0 2px 6px rgba(0,0,0,.7);
