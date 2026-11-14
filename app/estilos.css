@@ -172,6 +172,33 @@ a { color: var(--plata); }
   display: flex; align-items: center; gap: 4px;
 }
 
+/* La cabecera de la partida, continua en toda la app: el ciclo a la izquierda
+   y las monedas y los decretos que quedan a la derecha, en números. La barra
+   no se va con el scroll, así que estos datos siguen a la vista. */
+.barra-ciclo {
+  grid-column: 1;
+  justify-self: start;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--plata-claro);
+  white-space: nowrap;
+}
+.barra-recursos {
+  display: flex; align-items: center; gap: 9px;
+  margin-right: 2px;
+}
+.barra-rec { display: inline-flex; align-items: center; gap: 3px; }
+.barra-rec img { width: 17px; height: 17px; object-fit: contain; }
+.barra-rec b {
+  /* Cifras de ancho fijo: al bajar de 10 a 9 no baila el hueco. */
+  font: 700 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--plata-claro);
+  font-variant-numeric: tabular-nums;
+}
+
 .red { position: relative; }
 /* El punto de conexión va dentro de su círculo: verde cuando hay red, rojo
    latiendo cuando no. */
@@ -222,8 +249,9 @@ a { color: var(--plata); }
 .yo svg { width: 20px; height: 20px; display: block; }
 
 /* Los tres iconos de la derecha: tres círculos grises iguales y pequeños, con
-   el punto de conexión, la campana y el usuario dentro. */
-.barra-der > * {
+   el punto de conexión, la campana y el usuario dentro. La fila de recursos de
+   la partida se queda fuera: no es un icono, es un grupo con sus números. */
+.barra-der > :not(.barra-recursos) {
   box-sizing: border-box;
   width: 22px; height: 22px;
   display: grid; place-items: center;

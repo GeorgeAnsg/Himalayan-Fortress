@@ -13,7 +13,7 @@ import * as sesion from "./sesion.js";
 import * as avisos from "./avisos.js";
 import * as versionMod from "./version.js";
 import { Conexion } from "./socket.js";
-import { aviso, modal, avatarSVG, iconoUsuario } from "./ui.js";
+import { aviso, modal, avatarSVG, iconoUsuario, esc } from "./ui.js";
 import * as vistaEntrada from "./vistas/entrada.js";
 import * as vistaInicio from "./vistas/inicio.js";
 import * as vistaVestibulo from "./vistas/vestibulo.js";
@@ -336,6 +336,40 @@ function actualizarBarra() {
   const red = $red();
   if (red && !red.className.includes("on") && !red.className.includes("off")) {
     red.classList.toggle("on", estado.redAntes);
+  }
+  pintarCabeceraJuego();
+}
+
+/* La cabecera de la partida: el ciclo a la izquierda y las monedas y decretos
+   que te quedan a la derecha, en números. La barra no se mueve con el scroll
+   del tablero, así que esos datos siguen a la vista aunque estés abajo. El
+   juego los manda en `privada.cabecera`; si no vienen, la barra se queda como
+   estaba (nombre de la app y nada más). */
+function pintarCabeceraJuego() {
+  const cab = estado.mesa?.privada?.cabecera ?? null;
+  const juegoId = estado.mesa?.juego?.id ?? null;
+
+  const ciclo = document.getElementById("ciclo");
+  if (ciclo) {
+    const n = cab?.ciclo;
+    ciclo.hidden = !n;
+    ciclo.textContent = n ? (cab.ciclos ? `Ciclo ${n} de ${cab.ciclos}` : `Ciclo ${n}`) : "";
+  }
+  /* Con partida en marcha el ciclo ocupa el sitio del nombre: en un móvil no
+     caben las dos cosas y lo que hace falta ver es el ciclo. */
+  const marca = document.querySelector(".barra .marca");
+  if (marca) marca.hidden = !!cab?.ciclo;
+
+  const rec = document.getElementById("recursos");
+  if (rec) {
+    const lista = cab?.recursos ?? [];
+    rec.hidden = !lista.length;
+    rec.innerHTML = lista.map((r) => {
+      const icono = r.icono && juegoId
+        ? `<img src="/app/juegos/${encodeURIComponent(juegoId)}/img/iconos/${encodeURIComponent(r.icono)}.png" alt="">`
+        : "";
+      return `<span class="barra-rec" title="${esc(r.etiqueta ?? "")}: ${esc(String(r.valor ?? 0))}">${icono}<b>${esc(String(r.valor ?? 0))}</b></span>`;
+    }).join("");
   }
 }
 

@@ -565,6 +565,18 @@ const bunkerWars = {
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
       teToca: e.orden[e.turnoIdx] === jugadorId,
+      /* Lo que enseña la barra fija de la app: el ciclo (luna) en el que va la
+         partida y los recursos que te quedan ahora mismo, para no perderlos de
+         vista cuando el tablero está scrolleado. `ciclos` solo va en las
+         partidas con final por rondas (contrarreloj). */
+      cabecera: {
+        ciclo: e.luna,
+        ciclos: e.maxRondas ?? null,
+        recursos: [
+          { clave: "monedas",  icono: "monedas",     etiqueta: "Monedas",  valor: j.energia },
+          { clave: "decretos", icono: "pergaminos",  etiqueta: "Decretos", valor: j.accionesRestantes },
+        ],
+      },
     };
   },
 
