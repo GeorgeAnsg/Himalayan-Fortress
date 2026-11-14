@@ -171,14 +171,6 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
        separaban demasiado rápido; un 20 % menos lento es −0,336. */
     sueloEl?.style.setProperty("--px-flags",   `${sy * -0.336}px`);
     sueloEl?.style.setProperty("--py-fog",      `${(1 - t) * 40 + 50}px`);
-    /* La fortaleza crece a medida que se recorre el mapa: 1.00 arriba del todo y
-       1.20 al llegar abajo, siguiendo el mismo recorrido que el scroll. Solo
-       escala el bloque del castillo, no el tablero ni las fichas. */
-    const bloque = contenedor.querySelector(".bloque-mapa");
-    if (bloque) {
-      const p = max > 0 ? Math.min(1, Math.max(0, sy / max)) : 0;
-      bloque.style.setProperty("--zoom-fort", (1 + 0.2 * p).toFixed(3));
-    }
   }
   (pantalla ?? window).addEventListener("scroll", () => {
     if (!rafPending) { rafPending = true; requestAnimationFrame(parallax); }
@@ -2876,11 +2868,6 @@ function cssAdicional() {
       margin-top:var(--margen-castillo);
       width:100%; height:auto;
       display:none;
-      /* La fortaleza crece hasta un 20 % al acercarse al centro de la vista;
-         el factor lo pone el parallax según el scroll (--zoom-fort). */
-      transform:scale(var(--zoom-fort, 1));
-      transform-origin:50% 45%;
-      will-change:transform;
     }
     body.mapa-himalaya .bloque-mapa { display:block; }
     .bloque-mapa .img-fortress {
