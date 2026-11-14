@@ -2322,8 +2322,8 @@ function cssAdicional() {
     .bw-edif-puntos { display: flex; gap: .6cqw; margin-left: .5cqw; }
     .bw-edif-puntos i {
       box-sizing: border-box;
-      /* 2× el tamaño original de 1cqw (la mitad del 4cqw de la prueba). */
-      width: 2cqw; height: 2cqw; border-radius: 50%;
+      /* 20 % menos que 2cqw (2 × 0,8 = 1,6cqw). */
+      width: 1.6cqw; height: 1.6cqw; border-radius: 50%;
       border: 1px solid rgba(122, 16, 16, .55); background: transparent;
     }
     .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
