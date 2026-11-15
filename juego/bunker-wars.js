@@ -1006,6 +1006,12 @@ function faseAcciones(e, jugadorId, accion, evs) {
     }
   }
 
+  /* Sin decretos (o sin ninguna jugada legal) la fase termina sola: ya no hay
+     pestaña de acciones ni botón de pasar, así que el turno sigue al descarte. */
+  if (j.accionesRestantes <= 0 || legalesAcciones(e, jugadorId).length <= 1) {
+    e.fase = "descartar";
+  }
+
   comprobarFin(e);
   return { estado: e, eventos: evs };
 }

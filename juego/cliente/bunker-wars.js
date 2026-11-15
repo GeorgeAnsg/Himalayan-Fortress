@@ -1,9 +1,14 @@
 /* Cliente visual de Bunker Wars — Himalayan Fortress */
 
-import { esc, avatarSVG, modal } from "../../app/ui.js";
+import { esc, avatarSVG, modal, cerrarModal } from "../../app/ui.js";
 
-export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll }) {
+export function pintar(contenedor, opciones) {
+  const { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll } = opciones;
   if (!publica) { contenedor.innerHTML = "Cargando…"; return; }
+  /* Se guarda la última vista para poder volver desde la fortaleza de un
+     rival sin pedirle nada a la app. */
+  vistaContenedor = contenedor;
+  vistaOpciones = opciones;
 
   const { luna, fase, turnoActual, jugadores: tableros } = publica;
   const yo = tableros?.[tu] ?? null;
@@ -40,6 +45,13 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   turnoMesa = turnoActual ?? null;
   yoMesa = tu ?? null;
 
+  /* Sin decretos no queda nada que decidir en la fase de acciones: se manda el
+     pase solo, porque la pestaña de acciones ya no existe. */
+  if (teToca && fase === "acciones" && (privada?.accionesRestantes ?? 0) <= 0 && !pasandoAuto) {
+    pasandoAuto = true;
+    Promise.resolve(enviarAccion?.({ tipo: "pasar" })).finally(() => { pasandoAuto = false; });
+  }
+
   /* El repintado reconstruye todo el HTML del contenedor y eso devolvía la
      vista arriba del todo. Se guarda dónde estaba mirando el jugador (el que
      scrollea es #pantalla, no el contenedor) para dejarlo otra vez ahí, salvo
@@ -49,10 +61,20 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
      scrollTop ya vale 0: el sitio donde miraba el jugador llega en `scroll`. */
   const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
-  contenedor.innerHTML = `
-    ${css()}
-    ${cssAdicional()}
+  /* El CSS va a <head> y se queda ahí. Antes viajaba con el marcado, así que
+     cada repintado (la app vacía #pantalla) lo borraba y volvía a pegarlo: se
+     llegaba a ver el HUD sin estilos, texto blanco sobre negro, antes de que
+     todo se recolocara. */
+  instalarCss();
 
+  /* Modo visita: la fortaleza de otro jugador, en su estado y sin controles. */
+  if (viendoJugador && publica.jugadores?.[viendoJugador]) {
+    pintarVistaRival(contenedor, publica, viendoJugador);
+    return;
+  }
+  viendoJugador = null;
+
+  contenedor.innerHTML = `
     ${yo ? pintarMiBunker(yo, privada, fase) : ""}
 
   `;
@@ -73,20 +95,37 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   const esperaCarta = saleDestino && DESTINO_ESCALERAS.has(destino.tipo);
 
   /* El estreno del turno: la primera vez que te llega en esta luna se te avisa
-     con un modal y la vista NO baja al tablero hasta que pulsas «Empezar
-     turno». A partir de ahí, ese turno ya no vuelve a bajar solo. */
+     con un modal y la vista NO baja al tablero hasta que pulsas «Comenzar tu
+     turno». Cuenta cualquier fase con decisión tuya, también «lanzar»: antes
+     solo miraba «acciones», así que el modal de lanzar se adelantaba al aviso
+     y tapaba el avance de los monstruos. */
   const claveTurno = `${luna}:${turnoActual}`;
-  const estrenaTurno = teToca && fase === "acciones" && claveTurno !== turnoEmpezado;
+  const estrenaTurno = teToca && fase !== "descartar" && claveTurno !== turnoEmpezado;
 
-  const { ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta || estrenaTurno });
+  const { movidas: fichasMovidas, ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta || estrenaTurno });
+  /* Si la mesa se repinta mientras el aviso de turno está abierto, las fichas
+     nuevas vuelven a quedarse en su casilla de salida y su `reproducir` es el
+     bueno: el aviso usará este, no el del pintado viejo (ya desmontado). */
+  reproducirPendiente = estrenaTurno ? reproducir : null;
   const ajenasAhora = contenedor.querySelectorAll(".ficha.atacante, .ficha.ajena").length;
   const aparecen = ajenasPrevias !== null && ajenasAhora > ajenasPrevias;
   ajenasPrevias = ajenasAhora;
   const rondaDeMonstruos = ajenasMovidas > 0 || aparecen;
-  avanceRetenido = esperaCarta && rondaDeMonstruos ? reproducir : null;
+  /* Al empezar los decretos también cuentan los monstruos tuyos: son los que
+     acaban de avanzar en la fase de lanzar. Sin esto, la carta de Destino
+     salía encima del movimiento y no daba tiempo a verlo. */
+  const avanceDeTurno = rondaDeMonstruos || (saleDestino && fichasMovidas > 0);
+  avanceRetenido = esperaCarta && (fichasMovidas > 0 || aparecen) ? reproducir : null;
   if (estrenaTurno) {
-    avisarTurnoNuevo(claveTurno, reproducir);
-  } else if (rondaDeMonstruos && !esperaCarta) {
+    /* Orden del turno: aviso, avance de monstruos, lanzadera y carta. */
+    avisarTurnoNuevo(claveTurno, reproducir, {
+      hayAvance: avanceDeTurno,
+      alTerminar: () => {
+        if (fase === "lanzar") abrirLanzarSiToca();
+        else soltarTrasAvance();
+      },
+    });
+  } else if (avanceDeTurno && !esperaCarta) {
     bajarAlTablero();
     bloquearPorAvance(true);
     /* El movimiento va primero y, cuando acaba, sale la carta de Destino. */
@@ -105,6 +144,11 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   document.querySelector("body > .bw-panel.box-panel")?.remove();
   document.querySelector("body > .bw-panel.acciones-panel")?.remove();
   document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
+  document.querySelector("body > .bw-panel.torres-panel")?.remove();
+  document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.disparo-panel")?.remove();
+  document.querySelector("body > .bw-panel-overlay")?.remove();
+  disparoPanel = null;
 
   const navEl2 = document.createElement("nav");
   navEl2.id = "bw-nav-global";
@@ -113,14 +157,14 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   /* Sin fixed: el menú es la última fila de la columna de la app. */
   navEl2.style.cssText = "width:100%;flex:0 0 auto;";
   navEl2.innerHTML = `
-    <button class="bw-nav-tab activo" data-tab="cartas" type="button">
-      <span>Fortaleza</span>
-    </button>
     <button class="bw-nav-tab" data-tab="box" type="button">
       <span>Jaulas</span>
     </button>
-    <button class="bw-nav-tab" data-tab="acciones" type="button">
-      <span>Acciones</span>
+    <button class="bw-nav-tab" data-tab="torres" type="button">
+      <span>Torres</span>
+    </button>
+    <button class="bw-nav-tab" data-tab="mapa" type="button">
+      <span>Mapa</span>
     </button>
     <button class="bw-nav-tab" data-tab="manuscritos" type="button">
       <span>Manuscritos</span>
@@ -163,6 +207,31 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   manPanel.className = "bw-panel manuscritos-panel oculto";
   manPanel.innerHTML = pintarManuscritos();
   document.body.appendChild(manPanel);
+
+  /* Torres: los tres huecos, uno por camino, con su nivel y su alzado. */
+  const torresPanel = document.createElement("div");
+  torresPanel.className = "bw-panel torres-panel oculto";
+  torresPanel.innerHTML = pintarTorres(yo?.bunker?.torres ?? []);
+  document.body.appendChild(torresPanel);
+
+  /* Mapa: el listado de rivales, en el mismo tipo de panel que las jaulas. */
+  const mapaPanel = document.createElement("div");
+  mapaPanel.className = "bw-panel mapa-panel oculto";
+  mapaPanel.innerHTML = pintarMapa();
+  document.body.appendChild(mapaPanel);
+  mapaPanel.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-jugador]");
+    if (!b) return;
+    viendoJugador = b.dataset.jugador;
+    const cont = document.getElementById("tablero");
+    if (cont && vistaOpciones) { vistaContenedor = cont; pintar(cont, vistaOpciones); }
+  });
+
+  /* Velo común de los paneles: difumina y tiñe la fortaleza, pero queda por
+     debajo del menú para que las pestañas sigan visibles y pulsables. */
+  const panelOverlay = document.createElement("div");
+  panelOverlay.className = "bw-panel-overlay oculto";
+  document.body.appendChild(panelOverlay);
 
   /* Parallax: el contenedor de scroll en el motor es #pantalla, no window */
   const pantalla = document.getElementById("pantalla");
@@ -255,7 +324,12 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     document.querySelector("body > .bw-mano-wrap")?.remove();
     document.querySelector("body > .bw-panel.box-panel")?.remove();
   document.querySelector("body > .bw-panel.acciones-panel")?.remove();
-  document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
+      document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
+      document.querySelector("body > .bw-panel.torres-panel")?.remove();
+  document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.disparo-panel")?.remove();
+  document.querySelector("body > .bw-panel-overlay")?.remove();
+  disparoPanel = null;
     document.body.classList.remove("bw-himalaya", "mapa-himalaya");
     const res = await salirMesa();
     if (res?.error) aviso(res.error, { error: true });
@@ -277,7 +351,16 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
   /* Criadero del mapa y huecos libres del box: abren la lista de monstruos. */
   contenedor.querySelectorAll('[data-edif="criadero"]').forEach((el) => el.addEventListener("click", abrirCriadero));
   contenedor.querySelectorAll(".fort-slot").forEach((el) => {
-    if (el.classList.contains("fort-slot-lleno")) return;
+    const idMon = el.dataset.monId;
+    if (idMon) {
+      /* Con monstruo: se toca la jaula para mandarlo, igual que en el panel.
+         Antes solo respondían las vacías y la jaula llena no hacía nada. */
+      el.addEventListener("click", () => {
+        const mon = boxActual.find((m) => m?.id === idMon);
+        if (mon) abrirEnvio(mon);
+      });
+      return;
+    }
     el.addEventListener("click", () => abrirCriadero(Number(el.dataset.box) || 0));
   });
 
@@ -337,24 +420,46 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
     });
   }
 
+  /* Atacantes: al tocar una ficha que sube, el cálculo de las torres para
+     matarla. Los monstruos propios no responden a este toque. */
+  for (const el of contenedor.querySelectorAll(".ficha.atacante, .ficha.ajena")) {
+    el.addEventListener("click", () => abrirDisparo({
+      sendero: Number(el.dataset.sendero),
+      posicion: Number(el.dataset.pos),
+      nivel: Number(el.dataset.nivel),
+    }));
+  }
+
   /* Tabs de navegación inferior */
   function activarTab(id) {
     tabMesa = id;
     navEl2.querySelectorAll(".bw-nav-tab").forEach(t => t.classList.toggle("activo", t.dataset.tab === id));
     boxPanel.classList.toggle("oculto", id !== "box");
     manPanel.classList.toggle("oculto", id !== "manuscritos");
+    torresPanel.classList.toggle("oculto", id !== "torres");
+    mapaPanel.classList.toggle("oculto", id !== "mapa");
     manoWrap.classList.toggle("oculto", id !== "cartas");
+    actualizarOverlayPaneles();
   }
-  navEl2.querySelectorAll(".bw-nav-tab").forEach(tab => {
+      navEl2.querySelectorAll(".bw-nav-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      /* Las acciones no son un panel: se eligen en su propio modal. */
-      if (tab.dataset.tab === "acciones") { abrirModalAcciones(); return; }
-      activarTab(tab.dataset.tab);
+      /* Cualquier pestaña cierra antes el disparo, si estaba abierto. */
+      cerrarDisparo();
+      const id = tab.dataset.tab;
+      /* Volver a tocar la pestaña abierta cierra el panel, como la X. */
+      activarTab(id === tabMesa ? "cartas" : id);
     });
   });
   /* Se recuerda la pestaña abierta entre repintados (el servidor empuja estado
      a menudo y no queremos que el panel se cierre solo). */
   activarTab(tabMesa);
+
+  /* La X de la cabecera cierra el panel y devuelve la mano. */
+  [boxPanel, manPanel, torresPanel, mapaPanel].forEach((panel) => {
+    panel.addEventListener("click", (ev) => {
+      if (ev.target.closest("[data-cerrar-panel]")) activarTab("cartas");
+    });
+  });
 
   /* Carta de Destino: sale sola al empezar TU turno, una sola vez.
      El motor resuelve «carta» y «monedas» de golpe, así que la pista de que
@@ -380,21 +485,82 @@ export function pintar(contenedor, { publica, privada, jugadores, tu, acciones, 
        están avanzando (o esperan a que se acepte el aviso de turno), la carta
        sale cuando terminan de moverse. Solo las cartas de escaleras se
        adelantan, porque son las que cuentan lo que va a pasar en el tablero. */
-    if (esperaCarta || (!rondaDeMonstruos && !estrenaTurno)) abrir();
+    /* La carta espera a que no quede nada que enseñar antes: ni aviso de
+       turno, ni avance de fichas. Si lo hay, sale al terminar. */
+    if (!estrenaTurno && (esperaCarta || !avanceDeTurno)) abrir();
     else trasAvance = abrir;
   }
 
-  /* Fase LANZAR: el rival se elige en un modal, no en la lista de acciones. */
-  const opcionesLanzar = accionesMesa.filter(a => a.tipo === "lanzar");
-  if (fase === "lanzar" && teToca && opcionesLanzar.length && !document.querySelector(".bw-modal-fondo")) {
-    abrirLanzar(opcionesLanzar);
-  }
+  /* Fase LANZAR: el rival se elige en un modal, no en la lista de acciones.
+     Pero solo cuando ya se ha aceptado el turno y ha terminado el avance; si
+     no, el modal tapa justo lo que hay que ver. */
+  if (!estrenaTurno && !document.body.classList.contains("bw-avanzando")) abrirLanzarSiToca();
 
   /* Fase DESCARTAR: la mano entera en un modal, para elegir qué se tira. */
   if (fase !== "descartar") document.getElementById("bw-modal-descartar")?.remove();
   if (fase === "descartar" && teToca && !document.getElementById("bw-modal-descartar")) {
     abrirDescarte();
   }
+
+  /* Cajas de toque encima del tablero, solo para depurar (?zonas=1). */
+  pintarZonas();
+}
+
+/* ── Zonas de toque (depuración) ──────────────────────────────────────────
+   Con ?zonas=1 se dibujan encima del juego las cajas reales de todo lo que
+   responde a un toque. No son los dibujos: son las áreas de hit, que es donde
+   se ve por qué una jaula y una torre se pisan. */
+const ZONAS = [
+  [".fort-slot",         "jaula",     "#22c55e"],
+  [".torre .torre-zona", "torre",     "#ef4444"],
+  [".hueco",             "hueco",     "#f59e0b"],
+  [".lanzadera",         "lanzadera", "#38bdf8"],
+  [".ficha",             "ficha",     "#eab308"],
+  [".fort-circulo-edif", "edificio",  "#a855f7"],
+  [".fort-plat",         "recursos",  "#ec4899"],
+];
+let capaZonas = null;
+let rafZonas = 0;
+let frameZonas = 0;
+
+function pintarZonas() {
+  let activo = false;
+  try { activo = new URLSearchParams(location.search).get("zonas") === "1"; } catch { /* nada */ }
+  if (!activo) {
+    if (capaZonas) {
+      capaZonas.remove();
+      capaZonas = null;
+      cancelAnimationFrame(rafZonas);
+    }
+    return;
+  }
+  if (capaZonas) return;
+  capaZonas = document.createElement("div");
+  capaZonas.id = "bw-zonas";
+  capaZonas.style.cssText = "position:fixed;inset:0;z-index:99999;pointer-events:none";
+  document.body.appendChild(capaZonas);
+  const paso = () => {
+    if (!capaZonas) return;
+    if (frameZonas++ % 6 === 0) {
+      const cajas = [];
+      for (const [sel, nombre, color] of ZONAS) {
+        document.querySelectorAll(sel).forEach((el, i) => {
+          const b = el.getBoundingClientRect();
+          if (!b.width || !b.height) return;
+          const pos = el.dataset.posTorre ?? el.closest?.(".torre")?.dataset?.posTorre ?? null;
+          const caja = el.dataset.box ?? null;
+          /* En las jaulas, el número de jaula y el del hueco dentro de ella. */
+          const hueco = caja == null ? null
+            : [...document.querySelectorAll(`.fort-slot[data-box="${caja}"]`)].indexOf(el) + 1;
+          const et = pos ? ` ${pos}` : caja != null ? ` ${Number(caja) + 1}·${hueco}` : ` ${i + 1}`;
+          cajas.push(`<div style="position:fixed;left:${b.x}px;top:${b.y}px;width:${b.width}px;height:${b.height}px;box-sizing:border-box;border:2px solid ${color};background:${color}26;color:${color}"><span style="position:absolute;left:0;top:0;background:#000c;padding:1px 3px;white-space:nowrap;font:700 10px/1.1 ui-monospace,monospace">${nombre}${et}</span></div>`);
+        });
+      }
+      capaZonas.innerHTML = cajas.join("");
+    }
+    rafZonas = requestAnimationFrame(paso);
+  };
+  paso();
 }
 
 /* ── Animación del avance ─────────────────────────────────────────────────── */
@@ -484,6 +650,8 @@ let avanceRetenido = null;
    ahora mismo, la carta de Destino del turno. */
 const MS_AVANCE = 2100;
 let trasAvance = null;
+/* Último `reproducir()` de un pintado con el aviso de turno abierto. */
+let reproducirPendiente = null;
 function soltarTrasAvance() {
   const f = trasAvance;
   trasAvance = null;
@@ -513,7 +681,7 @@ let turnoEmpezado = leerTurnoEmpezado();
 /* Aviso de turno nuevo: se ve como el resto de modales de la app, con el texto
    arriba y un solo botón. Al pulsarlo se cierra y solo entonces la vista baja
    al tablero para ver la ronda de monstruos. */
-function avisarTurnoNuevo(clave, reproducir) {
+function avisarTurnoNuevo(clave, reproducir, { hayAvance = false, alTerminar = null } = {}) {
   /* Si hay otro modal encima (carta de Destino, aviso de la mesa) no se pisa:
      ya saldrá en el siguiente repintado. */
   if (document.querySelector(".bw-modal-fondo")) return;
@@ -530,14 +698,21 @@ function avisarTurnoNuevo(clave, reproducir) {
   }).then(() => {
     turnoEmpezado = clave;
     guardarTurnoEmpezado(clave);
+    /* Se bloquea ya, antes de empezar a bajar la vista: si el servidor empuja
+       estado mientras la pantalla se desplaza, el modal de lanzar no puede
+       colarse por delante de la animación. */
+    bloquearPorAvance(true);
     bajarYDespues(() => {
-      const mueve = typeof reproducir === "function";
-      reproducir?.();
-      bloquearPorAvance(true);
-      /* Con movimiento, la carta de Destino del turno espera a que acabe; sin
-         él, sale en cuanto se cierra este aviso. */
-      if (mueve) setTimeout(soltarTrasAvance, MS_AVANCE);
-      else soltarTrasAvance();
+      (reproducirPendiente ?? reproducir)?.();
+      reproducirPendiente = null;
+      const soltar = () => {
+        bloquearPorAvance(false);
+        alTerminar?.();
+      };
+      /* Con movimiento, deja que se vea entero (2 s) antes de abrir nada: la
+         lanzadera o la carta de Destino. */
+      if (hayAvance) setTimeout(soltar, MS_AVANCE);
+      else soltar();
     });
   });
 }
@@ -553,7 +728,168 @@ function bloquearPorAvance(activo) {
   relojAvance = setTimeout(() => document.body.classList.remove("bw-avanzando"), 4000);
 }
 
+/* ── Matar monstruo con las torres ─────────────────────────────────────── */
+
+/* Reparto del daño para matar un atacante: primero la torre de su propia calle
+   (hace su nivel) y después las demás (hacen uno menos, salvo con la ciencia
+   de torres universales). El coste es el daño hecho, igual que en el motor. */
+function planDisparo(nivel, senderoId, bunker) {
+  const ciencia = bunker?.ciencia ?? [];
+  const universal = ciencia.some(c => c.efecto === "torreta_universal");
+  const barata = ciencia.some(c => c.efecto === "torreta_barata");
+  const torres = (bunker?.torres ?? []).map((t, i) => {
+    if (!t?.nivel) return null;
+    const propia = (t.sendero ?? i + 1) === senderoId;
+    const tope = t.inhabilitada ? 0 : (propia || universal ? t.nivel : Math.max(0, t.nivel - 1));
+    return { pos: i + 1, nivel: t.nivel, propia, universal, inhabilitada: !!t.inhabilitada, tope };
+  }).filter(Boolean);
+  const orden = [...torres].sort((a, b) =>
+    (Number(b.propia) - Number(a.propia)) || (b.tope - a.tope) || (a.pos - b.pos));
+  let falta = nivel;
+  const usadas = [];
+  for (const t of orden) {
+    if (falta <= 0) break;
+    if (t.tope <= 0) continue;
+    const usa = Math.min(t.tope, falta);
+    usadas.push({ ...t, usa });
+    falta -= usa;
+  }
+  const capacidad = torres.reduce((s, t) => s + t.tope, 0);
+  const alcanza = capacidad >= nivel;
+  return {
+    torres, usadas, capacidad, alcanza,
+    coste: alcanza ? Math.max(0, nivel - (barata ? 1 : 0)) : null,
+    universal, barata,
+  };
+}
+
+/* Plantilla común de los modales de monstruo: título en borgoña, ribete de
+   piedra arriba y abajo, y el botón gris de casa para cerrar. La usan tanto
+   el monstruo de la jaula (mover o lanzar) como el ataque con torres. */
+let fondoModalAjustado = false;
+
+/* La textura del modal, a su tamaño real de pantalla. `naturalWidth` viene en
+   píxeles físicos; en un móvil con densidad 2 o 3 hay que dividirlo para que
+   un píxel de la imagen ocupe un píxel de la pantalla y no el triple. El tope
+   de 160 px evita que en pantallas de densidad 1 o 2 la textura se coma el
+   modal y se vea como una foto ampliada en vez de un patrón repetido. */
+function ajustarFondoModal() {
+  if (fondoModalAjustado) return;
+  fondoModalAjustado = true;
+  const img = new Image();
+  img.onload = () => {
+    const dpr = window.devicePixelRatio || 1;
+    const lado = Math.min(img.naturalWidth / dpr, 160);
+    document.documentElement.style.setProperty(
+      "--bg-modal-size", `${lado}px auto`,
+    );
+  };
+  img.src = `${BASE_IMG}/bg-modal.jpg`;
+}
+
+function modalMonstruo({ titulo, html = "", botones = [], clase = "" }) {
+  ajustarFondoModal();
+  return modal({ titulo, html, botones, clase: `modal-monstruo${clase ? ` ${clase}` : ""}` });
+}
+
+function abrirDisparo({ sendero, posicion, nivel }) {
+  const yo = jugadoresMesa.find(p => p.id === yoMesa) ?? null;
+  const plan = planDisparo(nivel, sendero, yo?.bunker);
+  const accion = accionesMesa.find(a => a.tipo === "atacar_monstruo"
+    && a.sendero === sendero && a.posicion === posicion) ?? null;
+  /* El modal sale siempre, también cuando no se puede disparar: la razón va
+     dentro. Solo se puede actuar en tu fase de decretos. */
+  const enDecretos = tocaMesa && faseMesa === "acciones";
+
+  const filas = (plan.alcanza ? plan.usadas : plan.torres).map(t => {
+    const dano = plan.alcanza ? t.usa : t.tope;
+    const nota = t.inhabilitada ? "bloqueada" : t.propia ? "su calle" : t.universal ? "universal" : "otra calle";
+    return `<div class="bw-disparo-fila${t.inhabilitada ? " bloqueada" : ""}">
+      <span class="bw-disparo-t">Torre ${t.pos} <em>${nota}</em></span>
+      <span class="bw-disparo-n">nv ${t.nivel}</span>
+      <b class="bw-disparo-d">${dano}</b>
+    </div>`;
+  }).join("");
+
+  const monedas = plan.coste ?? 0;
+  const moneda = monedas === 1 ? "moneda" : "monedas";
+  const puedePagar = plan.alcanza && monedas <= energiaMesa;
+  const puede = enDecretos && !!accion && puedePagar;
+
+  const nombreFase = {
+    lanzar: "la lanzadera",
+    descartar: "el descarte",
+    carta: "la carta de Destino",
+    energia: "repartir monedas",
+    avance: "el avance de los monstruos",
+  }[faseMesa] ?? "otra fase";
+
+  /* Razón por la que no se puede, en orden: primero si no es tu momento de
+     actuar; después, si las torres no llegan o no hay dinero o decretos. */
+  let problema = "";
+  if (!tocaMesa) {
+    problema = "No es tu turno: espera a que te toque para poder disparar.";
+  } else if (faseMesa !== "acciones") {
+    problema = `Ahora toca ${nombreFase}. Los ataques con torres se hacen en tu fase de decretos.`;
+  } else if (!plan.alcanza) {
+    problema = `Las torres llegan a ${plan.capacidad} de daño y el monstruo tiene ${nivel}. No puedes matarlo ahora.`;
+  } else if (!puedePagar) {
+    problema = `Cuesta ${monedas} ${moneda} y te quedan ${energiaMesa}.`;
+  } else if (!accion) {
+    problema = accionesRestantesMesa <= 0
+      ? "No te quedan decretos este turno."
+      : "Ese monstruo ya no está ahí.";
+  }
+
+  const html = `
+    <div class="bw-disparo">
+      <div class="bw-disparo-cab">Atacante nivel <b>${nivel}</b> en la escalera <b>${sendero}</b>, peldaño <b>${posicion + 1}</b>.</div>
+      ${filas || `<div class="bw-disparo-cab">No tienes torres construidas.</div>`}
+      <div class="bw-disparo-total"><span>Daño total</span><b>${plan.alcanza ? nivel : plan.capacidad} / ${nivel}</b></div>
+      <div class="bw-disparo-coste"><span>Coste</span><b>${plan.alcanza ? `${monedas} ${moneda} + 1 decreto` : "—"}</b></div>
+      ${problema ? `<div class="bw-disparo-aviso">${problema}</div>` : ""}
+    </div>`;
+
+  /* Mismo panel que torres/jaulas: encima del menú, con el velo detrás y el
+     menú visible para poder cambiar de pestaña sin cerrar nada a mano. */
+  disparoPanel?.remove();
+  const panel = document.createElement("div");
+  panel.className = "bw-panel disparo-panel";
+  panel.innerHTML = `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Matar monstruo</div>
+      <button class="bw-panel-x" type="button" data-cerrar-disparo aria-label="Cerrar">×</button>
+    </div>
+    ${html}
+    <div class="bw-disparo-botones">
+      <button type="button" class="bw-modal-usar" data-cerrar-disparo>Cerrar</button>
+      ${puede ? `<button type="button" class="bw-modal-usar bw-disparo-matar" data-disparo-matar>Matar · ${monedas} ${moneda}</button>` : ""}
+    </div>`;
+  document.body.appendChild(panel);
+  disparoPanel = panel;
+  actualizarOverlayPaneles();
+  panel.addEventListener("click", async (ev) => {
+    if (ev.target.closest("[data-cerrar-disparo]")) { cerrarDisparo(); return; }
+    if (!ev.target.closest("[data-disparo-matar]")) return;
+    if (!accion || !enviarAccion) return;
+    const res = await enviarAccion(accion);
+    if (res?.error) aviso(res.error, { error: true });
+    cerrarDisparo();
+  });
+}
+
 /* ── Modal de lanzadera: elegir rival y camino ───────────────────────────── */
+
+/* Abre el modal de lanzadera si de verdad toca (fase, turno y opciones). El
+   repintado lo llama a menudo, así que devuelve false sin tocar nada cuando
+   no hay nada que preguntar o ya hay un modal encima. */
+function abrirLanzarSiToca() {
+  const ops = accionesMesa.filter(a => a.tipo === "lanzar");
+  if (faseMesa !== "lanzar" || !tocaMesa || !ops.length) return false;
+  if (document.querySelector(".bw-modal-fondo") || document.getElementById("bw-modal-lanzar")) return false;
+  abrirLanzar(ops);
+  return true;
+}
 
 function abrirLanzar(ops) {
   document.getElementById("bw-modal-lanzar")?.remove();
@@ -919,7 +1255,9 @@ function totalesBunker(bunker) {
 }
 
 function pintarMiBunker(j, priv, fase) {
-  const energia    = priv?.energia ?? 0;
+  /* En la visita a otra fortaleza las monedas y los decretos son privados:
+     se pasan como null y se pintan «—». */
+  const energia    = priv && "energia" in priv ? priv.energia : 0;
   const mano       = priv?.mano ?? [];
   const descartando = fase === "descartar" && !!priv?.teToca;
   const arm  = j.bunker?.armeria     ?? 0;
@@ -933,9 +1271,10 @@ function pintarMiBunker(j, priv, fase) {
   /* Las dos cifras de la fortaleza son lo que te queda AHORA, no la producción
      del turno (esa ya va en el resumen de arriba, «N por luna nueva»): así
      bajan al jugar una carta, crear un monstruo o disparar una torre. */
+  const decretos   = priv && "accionesRestantes" in priv ? priv.accionesRestantes : 0;
   const quedan = {
     monedas:  energia,
-    decretos: priv?.accionesRestantes ?? 0,
+    decretos,
   };
 
   /* Puntos indicadores de nivel (dots) */
@@ -1000,14 +1339,11 @@ function pintarMiBunker(j, priv, fase) {
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
-      /* Icono del monstruo: de espaldas (m1-t, sin cabeza) cuando sube la
-         escalera atacando el fuerte, y de frente (m1-f, la cabeza hacia abajo)
-         cuando lo defiende. Encima lleva una pastilla con su fuerza. Las
-         imágenes están en /app/juegos/bunker-wars/img/monstruos/. */
-      const imgFrontal = `${BASE_IMG}/monstruos/m1-f.png`;
-      const imgTrasera = `${BASE_IMG}/monstruos/m1-t.png`;
-      const img = esAtacante ? imgTrasera : imgFrontal;
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
+         fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
+         que aún no tienen arte caen en la del nivel 1. */
+      const img = imgMonstruo(nivelDe(f), esAtacante);
+      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
@@ -1023,6 +1359,7 @@ function pintarMiBunker(j, priv, fase) {
     const nv = t.nivel;
     return `
       <div class="torre nv${nv}${t.inhabilitada ? " bloqueada" : ""}" data-pos-torre="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">
+        <i class="torre-zona"></i>
         <div class="anillo"><span></span></div>
         <div class="planta"></div>
         <div class="alzado"></div>
@@ -1038,7 +1375,7 @@ function pintarMiBunker(j, priv, fase) {
        pastilla con su fuerza, entrando desde la escalera. Antes era un texto
        oscuro sobre un círculo transparente, o sea, nada. */
     const dentro = l
-      ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
+      ? `<img src="${imgMonstruo(nivelDe(l))}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
       : "";
     return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
   }).join("");
@@ -1063,8 +1400,8 @@ function pintarMiBunker(j, priv, fase) {
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}" style="left:${pos.l};top:${pos.t}">${
-      mon ? `<img src="${BASE_IMG}/monstruos/m1-f.png" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}"${mon?.id ? ` data-mon-id="${esc(mon.id)}"` : ""} style="left:${pos.l};top:${pos.t}">${
+      mon ? `<img src="${imgMonstruo(mon.nivel)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
 
@@ -1093,15 +1430,15 @@ function pintarMiBunker(j, priv, fase) {
             <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
             <div class="fort-ui">
               <div class="fort-plat energia" style="left:20.5%;top:25.5%">
-                <div class="fort-cifra">${quedan.monedas}</div>
+                <div class="fort-cifra">${quedan.monedas ?? "—"}</div>
                 <div class="fort-pila-caja coins">
-                  <img src="${pilaCoins(quedan.monedas)}" class="fort-pila" alt=""${quedan.monedas > 0 ? "" : ` style="visibility:hidden"`}>
+                  <img src="${pilaCoins(quedan.monedas ?? 0)}" class="fort-pila" alt=""${(quedan.monedas ?? 0) > 0 ? "" : ` style="visibility:hidden"`}>
                 </div>
               </div>
               <div class="fort-plat vida" style="left:80.5%;top:25.4%">
-                <div class="fort-cifra">${quedan.decretos}</div>
+                <div class="fort-cifra">${quedan.decretos ?? "—"}</div>
                 <div class="fort-pila-caja decrees">
-                  <img src="${pilaDecrees(quedan.decretos)}" class="fort-pila" alt=""${quedan.decretos > 0 ? "" : ` style="visibility:hidden"`}>
+                  <img src="${pilaDecrees(quedan.decretos ?? 0)}" class="fort-pila" alt=""${(quedan.decretos ?? 0) > 0 ? "" : ` style="visibility:hidden"`}>
                 </div>
               </div>
               ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`, null, "criadero")}
@@ -1142,8 +1479,8 @@ function pintarMiBunker(j, priv, fase) {
 
 function pintarHud(j, priv) {
   const tot = totalesBunker(j?.bunker);
-  const energia = priv?.energia ?? 0;
-  const acciones = priv?.accionesRestantes ?? 0;
+  const energia = priv && "energia" in priv ? priv.energia : 0;
+  const acciones = priv && "accionesRestantes" in priv ? priv.accionesRestantes : 0;
   const vida = Math.max(0, 20 - (j?.puntosMonsters ?? 0));
 
   /* Las mejoras de la fortaleza: armería (torres de ataque) y criadero
@@ -1160,7 +1497,7 @@ function pintarHud(j, priv) {
 
   /* La unidad de la partida es la luna: cada luna nueva, tantas monedas. */
   const recurso = (icono, nombre, turno, quedan) => `
-        <div class="bw-rec" title="${nombre}: ${turno} por ciclo. Te quedan ${quedan}.">
+        <div class="bw-rec" title="${nombre}: ${turno} por ciclo. Te quedan ${quedan == null ? "—" : quedan}.">
           <img src="${ICONO(icono)}" alt="">
           <b>${turno}<em>/ciclo</em></b>
         </div>`;
@@ -1186,7 +1523,7 @@ function pintarHud(j, priv) {
   return `
     <div class="bw-hud">
       <div class="bw-hud-aviso" title="Turno en curso">
-        <span class="bw-hud-aviso-texto">${tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}</span>
+        <span class="bw-hud-aviso-texto">${vistaRival ? `Fortaleza de ${esc(j?.nombre ?? "un rival")}` : tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}</span>
         <div class="bw-hud-turnos aviso" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
       </div>
       <div class="bw-hud-caja" title="Fortaleza: producción, vida y edificios">
@@ -1223,21 +1560,67 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo">M${m.nivel}</div>`
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.nivel)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${m.nivel}</b></div>`
         : `<div class="bw-box-slot vacio" data-box="${b}" title="Jaula ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
-    const caminos = b === 0 ? "1 y 2" : "2 y 3";
+    /* La jaula 1 alimenta el camino izquierdo y el central; la 2, el central
+       y el derecho. Nunca el 1 y el 3 a la vez. */
+    const caminos = b === 0 ? "camino central izquierdo" : "camino central derecho";
     return `
       <div class="bw-caja">
-        <div class="bw-caja-label">Jaula ${b + 1} <span class="bw-panel-sub">→ caminos ${caminos}</span></div>
+        <div class="bw-caja-label">Jaula ${b + 1}<span class="bw-caja-camino">${caminos}</span></div>
         <div class="bw-box">${slots}</div>
       </div>`;
   };
 
   return `
-    <div class="bw-panel-label">🐾 Jaulas <span class="bw-panel-sub">${box.filter(Boolean).length} / 4</span></div>
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Jaulas <span class="bw-panel-sub">${box.filter(Boolean).length} / 4</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
     <div class="bw-cajas">${caja(0)}${caja(1)}</div>
-    <div class="bw-slot-sub" style="margin-top:6px">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja. Un hueco con aspa abre el criadero.</div>
+    <div class="bw-slot-sub" style="margin-top:10px;margin-bottom:8px;text-align:center">Toca un monstruo para mandarlo a la lanzadera o al inicio de un camino de su caja. Un hueco con aspa abre el criadero.</div>
+  `;
+}
+
+/* ── Mapa: el listado de rivales, en el mismo panel que jaulas y torres ── */
+function pintarMapa() {
+  const otros = jugadoresMesa.filter((p) => p.id !== yoMesa);
+  const lista = otros.length
+    ? otros.map((p) => `<button type="button" class="bw-mapa-rival" data-jugador="${esc(p.id)}">${esc(p.nombre ?? "Jugador")}</button>`).join("")
+    : `<p class="bw-mapa-vacio">No hay otros jugadores en la mesa.</p>`;
+  return `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Mapa <span class="bw-panel-sub">rivales</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
+    <div class="bw-mapa-lista">${lista}</div>
+  `;
+}
+
+/* ── Torres: un hueco por camino, con el nivel encima y el camino debajo ── */
+function pintarTorres(torres) {
+  const lista = Array.isArray(torres) ? torres : [];
+  const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
+  const torre = (i) => {
+    const n = Number(lista[i]?.nivel) || 0;
+    const nombre = n ? `Torre ${ROMANOS[n] ?? n}` : "Torre";
+    const dentro = n
+      ? `<img src="${imgTorre(n)}" class="bw-box-img" alt="torre nivel ${n}">`
+      : `<span class="bw-box-x">+</span>`;
+    return `
+      <div class="bw-torre">
+        <div class="bw-torre-nv">${nombre}</div>
+        <div class="bw-box-slot ${n ? "lleno" : "vacio"}">${dentro}</div>
+        <div class="bw-torre-camino">${caminos[i]}</div>
+      </div>`;
+  };
+  return `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Torres <span class="bw-panel-sub">${lista.filter(t => t?.nivel).length} / 3</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
+    <div class="bw-torres">${[0, 1, 2].map(torre).join("")}</div>
   `;
 }
 
@@ -1369,7 +1752,7 @@ function abrirCriadero(boxInicial = null) {
       <button type="button" class="bw-desc-celda" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>
         <div class="bw-carta-grande">
           <span class="bw-carta-coste-grande">${monedas}</span>
-          <div class="bw-carta-grande-img"><img src="${BASE_IMG}/monstruos/m1-f.png" alt=""></div>
+          <div class="bw-carta-grande-img"><img src="${imgMonstruo(m.nivel)}" alt=""></div>
           <div class="bw-carta-grande-texto">
             <div class="bw-carta-grande-titulo">${esc(m.nombre)}</div>
             <p class="bw-carta-grande-desc">${esc(m.texto)}</p>
@@ -1462,7 +1845,10 @@ function pintarManuscritos() {
   const parrafo = (txt) => `<p class="man-p">${esc(txt)}</p>`;
 
   return `
-    <div class="bw-panel-label">📜 Manuscritos <span class="bw-panel-sub">reglas de la fortaleza</span></div>
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Manuscritos <span class="bw-panel-sub">reglas de la fortaleza</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
 
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
@@ -1587,11 +1973,47 @@ let jugadoresMesa = [];
 let turnoMesa = null;
 let yoMesa = null;
 let tabMesa = "cartas";
+/* Visita a la fortaleza de otro jugador desde la pestaña Mapa. */
+let viendoJugador = null;
+let vistaContenedor = null;
+let vistaOpciones = null;
+let vistaRival = false;
+/* Panel de matar monstruo, abierto encima del menú como los demás. */
+let disparoPanel = null;
+function actualizarOverlayPaneles() {
+  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel"];
+  const abierto = !!disparoPanel || paneles.some((s) => {
+    const p = document.querySelector(`body > .bw-panel${s}`);
+    return p && !p.classList.contains("oculto");
+  });
+  document.querySelector("body > .bw-panel-overlay")?.classList.toggle("oculto", !abierto);
+}
+function cerrarDisparo() {
+  if (disparoPanel) { disparoPanel.remove(); disparoPanel = null; }
+  actualizarOverlayPaneles();
+}
+/* Evita mandar dos veces el pase automático al quedarse sin decretos. */
+let pasandoAuto = false;
 let energiaMesa = 0;
 let criaderoMesa = 0;
 let accionesRestantesMesa = 0;
 
 const BASE_IMG   = "/app/juegos/bunker-wars/img";
+/* Láminas de monstruo disponibles por nivel. Los niveles sin arte propio
+   (5, 7…) usan la del 1 hasta que haya imagen suya. */
+const MONSTRUOS_CON_ARTE = new Set([1, 2]);
+function imgMonstruo(nivel, atras = false) {
+  const n = Number(nivel);
+  const arte = MONSTRUOS_CON_ARTE.has(n) ? n : 1;
+  return `${BASE_IMG}/monstruos/m${arte}-${atras ? "t" : "f"}.png`;
+}
+
+/* Alzado de la torre según su nivel; el 1 si faltara el arte. */
+function imgTorre(nivel) {
+  const n = Number(nivel);
+  const arte = n >= 1 && n <= 3 ? n : 1;
+  return `${BASE_IMG}/torres/torre-alzado-nv${arte}.png`;
+}
 const ASSETS_IMG = "/app/juegos/bunker-wars/img/coins-and-decrees";
 const CARD_BG    = `${BASE_IMG}/card.png`;
 
@@ -1836,29 +2258,25 @@ function abrirCiencia() {
 
 function abrirEnvio(mon) {
   const opciones = accionesMesa.filter((a) => a.monstruoId === mon.id);
-  if (!opciones.length) {
-    aviso("Ese monstruo no se puede mover ahora.", { error: true });
-    return;
-  }
 
-  const fondo = document.createElement("div");
-  fondo.id = "bw-modal-envio";
-  fondo.className = "bw-modal-fondo";
-  fondo.innerHTML = `
-    <div class="bw-envio">
-      <div class="bw-envio-titulo">Monstruo ${mon.nivel}</div>
-      <div class="bw-envio-opciones">
-        ${opciones.map((a, i) => `<button type="button" class="bw-envio-op" data-i="${i}">${esc(a.texto ?? "Mover")}</button>`).join("")}
-      </div>
-      <button type="button" class="bw-envio-cerrar">Cerrar</button>
+  const html = `
+    <div class="bw-mon-cab">
+      <img src="${imgMonstruo(mon.nivel)}" class="bw-mon-img" alt="monstruo">
+      <b class="bw-mon-nv">${mon.nivel ?? "?"}</b>
     </div>
-  `;
-  document.body.appendChild(fondo);
+    ${opciones.length
+      ? `<div class="bw-envio-opciones">${opciones.map((a, i) => `<button type="button" class="bw-envio-op" data-i="${i}">${esc(a.texto ?? "Mover")}</button>`).join("")}</div>`
+      : `<p class="bw-envio-vacio">Ese monstruo no se puede mover ahora.</p>`}`;
 
-  fondo.querySelector(".bw-envio-cerrar").addEventListener("click", () => fondo.remove());
-  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) fondo.remove(); });
+  modalMonstruo({
+    titulo: "Avanzar monstruo",
+    html,
+    botones: [{ texto: "Cerrar", estilo: "secundario", valor: null }],
+  });
 
-  for (const b of fondo.querySelectorAll(".bw-envio-op")) {
+  /* `modal` deja la capa pintada en el acto: las opciones ya están en el DOM. */
+  const capa = document.getElementById("capa");
+  for (const b of capa?.querySelectorAll(".bw-envio-op") ?? []) {
     b.addEventListener("click", async () => {
       const accion = opciones[Number(b.dataset.i)];
       if (!accion || !enviarAccion) return;
@@ -1869,9 +2287,67 @@ function abrirEnvio(mon) {
         b.disabled = false;
         return;
       }
-      fondo.remove();
+      cerrarModal();
     });
   }
+}
+
+/* ── Mapa: elegir jugador y visitar su fortaleza ─────────────────────────── */
+
+/* La fortaleza de otro jugador, con la misma escena y su estado público. Las
+   monedas y los decretos propios no se ven: se pintan como «—». */
+function pintarVistaRival(contenedor, publica, id) {
+  const rival = publica.jugadores?.[id];
+  if (!rival) { viendoJugador = null; return; }
+
+  /* Fuera el menú, la mano y los paneles: esto es una vista de solo lectura. */
+  document.getElementById("bw-nav-global")?.remove();
+  document.querySelector("body > .bw-mano-wrap")?.remove();
+  document.querySelector("body > .bw-panel.box-panel")?.remove();
+  document.querySelector("body > .bw-panel.acciones-panel")?.remove();
+  document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
+  document.querySelector("body > .bw-panel.torres-panel")?.remove();
+  document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.disparo-panel")?.remove();
+  document.querySelector("body > .bw-panel-overlay")?.remove();
+  disparoPanel = null;
+
+  jugadoresMesa = Object.entries(publica.jugadores ?? {}).map(([pid, p]) => ({ id: pid, ...p }));
+  turnoMesa = publica.turnoActual ?? null;
+  yoMesa = id;
+  faseMesa = publica.fase ?? null;
+  tocaMesa = false;
+  energiaMesa = null;
+  accionesRestantesMesa = null;
+  boxActual = [];
+  lanzaderasMesa = rival.lanzaderas ?? [];
+  cienciasMesa = rival.bunker?.ciencia ?? [];
+  criaderoMesa = rival.bunker?.laboratorio ?? 0;
+  nivelEnemigoMesa = publica.nivelEnemigo ?? 1;
+  lunaMesa = publica.luna ?? 1;
+  vistaRival = true;
+
+  contenedor.innerHTML = `
+    <div class="bw-volver-barra">
+      <button type="button" class="bw-volver">Volver</button>
+    </div>
+    ${pintarMiBunker(rival, {
+      energia: null,
+      accionesRestantes: null,
+      mano: [],
+      box: [],
+      lanzaderas: rival.lanzaderas ?? [],
+      teToca: false,
+    }, publica.fase)}`;
+
+  vistaRival = false;
+
+  contenedor.querySelector(".bw-volver")?.addEventListener("click", () => {
+    viendoJugador = null;
+    /* Volver deja la fortaleza, no el mapa que abrió la visita. */
+    tabMesa = "cartas";
+    if (vistaContenedor && vistaOpciones) pintar(vistaContenedor, vistaOpciones);
+  });
 }
 
 function escaparCarta(ev) {
@@ -1924,6 +2400,20 @@ function labelFase(fase) {
 }
 
 /* ── CSS del juego (cabecera, stats, destino, nav, cartas) ──────────────── */
+
+/* La hoja del juego se instala una vez en <head> y se queda ahí: así sobrevive
+   a los repintados de la app (que vacía #pantalla) y no se reparsean 77 kB de
+   CSS en cada empujón de la mesa. */
+function instalarCss() {
+  if (document.getElementById("bw-css")) return;
+  const hoja = document.createElement("style");
+  hoja.id = "bw-css";
+  hoja.textContent = sinEtiquetas(css()) + sinEtiquetas(cssAdicional());
+  document.head.appendChild(hoja);
+}
+function sinEtiquetas(texto) {
+  return String(texto).replace(/^\s*<style>/, "").replace(/<\/style>\s*$/, "");
+}
 
 function css() {
   return `<style>
@@ -2014,7 +2504,8 @@ function css() {
       position:relative; z-index:20;
     }
     /* Box panel: flota encima del nav */
-    .bw-panel.box-panel, .bw-panel.acciones-panel, .bw-panel.manuscritos-panel {
+    .bw-panel.box-panel, .bw-panel.acciones-panel, .bw-panel.manuscritos-panel,
+    .bw-panel.torres-panel, .bw-panel.mapa-panel, .bw-panel.disparo-panel {
       position:fixed !important;
       bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
       left:0 !important; right:0 !important;
@@ -2022,6 +2513,55 @@ function css() {
       border-radius:16px 16px 0 0 !important;
       max-height:50vh; overflow-y:auto;
       z-index:290 !important;
+    }
+    /* El panel de jaulas flota justo encima del menú, con el ribete de piedra
+       arriba y abajo (más fino que el del modal). */
+    .bw-panel.box-panel, .bw-panel.manuscritos-panel, .bw-panel.torres-panel,
+    .bw-panel.mapa-panel, .bw-panel.disparo-panel {
+      padding:26px 14px 22px;
+      background-color:rgba(27,23,19,.97);
+      background-image:url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png');
+      background-position:left top, left bottom;
+      background-size:auto 11px, auto 11px;
+      background-repeat:repeat-x, repeat-x;
+    }
+    /* Cabecera común de los paneles: título centrado, algo más grande y una X
+       para cerrar a la derecha del todo. */
+    .bw-panel-head {
+      position:relative; display:flex; align-items:center; justify-content:center;
+      min-height:34px; padding:0 38px; margin-bottom:40px; text-align:center;
+    }
+    .bw-panel-head .bw-panel-label { margin-bottom:0; }
+    /* Separación bajo el título: 20 px de aire y una línea fina. */
+    .bw-panel-head::after {
+      content:""; position:absolute; left:0; right:0; bottom:-20px; height:1px;
+      background:rgba(244,236,221,.18); pointer-events:none;
+    }
+    .bw-panel-x {
+      position:absolute; right:-6px; top:50%; transform:translateY(-50%);
+      width:34px; height:34px; padding:0; border:0; background:transparent;
+      color:#d9cbb6; font:400 26px/1 ui-sans-serif, system-ui, sans-serif;
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .bw-panel-x:active { color:#fff; }
+    .box-panel .bw-panel-label, .manuscritos-panel .bw-panel-label,
+    .torres-panel .bw-panel-label, .mapa-panel .bw-panel-label,
+    .disparo-panel .bw-panel-label {
+      font:700 18px/1.25 ui-serif, Georgia, serif;
+      text-transform:none; letter-spacing:.01em;
+      color:#f4ecdd; text-align:center;
+    }
+    .bw-panel-sub { font-size:12px; }
+    .box-panel .bw-caja-label {
+      font:700 13px/1.25 ui-serif, Georgia, serif;
+      text-transform:none; letter-spacing:.01em; color:#d9cbb6;
+      text-align:center; margin-bottom:10px;
+    }
+    .bw-caja-camino {
+      display:block; margin-top:3px;
+      font:400 11px/1.25 ui-serif, Georgia, serif;
+      color:#b8ab96; letter-spacing:0;
     }
     /* Botones de acción del panel: uno por acción legal */
     .bw-acciones { display:grid; gap:6px; }
@@ -2039,15 +2579,71 @@ function css() {
     .bw-panel-sub { font-weight:400; text-transform:none; letter-spacing:0; }
     .bw-slot-sub { font-size:10px; color:#8b7e6b; }
     .bw-cajas { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .bw-torres { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; align-items:start; }
+    .bw-torre { display:flex; flex-direction:column; align-items:center; min-width:0; }
+    .bw-torre-nv { font:700 13px/1.25 ui-serif, Georgia, serif; color:#d9cbb6;
+                   text-align:center; margin-bottom:3px; }
+    .bw-torre-camino { font:400 11px/1.25 ui-serif, Georgia, serif; color:#b8ab96;
+                       text-align:center; margin-top:3px; }
+    .bw-mapa-lista { display:flex; flex-direction:column; gap:8px; }
+    .bw-mapa-rival {
+      width:100%; padding:12px 14px; border-radius:9px;
+      background:rgba(244,236,221,.07); border:1px solid rgba(244,236,221,.18);
+      color:#f4ecdd; font:700 15px/1.2 ui-serif, Georgia, serif;
+      text-align:center; cursor:pointer;
+    }
+    .bw-mapa-rival:active { background:rgba(244,236,221,.16); }
+    .bw-mapa-vacio { margin:0; text-align:center; color:#8b7e6b; font-size:13px; }
+    /* Velo de los paneles: por debajo del menú, para que se siga viendo. */
+    .bw-panel-overlay {
+      position:fixed; inset:0; z-index:280;
+      background:rgba(8,7,5,.42);
+      backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+    }
+    .bw-panel-overlay.oculto { display:none; }
+    .bw-panel.disparo-panel { max-height:80vh; overflow-y:auto; z-index:290; }
+    .bw-disparo-botones { display:flex; gap:8px; margin-top:14px; }
+    .bw-disparo-botones .bw-modal-usar {
+      flex:1; width:auto; padding:10px 12px; border-radius:9px;
+      font:700 13px/1.2 ui-serif, Georgia, serif;
+    }
+    .bw-disparo-botones .bw-disparo-matar {
+      background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
+    }
     .bw-caja-label { font-size:10px; font-weight:800; letter-spacing:.06em;
                      text-transform:uppercase; color:#b7a992; margin-bottom:5px; }
     .bw-box { display:grid; grid-template-columns:repeat(2, 1fr); gap:5px; }
-    .bw-box-slot { height:34px; border-radius:8px; display:flex; align-items:center;
-                   justify-content:center; font-size:11px; font-weight:800;
-                   border:1px dashed rgba(244,236,221,.16); color:#8b7e6b; }
-    .bw-box-slot.lleno { border-style:solid; border-color:#4a90d9;
-                         background:rgba(74,144,217,.22); color:#8dc0f0; cursor:pointer; }
-    .bw-box-slot.lleno:hover { background:rgba(74,144,217,.38); }
+    .bw-box-slot { position:relative; width:100%; aspect-ratio:1 / 1; min-width:0;
+                   border-radius:8px; display:flex;
+                   align-items:center; justify-content:center; font-size:11px; font-weight:800;
+                   border:1px dashed rgba(244,236,221,.16); color:#8b7e6b;
+                   overflow:hidden; }
+    /* Jaula llena: pergamino, borde turquesa, el monstruo dentro y su nivel
+       en el círculo de arriba a la derecha. */
+    .bw-box-slot.lleno {
+      border:1.5px solid #179494;
+      background-color:#e8ddc8;
+      background-image:url('${BASE_IMG}/bg-modal.jpg');
+      background-position:center;
+      background-size:var(--bg-modal-size, 160px auto);
+      background-repeat:repeat;
+      color:#fff; cursor:pointer;
+    }
+    .bw-box-slot.lleno:hover { filter:brightness(1.06); }
+    .bw-box-img {
+      position:absolute; left:50%; top:50%;
+      transform:translate(-50%,-50%);
+      height:92%; width:auto; max-width:92%;
+      pointer-events:none;
+      filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));
+    }
+    .bw-box-nv {
+      position:absolute; top:3px; right:3px;
+      min-width:15px; height:15px; padding:0 3px;
+      border-radius:999px; background:rgba(23,148,148,.92); color:#fff;
+      font:800 9px/15px ui-monospace, monospace; text-align:center;
+      box-shadow:0 1px 2px rgba(0,0,0,.35);
+    }
     /* Hueco libre: punteado de 1 px, translúcido y con un aspa blanca en el
        centro. Se toca para criar. */
     .bw-box-slot.vacio {
@@ -2638,10 +3234,26 @@ function cssAdicional() {
       z-index:3;
     }
     body.bw-himalaya .bw-panel.box-panel, body.bw-himalaya .bw-panel.acciones-panel,
-    body.bw-himalaya .bw-panel.manuscritos-panel {
+    body.bw-himalaya .bw-panel.manuscritos-panel, body.bw-himalaya .bw-panel.torres-panel,
+    body.bw-himalaya .bw-panel.mapa-panel, body.bw-himalaya .bw-panel.disparo-panel {
       bottom: var(--alto-nav, 34px) !important;
       /* Mismo negro que la barra del menú */
       background: #000 !important;
+    }
+    /* Los paneles de jaulas y manuscritos conservan su ribete de piedra
+       arriba y abajo, aunque la regla anterior los pegue al menú y los pinte
+       de negro. */
+    body.bw-himalaya .bw-panel.box-panel,
+    body.bw-himalaya .bw-panel.manuscritos-panel,
+    body.bw-himalaya .bw-panel.torres-panel,
+    body.bw-himalaya .bw-panel.mapa-panel,
+    body.bw-himalaya .bw-panel.disparo-panel {
+      bottom: var(--alto-nav, 34px) !important;
+      background-color: rgba(27,23,19,.97) !important;
+      background-image: url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png') !important;
+      background-position: left top, left bottom !important;
+      background-size: auto 11px, auto 11px !important;
+      background-repeat: repeat-x, repeat-x !important;
     }
 
     /* ── Barra de información del turno ──
@@ -3272,6 +3884,9 @@ function cssAdicional() {
       /* Por encima del tablero (z-index 2): así el monstruo que entra aparece
          entre la bruma en vez de por delante de ella. */
       z-index:4;
+      /* Pero es solo dibujo: si traga los toques, las fichas y lanzaderas de
+         la parte baja no se pueden pulsar (el modal del monstruo no salía). */
+      pointer-events:none;
       /* Sin vaivén propio: se mueve solo con el scroll (--py-fog). */
     }
 
@@ -3355,7 +3970,9 @@ function cssAdicional() {
       box-sizing:border-box; padding:calc(.5 * var(--u)) 0 0; text-align:center;
       font-weight:700; font-family:ui-monospace,monospace;
       font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
-      pointer-events:none;
+      /* La pastilla del nivel también abre el modal del monstruo: es el sitio
+         natural al que se apunta y, sin esto, el toque se colaba al tablero. */
+      pointer-events:auto;
     }
 
     /* torres */
@@ -3363,6 +3980,16 @@ function cssAdicional() {
       position:absolute; width:calc(9.5 * var(--u)); aspect-ratio:1;
       margin:calc(-9.5 * var(--u)) 0 0 calc(-4.75 * var(--u));
       z-index:3;
+      /* Solo .torre-zona recibe toques: la lámina del alzado mide 16,5 u y su
+         caja se metía encima de las jaulas de al lado (abrían la torre). */
+      pointer-events:none;
+    }
+    .torre > * { pointer-events:none; }
+    /* Área de toque de la torre: el ancho de la peana y el alto del cuerpo. */
+    .torre .torre-zona {
+      position:absolute; left:0; right:0; bottom:0;
+      height:calc(14 * var(--u));
+      pointer-events:auto;
     }
     .torre .planta {
       position:absolute; inset:0;
@@ -3491,6 +4118,212 @@ function cssAdicional() {
        toque el tablero mientras se mueven las fichas, pero un modal es una
        decisión ya tomada y, si se queda sin responder, encierra al jugador
        (pasaba con la carta de Destino y con el de lanzar). */
+
+    /* ── Matar monstruo: desglose de torres ── */
+    .bw-disparo { display:flex; flex-direction:column; gap:7px; margin:2px 0 14px; }
+    .bw-disparo-cab { font-size:13.5px; color:#cfd8d4; line-height:1.45; }
+    .bw-disparo-cab b { color:#fff; }
+    .bw-disparo-fila {
+      display:flex; align-items:center; gap:9px;
+      padding:8px 11px; border-radius:9px;
+      background:rgba(255,255,255,.055);
+      border:1px solid rgba(255,255,255,.12);
+      font-size:13.5px;
+    }
+    .bw-disparo-fila .bw-disparo-t { flex:1; font-weight:700; }
+    .bw-disparo-fila .bw-disparo-t em {
+      font-style:normal; font-weight:600; font-size:11.5px;
+      color:#9fd2c0; margin-left:5px;
+    }
+    .bw-disparo-fila .bw-disparo-n { font-size:11.5px; color:#aebcb6; }
+    .bw-disparo-fila .bw-disparo-d {
+      min-width:22px; text-align:center; font-weight:800;
+      font-family:ui-monospace,monospace; color:#ffd88a;
+    }
+    .bw-disparo-fila.bloqueada { opacity:.55; }
+    .bw-disparo-fila.bloqueada .bw-disparo-d { color:#9a9a9a; }
+    .bw-disparo-total, .bw-disparo-coste {
+      display:flex; justify-content:space-between; align-items:baseline;
+      gap:10px; padding:9px 11px 0;
+      border-top:1px solid rgba(255,255,255,.12);
+      font-size:13px; color:#cfd8d4;
+    }
+    .bw-disparo-total b, .bw-disparo-coste b { color:#fff; font-size:14.5px; }
+    .bw-disparo-aviso {
+      margin-top:2px; padding:9px 11px; border-radius:9px;
+      background:rgba(224,83,63,.14); border:1px solid rgba(224,83,63,.4);
+      color:#ffb4a2; font-size:13px; line-height:1.4;
+    }
+
+    /* ── Plantilla común de los modales de monstruo ── */
+    .modal.modal-monstruo {
+      /* El ribete de piedra va pegado a los bordes; el relleno deja aire para
+         que el título y el botón no lo toquen. El pergamino cubre la caja
+         entera y el texto pasa a tinta oscura para seguir leyéndose. Un poco
+         más ancho que los modales de casa para que quepa la imagen. */
+      /* Un tercio menos de aire a los lados (22 → 15). */
+      width:min(100%, 460px);
+      padding:34px 15px 34px;
+      overflow:hidden;
+      /* La mitad del radio de los modales de casa. */
+      border-radius:10px;
+      /* Textura a su tamaño natural y repetida, no estirada. El tamaño de
+         verdad lo pone ajustarFondoModal(): el navegador mide la imagen en
+         píxeles físicos y hay que dividir por la densidad de la pantalla, o
+         en un móvil Retina se ve al triple de grande. */
+      background-color:#1c130c;
+      background-image:url('${BASE_IMG}/bg-modal.jpg');
+      background-position:center;
+      background-size:var(--bg-modal-size, 160px auto);
+      background-repeat:repeat;
+      color:#2a1c14;
+    }
+    .modal.modal-monstruo::before,
+    .modal.modal-monstruo::after {
+      content:""; position:absolute; left:0; right:0; height:16px;
+      background:url('${BASE_IMG}/ribete.png') left center / auto 100% repeat-x;
+      pointer-events:none;
+    }
+    .modal.modal-monstruo::before { top:0; }
+    .modal.modal-monstruo::after { bottom:0; }
+    /* Título en el borgoña de las cartas, en negrita y un punto menos, con
+       aire a la derecha para la X grande. */
+    .modal.modal-monstruo h2 {
+      margin-top:2px; padding-right:48px;
+      color:#8f1e17; font-weight:700; font-size:20px;
+    }
+    /* La X, la mitad de grande que antes y del mismo borgoña que el título,
+       sin fondo ni borde. */
+    .modal.modal-monstruo .cerrar {
+      top:14px; right:8px;
+      width:56px; height:56px;
+      border:0; background:none; box-shadow:none;
+      color:#8f1e17; font-size:26px;
+    }
+    /* Barra de vuelta de la visita a otra fortaleza: abajo y centrada. */
+    .bw-volver-barra {
+      position:fixed; left:0; right:0; bottom:0; z-index:9500;
+      display:flex; align-items:center; justify-content:center;
+      padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+      background:linear-gradient(0deg, rgba(10,9,7,.96), rgba(10,9,7,.82));
+      border-top:1px solid rgba(232,221,200,.18);
+    }
+    /* Mismo botón gris de la casa que el resto de modales. */
+    .bw-volver {
+      display:inline-flex; align-items:center; justify-content:center;
+      min-height:38px; padding:9px 26px; border-radius:9px;
+      background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1);
+      color:#12161a; border:1px solid rgba(18,16,14,.25);
+      font:700 14px/1.1 ui-serif, Georgia, serif;
+      cursor:pointer; box-shadow:0 3px 8px rgba(0,0,0,.35);
+    }
+    .bw-volver:active { filter:brightness(.94); }
+
+    /* Cabecera del monstruo: su imagen y el nivel arriba a la derecha. */
+    .modal.modal-monstruo .bw-mon-cab {
+      position:relative; display:flex; justify-content:center;
+      margin:2px 0 10px;
+    }
+    .modal.modal-monstruo .bw-mon-img {
+      display:block; height:120px; width:auto; max-width:100%;
+      filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));
+    }
+    .modal.modal-monstruo .bw-mon-nv {
+      position:absolute; top:4px; right:4px;
+      min-width:24px; padding:4px 9px; border-radius:999px;
+      background:rgba(23,148,148,.9); color:#fff;
+      font:800 14px/1 ui-monospace,monospace; text-align:center;
+    }
+
+    .modal.modal-monstruo .bw-envio-opciones {
+      display:flex; flex-direction:column; gap:8px; margin:2px 0 8px;
+    }
+    .modal.modal-monstruo .bw-envio-op {
+      padding:13px 14px; border-radius:7px; text-align:left;
+      font:600 14.5px/1.35 ui-sans-serif, system-ui, sans-serif;
+      /* Botones de acción del modal: un tono más oscuro que el pergamino. */
+      background:rgba(84,56,32,.2); color:#12100e;
+      border:1px solid rgba(74,48,26,.4); cursor:pointer;
+    }
+    .modal.modal-monstruo .bw-envio-op:hover { background:rgba(84,56,32,.28); }
+    .modal.modal-monstruo .bw-envio-op:disabled { opacity:.5; cursor:wait; }
+    .modal.modal-monstruo .bw-envio-vacio {
+      margin:0 0 10px; color:#5a4436; font-size:14px; line-height:1.4;
+    }
+    /* El desglose de disparo sobre el pergamino: tinta oscura y filas claras. */
+    .modal.modal-monstruo .bw-disparo-cab { color:#4a3629; }
+    .modal.modal-monstruo .bw-disparo-cab b { color:#12100e; }
+    .modal.modal-monstruo .bw-disparo-fila {
+      background:rgba(255,255,255,.42); border-color:rgba(90,60,35,.28);
+    }
+    .modal.modal-monstruo .bw-disparo-fila .bw-disparo-t em { color:#7a4b2a; }
+    .modal.modal-monstruo .bw-disparo-fila .bw-disparo-n { color:#6b5544; }
+    .modal.modal-monstruo .bw-disparo-fila .bw-disparo-d { color:#7a1010; }
+    .modal.modal-monstruo .bw-disparo-total,
+    .modal.modal-monstruo .bw-disparo-coste {
+      color:#4a3629; border-top-color:rgba(90,60,35,.3);
+    }
+    .modal.modal-monstruo .bw-disparo-total b,
+    .modal.modal-monstruo .bw-disparo-coste b { color:#12100e; }
+    .modal.modal-monstruo .bw-disparo-aviso {
+      background:rgba(166,42,34,.12); border-color:rgba(166,42,34,.4); color:#7a1f18;
+    }
+    /* El «Cerrar» de siempre, pero en negrita. */
+    .modal.modal-monstruo .fila .boton { font-weight:700; }
+
+    /* Matar monstruo: hoja desde abajo, negro y cabecera igual que los paneles. */
+    .modal.modal-monstruo.modal-disparo {
+      position:fixed; left:0; right:0; bottom:0; top:auto;
+      width:100%; max-width:100%; margin:0;
+      max-height:80vh; overflow-y:auto;
+      padding:26px 14px calc(22px + env(safe-area-inset-bottom, 0px));
+      border-radius:16px 16px 0 0;
+      background-color:#1b1713;
+      background-image:url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png');
+      background-position:left top, left bottom;
+      background-size:auto 11px, auto 11px;
+      background-repeat:repeat-x, repeat-x;
+      color:#f4ecdd;
+      box-shadow:0 -18px 50px rgba(0,0,0,.5);
+      animation:bw-subir .22s ease-out;
+    }
+    .modal.modal-monstruo.modal-disparo::before,
+    .modal.modal-monstruo.modal-disparo::after { display:none; }
+    .modal.modal-monstruo.modal-disparo h2 {
+      margin:0 0 40px; padding:0 38px; text-align:center;
+      color:#f4ecdd; font:700 18px/1.25 ui-serif, Georgia, serif;
+      position:relative;
+    }
+    .modal.modal-monstruo.modal-disparo h2::after {
+      content:""; position:absolute; left:0; right:0; bottom:-20px; height:1px;
+      background:rgba(244,236,221,.18);
+    }
+    .modal.modal-monstruo.modal-disparo .cerrar {
+      top:18px; right:6px; width:34px; height:34px;
+      border:0; background:none; box-shadow:none;
+      color:#d9cbb6; font-size:26px; z-index:3;
+    }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-cab { color:#cfd8d4; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-cab b { color:#fff; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-fila {
+      background:rgba(255,255,255,.055); border-color:rgba(255,255,255,.12);
+    }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-fila .bw-disparo-t em { color:#9fd2c0; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-fila .bw-disparo-n { color:#b7a992; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-fila .bw-disparo-d { color:#ffd88a; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-total,
+    .modal.modal-monstruo.modal-disparo .bw-disparo-coste {
+      color:#cfd8d4; border-top-color:rgba(255,255,255,.12);
+    }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-total b,
+    .modal.modal-monstruo.modal-disparo .bw-disparo-coste b { color:#fff; }
+    .modal.modal-monstruo.modal-disparo .bw-disparo-aviso {
+      background:rgba(224,83,63,.14); border-color:rgba(224,83,63,.4); color:#ffb4a2;
+    }
+    @keyframes bw-subir {
+      from { transform:translateY(100%); }
+      to { transform:translateY(0); }
+    }
 
     .num-calle {
       /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde

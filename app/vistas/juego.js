@@ -13,6 +13,16 @@ import { h, esc, avatarSVG, modal, aviso } from "../ui.js";
    tacada, sin que llegue a verse el hueco negro entre una cosa y otra. */
 const tableros = new Map();
 
+/* Descarga el tablero antes de entrar a la mesa. Así el primer pintado de la
+   partida ya lo tiene en memoria y es síncrono: no se ve el hueco negro entre
+   el vestíbulo y el juego. */
+export function precargar(id) {
+  if (!id || tableros.has(id)) return;
+  import(new URL(`../juego/cliente/${encodeURIComponent(id)}.js`, document.baseURI).href)
+    .then((mod) => { if (typeof mod.pintar === "function") tableros.set(id, mod); })
+    .catch(() => {});
+}
+
 export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
   const turno = mesa.jugadores.find((j) => j.id === mesa.turno);
   const ronda = mesa.publica?.ronda;

@@ -216,6 +216,8 @@ function pintarInicio(sala) {
 function pintarVestibulo() {
   limpiar();
   $barra().hidden = false;
+  /* El tablero se baja ya, mientras se espera en el vestíbulo. */
+  vistaJuego.precargar(estado.mesa.juego?.id);
   pintarCon(vistaVestibulo, {
     mesa: estado.mesa,
     alListo: (valor) => estado.conexion.listo(valor),
