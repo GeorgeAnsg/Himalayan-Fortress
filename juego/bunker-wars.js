@@ -431,8 +431,11 @@ function jugadorInicial(info, e) {
     id: info.id,
     nombre: info.nombre,
     avatar: info.avatar,
+    esBot: !!info.esBot,
+    equipo: e.modo === "equipos" ? (Number(info.equipo) === 1 ? 1 : 0) : null,
     puntosMonsters: 0,
     vivo: true,
+    regalos: [],
     bunker,
     energia: 0,
     accionesRestantes: 0,
@@ -456,9 +459,12 @@ const bunkerWars = {
   max: 8,
   resumen: "Defiende tu búnker 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
 
-  crear({ jugadores, semilla }) {
+  crear({ jugadores, semilla, opciones }) {
+    const modo = opciones?.modo === "equipos" ? "equipos" : "todos";
+    const equipos = opciones?.equipos ?? {};
     const e = {
       luna: 1,
+      modo,
       fase: "avance",
       orden: jugadores.map(j => j.id),
       turnoIdx: 0,
@@ -467,9 +473,15 @@ const bunkerWars = {
       descarteDestino: [],
       nivelEnemigo: 1,
       jugadores: {},
+      regalos: [],
       final: null,
     };
-    for (const j of jugadores) e.jugadores[j.id] = jugadorInicial(j, e);
+    for (const [i, j] of jugadores.entries()) {
+      const equipo = modo === "equipos"
+        ? (Number(equipos[j.id]) === 1 ? 1 : Number(equipos[j.id]) === 0 ? 0 : i % 2)
+        : null;
+      e.jugadores[j.id] = jugadorInicial({ ...j, equipo }, e);
+    }
     e.mazoDestino = crearMazoDestino(jugadores.length, e);
     /* El primer turno arranca ya en la fase de decretos (avance, lanzar y
        carta de Destino se resuelven solos), con las monedas y los decretos
@@ -534,6 +546,7 @@ const bunkerWars = {
     sincronizarTorres(e); // también migra partidas guardadas con la torreta en el camino
     return {
       luna: e.luna,
+      modo: e.modo ?? "todos",
       fase: e.fase,
       turnoActual: e.orden[e.turnoIdx],
       nivelEnemigo: e.nivelEnemigo,
@@ -541,6 +554,8 @@ const bunkerWars = {
         Object.entries(e.jugadores).map(([id, j]) => [id, {
           nombre: j.nombre,
           avatar: j.avatar,
+          esBot: !!j.esBot,
+          equipo: j.equipo ?? null,
           vivo: j.vivo,
           puntosMonsters: j.puntosMonsters,
           bunker: j.bunker,
@@ -562,6 +577,7 @@ const bunkerWars = {
       mano: j.mano,
       box: j.box,
       lanzaderas: j.lanzaderas,
+      regalos: j.regalos ?? [],
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
       teToca: e.orden[e.turnoIdx] === jugadorId,
@@ -801,14 +817,91 @@ function faseEnergia(e, jugadorId, evs) {
   j.energia = energiaTotal(j);
   j.accionesRestantes = accionesTotal(j);
   j.cartasJugadasEsteTurno = 0;
+  /* Los regalos llegan justo después del reparto del turno y antes de los
+     decretos: así las monedas y los decretos enviados no los borra el reset. */
+  entregarRegalos(e, jugadorId, evs);
   evs.push({ tipo: "energia", texto: `${j.nombre}: ${j.energia} monedas, ${j.accionesRestantes} decretos.`, a: jugadorId });
   e.fase = "acciones";
   return { estado: e, eventos: evs };
 }
 
+/* Entrega los envíos pendientes al jugador que empieza su fase de decretos.
+   Las monedas y los decretos ya están repartidos; los monstruos solo ocupan
+   huecos libres de las cuatro jaulas visibles. */
+function entregarRegalos(e, jugadorId, evs) {
+  if (!e.regalos?.length) return;
+  const j = e.jugadores[jugadorId];
+  if (!j?.vivo) return;
+  const pendientes = e.regalos.filter((g) => g.para === jugadorId);
+  if (!pendientes.length) return;
+  e.regalos = e.regalos.filter((g) => g.para !== jugadorId);
+  for (const g of pendientes) {
+    j.energia += g.monedas ?? 0;
+    j.accionesRestantes += g.decretos ?? 0;
+    const recibidos = [];
+    const sobran = [];
+    for (const m of g.monstruos ?? []) {
+      const i = j.box.findIndex((x, idx) => idx < 4 && !x);
+      if (i >= 0) {
+        j.box[i] = { ...m, dueno: jugadorId };
+        recibidos.push({ ...m, dueno: jugadorId });
+      } else {
+        sobran.push(m);
+      }
+    }
+    j.regalos = [...(j.regalos ?? []), {
+      id: g.id,
+      de: g.deNombre ?? "Un aliado",
+      monedas: g.monedas ?? 0,
+      decretos: g.decretos ?? 0,
+      monstruos: recibidos.map((m) => m.nivel),
+      sobran: sobran.map((m) => m.nivel),
+    }];
+    evs.push({
+      tipo: "regalo",
+      texto: `${g.deNombre ?? "Un aliado"} envía a ${j.nombre}: ${g.monedas ?? 0} monedas, ${g.decretos ?? 0} decretos y ${recibidos.length} monstruo(s).`,
+      a: jugadorId,
+    });
+  }
+}
+
 // ── Fase DECRETOS (interna: acciones) ─────────────────────────────────────
 function faseAcciones(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
+
+  /* Envío a un aliado: no es una jugada de las cartas, sino un traspaso que
+     se queda esperando al siguiente turno del destinatario. */
+  if (accion.tipo === "enviar_aliado") {
+    const para = e.jugadores[accion.para];
+    const monedas = Math.max(0, Math.floor(Number(accion.monedas) || 0));
+    const decretos = Math.max(0, Math.floor(Number(accion.decretos) || 0));
+    const ids = [...new Set((Array.isArray(accion.monstruos) ? accion.monstruos : [])
+      .filter((x) => typeof x === "string"))];
+    if (!para || !para.vivo || !esAliado(e, jugadorId, para.id)) {
+      evs.push({ tipo: "envio", texto: "No puedes enviar nada a ese jugador." });
+      return { estado: e, eventos: evs };
+    }
+    if (monedas > j.energia || decretos > j.accionesRestantes) return { estado: e, eventos: evs };
+    const monstruos = ids.map((id) => j.box.find((m) => m?.id === id)).filter(Boolean);
+    if (monstruos.length !== ids.length) return { estado: e, eventos: evs };
+    const huecos = Array.from({ length: 4 }, (_, i) => para.box?.[i]).filter((m) => !m).length;
+    if (monstruos.length > huecos) return { estado: e, eventos: evs };
+    if (!monedas && !decretos && !monstruos.length) return { estado: e, eventos: evs };
+
+    j.energia -= monedas;
+    j.accionesRestantes -= decretos;
+    for (const m of monstruos) {
+      const i = j.box.findIndex((x) => x?.id === m.id);
+      if (i >= 0) j.box[i] = null;
+    }
+    e.regalos = e.regalos ?? [];
+    e.regalos.push({
+      id: uid("g"), de: j.id, deNombre: j.nombre, para: para.id,
+      monedas, decretos, monstruos: monstruos.map((m) => ({ ...m, dueno: para.id })), luna: e.luna,
+    });
+    evs.push({ tipo: "envio", texto: `${j.nombre} envía a ${para.nombre}: ${monedas} monedas, ${decretos} decretos y ${monstruos.length} monstruo(s).`, a: para.id });
+    return { estado: e, eventos: evs };
+  }
 
   if (accion.tipo === "pasar") {
     e.fase = "descartar";
@@ -1056,7 +1149,7 @@ function legalesLanzar(e, jugadorId) {
   if (!cargadas.length) return [{ tipo: "no_lanzar", texto: "Continuar (sin lanzadera)" }];
   const acc = [];
   for (const rivalId of e.orden) {
-    if (rivalId === jugadorId) continue;
+    if (!esRival(e, jugadorId, rivalId)) continue;
     const rival = e.jugadores[rivalId];
     if (!rival.vivo) continue;
     for (const s of rival.senderos) {
@@ -1076,6 +1169,9 @@ function legalesLanzar(e, jugadorId) {
 function legalesAcciones(e, jugadorId) {
   const j = e.jugadores[jugadorId];
   const acc = [{ tipo: "pasar", texto: "Terminar decretos" }];
+  const aliadosVivos = Object.values(e.jugadores)
+    .filter((o) => o.vivo && esAliado(e, jugadorId, o.id));
+  if (aliadosVivos.length) acc.push({ tipo: "enviar_aliado", libre: true, texto: "Enviar a un aliado" });
   if (!j.accionesRestantes) return acc;
 
   for (const carta of j.mano) {
@@ -1128,7 +1224,7 @@ function legalesAcciones(e, jugadorId) {
       }
     } else if (carta.efecto === "avanzar_rival_1") {
       for (const otro of Object.values(e.jugadores)) {
-        if (otro.id === jugadorId || !otro.vivo) continue;
+        if (!otro.vivo || !esRival(e, jugadorId, otro.id)) continue;
         for (const s of otro.senderos) {
           s.posiciones.forEach((f, posicion) => {
             if (f?.tipo !== "atacante" || f.dueno !== jugadorId || f.nivel > 3) return;
@@ -1175,7 +1271,7 @@ function legalesAcciones(e, jugadorId) {
         const m = j.box[i];
         if (!m || m.nivel > 3) continue;
         for (const otro of Object.values(e.jugadores)) {
-          if (otro.id === jugadorId || !otro.vivo) continue;
+          if (!otro.vivo || !esRival(e, jugadorId, otro.id)) continue;
           for (const s of otro.senderos) {
             if (s.posiciones[0]) continue; // entrada ocupada
             acc.push({
@@ -1658,6 +1754,16 @@ function resolverCombate(atacante, defensor) {
   return { enemigoMuere: gana, monstruoSobrevive: gana };
 }
 
+function esAliado(e, a, b) {
+  return !!a && !!b && a !== b && (e.modo ?? "todos") === "equipos"
+    && e.jugadores[a]?.equipo === e.jugadores[b]?.equipo;
+}
+
+function esRival(e, a, b) {
+  return !!a && !!b && a !== b
+    && ((e.modo ?? "todos") !== "equipos" || e.jugadores[a]?.equipo !== e.jugadores[b]?.equipo);
+}
+
 function avanzarTurno(e) {
   const n = e.orden.length;
   let sig = (e.turnoIdx + 1) % n;
@@ -1690,6 +1796,28 @@ function avanzarTurno(e) {
 function comprobarFin(e) {
   if (e.final) return;
   const vivos = e.orden.filter(id => e.jugadores[id]?.vivo);
+  if (e.modo === "equipos") {
+    const equiposVivos = new Set(vivos.map(id => e.jugadores[id].equipo));
+    if (equiposVivos.size > 1 && e.luna <= 25) return;
+    const totales = new Map();
+    for (const id of e.orden) {
+      const equipo = e.jugadores[id].equipo;
+      totales.set(equipo, (totales.get(equipo) ?? 0) + e.jugadores[id].puntosMonsters);
+    }
+    const vivosSet = new Set(vivos);
+    const puestos = [...e.orden]
+      .map(id => ({ jugadorId: id, puntos: e.jugadores[id].puntosMonsters, equipo: e.jugadores[id].equipo }))
+      .sort((a, b) => {
+        const aVivo = vivosSet.has(a.jugadorId) ? 0 : 1;
+        const bVivo = vivosSet.has(b.jugadorId) ? 0 : 1;
+        if (aVivo !== bVivo) return aVivo - bVivo;
+        const ta = totales.get(a.equipo) ?? 0;
+        const tb = totales.get(b.equipo) ?? 0;
+        return ta - tb || a.puntos - b.puntos || e.orden.indexOf(a.jugadorId) - e.orden.indexOf(b.jugadorId);
+      });
+    e.final = { puestos };
+    return;
+  }
   if (vivos.length <= 1 || e.luna > 25) {
     const puestos = [...e.orden]
       .map(id => ({ jugadorId: id, puntos: e.jugadores[id].puntosMonsters }))
@@ -1757,7 +1885,7 @@ function resolverDestino(e, jugadorId, carta) {
     case "amenaza_rival": {
       const nv = nivelRealEnemigo(e, carta.nivel);
       for (const rivalId of e.orden) {
-        if (rivalId === jugadorId) continue;
+        if (!esRival(e, jugadorId, rivalId)) continue;
         const rival = e.jugadores[rivalId];
         if (!rival.vivo) continue;
         const sid = priorizarSendero(rival.senderos, carta.prio);

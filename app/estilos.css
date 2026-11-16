@@ -319,6 +319,12 @@ a { color: var(--plata); }
   border: 1px solid rgba(122, 16, 16, 0.32);
 }
 .ajustes-boton:active { background: rgba(122, 16, 16, 0.28); }
+.ajustes-boton.peligro {
+  color: #f0b0a0;
+  background: rgba(194, 112, 90, 0.18);
+  border-color: rgba(194, 112, 90, 0.45);
+}
+.ajustes-boton.peligro:active { background: rgba(194, 112, 90, 0.3); }
 .ajustes-val.bien { color: #8fbf7a; }
 .ajustes-val.mal { color: #e0533f; }
 .barra-der > .red { cursor: default; }
@@ -503,6 +509,29 @@ input::placeholder { color: var(--tinta-tenue); }
 
 .acciones-inicio { display: grid; gap: 12px; }
 
+/* Un juego de la lista: nombre, resumen y crear/entrar en la misma tarjeta. */
+.juego-slot {
+  padding: 14px;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+.juego-slot-cab {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.juego-slot-info { min-width: 0; display: grid; gap: 3px; }
+.juego-slot-nombre { font-size: 16px; line-height: 1.25; }
+.juego-slot-info small {
+  color: var(--tinta-tenue);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.juego-slot-cab .boton.chico { flex: none; }
+.juego-slot .unirse { margin-top: 12px; }
+
 .tarjeta-volver {
   display: flex;
   align-items: center;
@@ -567,6 +596,65 @@ input::placeholder { color: var(--tinta-tenue); }
 .jugador .nombre { flex: 1; font-weight: 600; font-size: 15px; }
 .jugador .nombre small { display: block; font-weight: 400; color: var(--tinta-tenue); font-size: 12px; }
 
+/* Personalización del vestíbulo: dos modos y reparto de equipos. */
+.personalizacion {
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--panel);
+}
+.personalizacion .subtitulo { margin-bottom: 8px; }
+.modo-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modo-opcion {
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: var(--radio-chico);
+  border: 1px solid var(--borde-fuerte);
+  background: var(--panel-2);
+  color: var(--tinta-suave);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.modo-opcion.on {
+  border-color: rgba(206, 214, 222, 0.55);
+  background: rgba(206, 214, 222, 0.12);
+  color: var(--tinta);
+}
+.modo-opcion:disabled { opacity: 0.65; cursor: default; }
+.equipos { list-style: none; display: grid; gap: 0; margin: 12px 0 0; padding: 0; }
+.equipo-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--borde);
+}
+.equipo-nombre { font-size: 13px; font-weight: 600; color: var(--tinta); }
+.equipo-botones { display: flex; gap: 5px; flex: none; }
+.equipo-botones button {
+  min-width: 56px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radio-chico);
+  border: 1px solid var(--borde-fuerte);
+  background: transparent;
+  color: var(--tinta-tenue);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.equipo-botones button.equipo-0 { border-color: rgba(74, 144, 217, 0.4); }
+.equipo-botones button.equipo-1 { border-color: rgba(231, 76, 60, 0.4); }
+.equipo-botones button.equipo-0.on { background: var(--ficha-mia-tinte); color: var(--ficha-mia-texto); border-color: var(--ficha-mia); }
+.equipo-botones button.equipo-1.on { background: var(--ficha-rival-tinte); color: var(--ficha-rival-texto); border-color: var(--ficha-rival); }
+.equipo-botones button:disabled { opacity: 0.7; cursor: default; }
+
 .estado-punto {
   display: inline-flex;
   align-items: center;
@@ -606,6 +694,56 @@ input::placeholder { color: var(--tinta-tenue); }
 }
 .cabecera-mesa .sala { color: var(--tinta-tenue); font-size: 12px; letter-spacing: 0.16em; }
 .cabecera-mesa .ronda { font-size: 13px; color: var(--tinta-suave); }
+
+/* El código, en la cabecera del vestíbulo: número y un solo icono para copiar. */
+.codigo-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.codigo-cabecera-valor {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  color: var(--plata-claro);
+}
+.copiar-icono {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--borde-fuerte);
+  background: rgba(206, 214, 222, 0.08);
+  color: var(--tinta-suave);
+  cursor: pointer;
+}
+.copiar-icono svg { display: block; }
+.copiar-icono.copiado { color: var(--musgo); border-color: rgba(143, 174, 99, 0.55); }
+
+/* La línea «En la mesa · 1 de 8 · faltan 1» y, a su derecha, añadir bot. */
+.mesa-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.mesa-cabecera .subtitulo { margin: 0; }
+.boton-texto {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--plata);
+  font: 600 12px/1.2 inherit;
+  letter-spacing: 0.03em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.boton-texto:disabled { opacity: 0.55; cursor: default; }
 
 .turno-aviso {
   display: flex;

@@ -116,6 +116,7 @@ export class Conexion {
   crear(juego) { return this.emitir("crear", { juego }); }
   unirse(codigo) { return this.emitir("unirse", { codigo }); }
   listo(valor) { return this.emitir("listo", { valor }); }
+  personalizar(datos) { return this.emitir("personalizar", datos); }
   empezar() { return this.emitir("empezar", {}); }
   accion(accion) { return this.emitir("accion", accion); }
   añadirBot() { return this.emitir("añadir-bot", {}); }

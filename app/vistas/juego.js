@@ -23,6 +23,28 @@ export function precargar(id) {
     .catch(() => {});
 }
 
+/* El juego cuelga de <body> el menú, la mano, los paneles, el cielo y sus
+   modales. Al salir de la mesa o al volver al vestíbulo hay que retirarlos:
+   vaciar #pantalla no se los lleva, y se quedaban encima del inicio. */
+export function limpiar() {
+  document.querySelectorAll([
+    "body > #bw-nav-global",
+    "body > .bw-mano-wrap",
+    "body > .bw-panel",
+    "body > .bw-panel-overlay",
+    "body > #bw-cielo-global",
+    "body > #bw-zonas",
+    "body > .bw-modal-fondo",
+  ].join(",")).forEach((nodo) => nodo.remove());
+  document.body.classList.remove("bw-himalaya", "mapa-himalaya", "bw-avanzando");
+  /* La hoja del juego trae sus propias variables en :root; si se queda en
+     <head>, al volver al inicio pisa los colores de la app. Se reinstala sola
+     la próxima vez que se pinte el tablero. */
+  document.getElementById("bw-css")?.remove();
+  document.documentElement.style.removeProperty("--alto-nav");
+  document.documentElement.style.removeProperty("--alto-barra");
+}
+
 export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
   const turno = mesa.jugadores.find((j) => j.id === mesa.turno);
   const ronda = mesa.publica?.ronda;

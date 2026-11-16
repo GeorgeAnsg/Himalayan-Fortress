@@ -6,8 +6,14 @@
 import { h, esc, avatarSVG, aviso } from "../ui.js";
 
 export function pintar(raiz, { usuario, sala = null, juegos = [], alCrear, alUnirse, alVolver, alSalir }) {
-  const varios = juegos.length > 1;
-  const unico = juegos[0];
+  /* Crear y entrar viven en la misma zona: el código no cambia de juego, así
+     que se escribe una vez y la mesa decide con qué se juega. */
+  const entrarHTML = `
+    <div class="unirse">
+      <input id="codigo" type="text" inputmode="text" maxlength="5" placeholder="CÓDIGO"
+             aria-label="Código de la madriguera" autocomplete="off" spellcheck="false" />
+      <button class="boton secundario" id="unirse" type="button" style="width:auto;padding:0 18px">Entrar</button>
+    </div>`;
 
   const nodo = h(`
     <section>
@@ -31,22 +37,22 @@ export function pintar(raiz, { usuario, sala = null, juegos = [], alCrear, alUni
       ` : ""}
 
       <section class="seccion" style="margin-top:22px">
-        <p class="subtitulo">Jugar</p>
+        <p class="subtitulo">Juegos</p>
         <div class="acciones-inicio">
-          ${varios
+          ${juegos.length
             ? juegos.map((j) => `
-                <button class="boton secundario" data-juego="${esc(j.id)}" type="button" style="flex-direction:column;align-items:flex-start;gap:2px;padding:15px 16px;text-align:left">
-                  <strong style="font-size:16px">${esc(j.nombre)}</strong>
-                  <small style="font-weight:400;color:var(--tinta-tenue);font-size:13px">${esc(j.resumen ?? "")}</small>
-                </button>`).join("")
-            : `<button class="boton" id="crear" type="button">Abrir una madriguera</button>`}
-
-          <div class="unirse">
-            <input id="codigo" type="text" inputmode="text" maxlength="5" placeholder="CÓDIGO"
-                   aria-label="Código de la madriguera" autocomplete="off" spellcheck="false" />
-            <button class="boton secundario" id="unirse" type="button" style="width:auto;padding:0 18px">Entrar</button>
-          </div>
-          <p class="nota">${unico ? esc(unico.nombre) + ". " : ""}Te damos un código de cinco letras para pasar.</p>
+                <article class="juego-slot">
+                  <div class="juego-slot-cab">
+                    <div class="juego-slot-info">
+                      <strong class="juego-slot-nombre">${esc(j.nombre)}</strong>
+                      <small>${esc(j.resumen ?? "")}</small>
+                    </div>
+                    <button class="boton chico" data-juego="${esc(j.id)}" type="button">Crear partida</button>
+                  </div>
+                  ${juegos.length === 1 ? entrarHTML : ""}
+                </article>`).join("")
+            : `<div class="vacio">No hay juegos instalados.</div>`}
+          ${juegos.length > 1 ? entrarHTML : ""}
         </div>
       </section>
 
@@ -65,7 +71,6 @@ export function pintar(raiz, { usuario, sala = null, juegos = [], alCrear, alUni
   `);
 
   nodo.querySelector("#volver")?.addEventListener("click", () => alVolver());
-  nodo.querySelector("#crear")?.addEventListener("click", () => alCrear(unico?.id));
 
   for (const b of nodo.querySelectorAll("[data-juego]")) {
     b.addEventListener("click", () => alCrear(b.dataset.juego));

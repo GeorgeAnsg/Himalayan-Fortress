@@ -143,6 +143,9 @@ function jugadoresPublicos(sala, usuarioId) {
     listo: !!j.listo,
     conectado: mesas.vivoDe(sala, j.id).conectado,
     tu: j.id === usuarioId,
+    equipo: sala.datos.opciones?.modo === "equipos"
+      ? (sala.datos.opciones.equipos?.[j.id] ?? 0)
+      : null,
   }));
 }
 
@@ -165,6 +168,10 @@ function vistaPara(sala, usuarioId) {
       jugadores,
       todosListos: jugadores.length > 0 && jugadores.every((j) => j.listo),
       tieneBot: juego?.bot != null,
+      personalizacion: {
+        modo: sala.datos.opciones?.modo ?? "todos",
+        equipos: { ...(sala.datos.opciones?.equipos ?? {}) },
+      },
       log: sala.log.slice(-20),
     };
   }
@@ -518,6 +525,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("listo", conMesa((sala, { valor }) => mesas.listo(usuario.id, valor)));
+  socket.on("personalizar", conMesa((sala, datos) => mesas.personalizar(usuario.id, datos)));
   socket.on("empezar", conMesa(() => mesas.empezar(usuario.id)));
   socket.on("accion", conMesa((sala, accion) => mesas.accion(usuario.id, accion)));
   socket.on("añadir-bot", conMesa(() => mesas.añadirBot(usuario.id)));

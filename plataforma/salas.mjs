@@ -46,6 +46,10 @@ export function emparejarLegal(legales, pedida) {
   const p = pedida ?? {};
   return legales.find((l) => {
     if (l.tipo !== p.tipo) return false;
+    /* Hay jugadas que el motor valida con su propio payload (por ejemplo,
+       enviar a un aliado): se marcan como libres y no se comparan campo a
+       campo; el motor comprueba cantidades, destino y jaulas. */
+    if (l.libre) return true;
     if ((l.a ?? null) !== (p.a ?? null)) return false;
     return Object.entries(p).every(
       ([k, v]) => k === "texto" || JSON.stringify(l[k]) === JSON.stringify(v)
@@ -58,6 +62,72 @@ export function limpiarCodigo(x) {
     .toUpperCase()
     .replace(/[^A-Z]/g, "")
     .slice(0, 6);
+}
+
+/* ── Personalización: todos contra todos o por equipos ─────────────────── */
+
+const MODOS = new Set(["todos", "equipos"]);
+
+function opcionesNuevas() {
+  return { modo: "todos", equipos: {} };
+}
+
+function opcionesDe(sala) {
+  if (!sala.datos.opciones || typeof sala.datos.opciones !== "object") {
+    sala.datos.opciones = opcionesNuevas();
+  }
+  const o = sala.datos.opciones;
+  if (!MODOS.has(o.modo)) o.modo = "todos";
+  if (!o.equipos || typeof o.equipos !== "object") o.equipos = {};
+  return o;
+}
+
+function equipoValido(v) {
+  return v === 0 || v === 1;
+}
+
+function limpiarEquipos(sala) {
+  const o = opcionesDe(sala);
+  for (const id of Object.keys(o.equipos)) {
+    if (!sala.datos.jugadores.some((j) => j.id === id)) delete o.equipos[id];
+  }
+}
+
+/* Reparte equipos alternos a quien no tenga uno; el anfitrión puede cambiarlos
+   después jugador a jugador. */
+function repartirEquipos(sala) {
+  const o = opcionesDe(sala);
+  limpiarEquipos(sala);
+  if (o.modo !== "equipos") {
+    o.equipos = {};
+    return;
+  }
+  sala.datos.jugadores.forEach((j, i) => {
+    if (!equipoValido(o.equipos[j.id])) o.equipos[j.id] = i % 2;
+  });
+}
+
+function reiniciarEquipos(sala) {
+  const o = opcionesDe(sala);
+  o.equipos = {};
+  if (o.modo === "equipos") {
+    sala.datos.jugadores.forEach((j, i) => { o.equipos[j.id] = i % 2; });
+  }
+}
+
+function asignarEquipo(sala, jugadorId) {
+  const o = opcionesDe(sala);
+  if (o.modo !== "equipos") {
+    delete o.equipos[jugadorId];
+    return;
+  }
+  if (equipoValido(o.equipos[jugadorId])) return;
+  const cuentas = [0, 0];
+  for (const j of sala.datos.jugadores) {
+    if (j.id === jugadorId) continue;
+    if (equipoValido(o.equipos[j.id])) cuentas[o.equipos[j.id]]++;
+  }
+  o.equipos[jugadorId] = cuentas[0] <= cuentas[1] ? 0 : 1;
 }
 
 export class Mesas {
@@ -93,6 +163,7 @@ export class Mesas {
         datos: {
           jugadores: Array.isArray(guardado.jugadores) ? guardado.jugadores : [],
           estado: guardado.estado ?? null,
+          opciones: guardado.opciones ?? opcionesNuevas(),
           final: guardado.final,
         },
         log: Array.isArray(guardado.log) ? guardado.log : [],
@@ -172,6 +243,7 @@ export class Mesas {
       datos: {
         jugadores: [{ id: usuario.id, nombre: usuario.nombre, avatar: usuario.avatar, listo: false }],
         estado: null,
+        opciones: opcionesNuevas(),
       },
       log: [{ t: Date.now(), tipo: "sala", texto: `${usuario.nombre} abre la madriguera.` }],
       actualizado: Date.now(),
@@ -194,6 +266,7 @@ export class Mesas {
     const n = sala.datos.jugadores.filter(j => j.esBot).length + 1;
     const bot = { id: `bot-${sala.codigo}-${n}`, nombre: `Bot ${n}`, avatar: "robot", listo: true, esBot: true };
     sala.datos.jugadores.push(bot);
+    asignarEquipo(sala, bot.id);
     this.anotar(sala, `Bot ${n} entra en la madriguera.`);
     this.guardar(sala);
     this.difundir(sala);
@@ -228,6 +301,7 @@ export class Mesas {
     if (sala.datos.jugadores.length >= juego.max) return { error: "La mesa está llena." };
 
     sala.datos.jugadores.push({ id: usuario.id, nombre: usuario.nombre, avatar: usuario.avatar, listo: false });
+    asignarEquipo(sala, usuario.id);
     this.vivoDe(sala, usuario.id);
     this.anotar(sala, `${usuario.nombre} entra en la madriguera.`);
     this.guardar(sala);
@@ -245,6 +319,8 @@ export class Mesas {
     const jugador = sala.datos.jugadores.find((j) => j.id === usuarioId);
     sala.datos.jugadores = sala.datos.jugadores.filter((j) => j.id !== usuarioId);
     sala.vivo.delete(usuarioId);
+    delete opcionesDe(sala).equipos[usuarioId];
+    limpiarEquipos(sala);
     this.anotar(sala, `${jugador?.nombre ?? "alguien"} sale de la madriguera.`);
 
     if (sala.datos.jugadores.length === 0) {
@@ -275,6 +351,37 @@ export class Mesas {
     return { sala };
   }
 
+  /* Solo el anfitrión cambia el modo y los equipos, y solo en el vestíbulo. */
+  personalizar(usuarioId, datos = {}) {
+    const sala = this.deUsuario(usuarioId);
+    if (!sala) return { error: "No estás en ninguna madriguera." };
+    if (sala.fase !== "vestibulo") return { error: "La partida ya empezó." };
+    if (sala.anfitrion !== usuarioId) return { error: "Solo el anfitrión puede personalizar la partida." };
+
+    const o = opcionesDe(sala);
+    const modo = datos.modo === undefined ? o.modo : String(datos.modo);
+    if (!MODOS.has(modo)) return { error: "Ese modo de juego no existe." };
+
+    if (modo !== o.modo) {
+      o.modo = modo;
+      reiniciarEquipos(sala);
+      this.anotar(sala, modo === "equipos" ? "Personalización: por equipos." : "Personalización: todos contra todos.");
+    }
+
+    if (o.modo === "equipos" && datos.equipos && typeof datos.equipos === "object") {
+      for (const j of sala.datos.jugadores) {
+        const v = Number(datos.equipos[j.id]);
+        if (equipoValido(v)) o.equipos[j.id] = v;
+      }
+      repartirEquipos(sala);
+    }
+    if (o.modo === "todos") o.equipos = {};
+
+    this.guardar(sala);
+    this.difundir(sala);
+    return { sala };
+  }
+
   /* ── Empezar y jugar ─────────────────────────────────────────────────── */
 
   empezar(usuarioId) {
@@ -290,10 +397,18 @@ export class Mesas {
     if (jugadores.length < juego.min) return { error: `Hacen falta al menos ${juego.min} jugadores.` };
     if (!jugadores.every((j) => j.listo)) return { error: "Falta alguien por decir que está listo." };
 
+    const opciones = opcionesDe(sala);
+    repartirEquipos(sala);
+    if (opciones.modo === "equipos") {
+      const equipos = new Set(Object.values(opciones.equipos));
+      if (equipos.size < 2) return { error: "Hacen falta al menos dos equipos con jugadores." };
+    }
+
     sala.semilla = Math.floor(Math.random() * 1_000_000_000);
     sala.datos.estado = juego.crear({
       jugadores: jugadores.map(({ id, nombre, avatar }) => ({ id, nombre, avatar })),
       semilla: sala.semilla,
+      opciones: { modo: opciones.modo, equipos: { ...opciones.equipos } },
     });
     sala.fase = "jugando";
     this.anotar(sala, "Empieza la partida.");
@@ -331,7 +446,8 @@ export class Mesas {
 
     let salida;
     try {
-      salida = juego.aplicar(estado, usuarioId, { ...legal });
+      const accionAplicar = legal.libre ? { ...pedida, tipo: legal.tipo } : { ...legal };
+      salida = juego.aplicar(estado, usuarioId, accionAplicar);
     } catch (err) {
       console.log(`[mesa ${sala.codigo}] el motor falló: ${err?.message ?? err}`);
       return { error: "El juego rechazó la jugada." };

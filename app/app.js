@@ -13,7 +13,7 @@ import * as sesion from "./sesion.js";
 import * as avisos from "./avisos.js";
 import * as versionMod from "./version.js";
 import { Conexion } from "./socket.js";
-import { aviso, modal, avatarSVG, esc } from "./ui.js";
+import { aviso, modal, cerrarModal, hayModal, avatarSVG, esc } from "./ui.js";
 import * as vistaEntrada from "./vistas/entrada.js";
 import * as vistaInicio from "./vistas/inicio.js";
 import * as vistaVestibulo from "./vistas/vestibulo.js";
@@ -123,11 +123,19 @@ function alRed(conectado) {
     red.classList.toggle("on", conectado);
     red.classList.toggle("off", !conectado);
   }
-  if (!conectado && estado.redAntes) {
-    aviso("Se ha cortado la conexión. Se reintenta solo.", { ms: 4000 });
+  if (!conectado && estado.redAntes && !hayModal()) {
+    /* Al perder la conexión, un único aviso modal. Al volver no se dice nada:
+       el punto de la barra ya marca que hay red y el juego sigue solo. Si ya
+       hay un modal abierto (una carta, el turno…), no se le echa encima. */
+    modal({
+      titulo: "Sin conexión",
+      texto: "Se ha perdido la conexión. Se reintenta solo.",
+      botones: [{ texto: "Entendido", estilo: "secundario", valor: "ok" }],
+      clase: "modal-conexion",
+    });
   }
   if (conectado && !estado.redAntes) {
-    aviso("Estás dentro otra vez.", { ms: 2200 });
+    if (document.querySelector(".modal.modal-conexion")) cerrarModal();
   }
   estado.redAntes = conectado;
 }
@@ -158,6 +166,10 @@ function alMesa(vista) {
 function alSinMesa() {
   estado.mesa = null;
   sesion.recordarSala(null);
+  /* La barra puede seguir (es la cuenta), pero el ciclo y los recursos de la
+     partida se apagan aquí: si no, al salir de la mesa se quedaban colgados
+     arriba a la derecha. */
+  actualizarBarra();
   if (estado.usuario) pintarInicio(null);
 }
 
@@ -175,6 +187,7 @@ function limpiar() {
 }
 
 function pintarEntrada({ codigo = null, error = null } = {}) {
+  vistaJuego.limpiar();
   limpiar();
   $barra().hidden = true;
   pintarCon(vistaEntrada, { alEnviar, codigo, error });
@@ -193,8 +206,13 @@ function pintarSinServidor() {
 }
 
 function pintarInicio(sala) {
+  /* Al volver de una mesa, el menú inferior, la mano, los paneles y el cielo
+     del juego son nodos de <body>, no de #pantalla: hay que retirarlos a mano
+     o se quedan encima del inicio. */
+  vistaJuego.limpiar();
   limpiar();
   $barra().hidden = false;
+  actualizarBarra();
   const mia = sala ?? (estado.mesa ? { codigo: estado.mesa.codigo, fase: estado.mesa.fase } : null);
   pintarCon(vistaInicio, {
     usuario: estado.usuario,
@@ -214,6 +232,7 @@ function pintarInicio(sala) {
 }
 
 function pintarVestibulo() {
+  vistaJuego.limpiar();
   limpiar();
   $barra().hidden = false;
   /* El tablero se baja ya, mientras se espera en el vestíbulo. */
@@ -221,6 +240,7 @@ function pintarVestibulo() {
   pintarCon(vistaVestibulo, {
     mesa: estado.mesa,
     alListo: (valor) => estado.conexion.listo(valor),
+    alPersonalizar: (datos) => estado.conexion.personalizar(datos),
     alEmpezar: async () => {
       const r = await estado.conexion.empezar();
       if (r?.error) aviso(r.error, { error: true });
@@ -234,9 +254,10 @@ function pintarVestibulo() {
 }
 
 function pintarMesa() {
-  limpiar();
   $barra().hidden = false;
   if (estado.mesa.fase === "final") {
+    vistaJuego.limpiar();
+    limpiar();
     pintarCon(vistaFinal, {
       mesa: estado.mesa,
       alRevancha: () => estado.conexion.revancha(),
@@ -244,6 +265,7 @@ function pintarMesa() {
     });
     return;
   }
+  limpiar();
   pintarCon(vistaJuego, {
     mesa: estado.mesa,
     alAccion: (accion) => estado.conexion.accion(accion),
@@ -351,8 +373,11 @@ function actualizarBarra() {
    juego los manda en `privada.cabecera`; si no vienen, la barra se queda como
    estaba (nombre de la app y nada más). */
 function pintarCabeceraJuego() {
-  const cab = estado.mesa?.privada?.cabecera ?? null;
-  const juegoId = estado.mesa?.juego?.id ?? null;
+  /* El ciclo y los recursos solo existen dentro de una partida. En el inicio,
+     el vestíbulo y los resultados la barra se queda con la cuenta y nada más. */
+  const enPartida = estado.mesa?.fase === "jugando";
+  const cab = enPartida ? (estado.mesa?.privada?.cabecera ?? null) : null;
+  const juegoId = enPartida ? (estado.mesa?.juego?.id ?? null) : null;
 
   const ciclo = document.getElementById("ciclo");
   if (ciclo) {
@@ -395,6 +420,9 @@ function abrirAjustes() {
           <span class="ajustes-etq">Cuenta</span>
           <span class="ajustes-val">${esc(estado.usuario.nombre)}</span>
         </div>
+        ${estado.mesa ? `<button class="ajustes-boton peligro" id="aj-salir-partida" type="button">
+          ${estado.mesa.fase === "jugando" ? "Salir de la partida" : "Salir de la mesa"}
+        </button>` : ""}
       </div>`,
     botones: [
       { texto: "Tu cuenta", valor: "cuenta" },
@@ -405,6 +433,11 @@ function abrirAjustes() {
   /* Los controles se atan en cuanto el modal está en el DOM (modal() lo pinta
      antes de devolver la promesa). */
   const caja = document.getElementById("capa");
+  caja?.querySelector("#aj-salir-partida")?.addEventListener("click", () => {
+    cerrarModal();
+    salirDeMesa();
+  });
+
   caja?.querySelector("#aj-avisos")?.addEventListener("click", async (e) => {
     const boton = e.currentTarget;
     /* Solo dos cosas: encender o apagar. Encender pide permiso al navegador

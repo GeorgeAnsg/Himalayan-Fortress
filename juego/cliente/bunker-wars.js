@@ -44,6 +44,14 @@ export function pintar(contenedor, opciones) {
     .sort((a, b) => (a.id === tu ? -1 : b.id === tu ? 1 : 0));
   turnoMesa = turnoActual ?? null;
   yoMesa = tu ?? null;
+  /* En «por equipos», los aliados son los vivos del mismo equipo (también
+     los bots del equipo); en «todos contra todos» no hay aliados. */
+  modoMesa = publica.modo ?? "todos";
+  miEquipoMesa = tableros?.[yoMesa]?.equipo ?? 0;
+  aliadosMesa = modoMesa === "equipos"
+    ? jugadoresMesa.filter((p) =>
+        p.id !== yoMesa && p.vivo !== false && (p.equipo ?? 0) === miEquipoMesa)
+    : [];
 
   /* Sin decretos no queda nada que decidir en la fase de acciones: se manda el
      pase solo, porque la pestaña de acciones ya no existe. */
@@ -148,6 +156,7 @@ export function pintar(contenedor, opciones) {
   document.querySelector("body > .bw-panel.mapa-panel")?.remove();
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
+  document.querySelector("body > .bw-panel.aliados-panel")?.remove();
   disparoPanel = null;
 
   const navEl2 = document.createElement("nav");
@@ -168,7 +177,10 @@ export function pintar(contenedor, opciones) {
     </button>
     <button class="bw-nav-tab" data-tab="manuscritos" type="button">
       <span>Manuscritos</span>
-    </button>`;
+    </button>
+    ${aliadosMesa.length ? `<button class="bw-nav-tab" data-tab="aliados" type="button">
+      <span>Aliados</span>
+    </button>` : ""}`;
   document.body.appendChild(navEl2);
 
   /* Alto real de la barra y del menú, en vivo: de ahí cuelgan el escenario, la
@@ -211,8 +223,17 @@ export function pintar(contenedor, opciones) {
   /* Torres: los tres huecos, uno por camino, con su nivel y su alzado. */
   const torresPanel = document.createElement("div");
   torresPanel.className = "bw-panel torres-panel oculto";
-  torresPanel.innerHTML = pintarTorres(yo?.bunker?.torres ?? []);
+  torresPanel.innerHTML = pintarTorres(yo?.bunker?.torres ?? [], yo?.senderos ?? []);
   document.body.appendChild(torresPanel);
+  torresPanel.addEventListener("click", (ev) => {
+    const slot = ev.target.closest("[data-disparo-slot]");
+    if (!slot) return;
+    abrirDisparo({
+      sendero: Number(slot.dataset.sendero),
+      posicion: Number(slot.dataset.posicion),
+      nivel: Number(slot.dataset.nivel),
+    });
+  });
 
   /* Mapa: el listado de rivales, en el mismo tipo de panel que las jaulas. */
   const mapaPanel = document.createElement("div");
@@ -226,6 +247,16 @@ export function pintar(contenedor, opciones) {
     const cont = document.getElementById("tablero");
     if (cont && vistaOpciones) { vistaContenedor = cont; pintar(cont, vistaOpciones); }
   });
+
+  /* Aliados: solo existe la pestaña si hay otros jugadores humanos. */
+  let aliadosPanel = null;
+  if (aliadosMesa.length) {
+    aliadosPanel = document.createElement("div");
+    aliadosPanel.className = "bw-panel aliados-panel oculto";
+    aliadosPanel.innerHTML = pintarAliados(aliadosMesa);
+    document.body.appendChild(aliadosPanel);
+    prepararAliados(aliadosPanel, aliadosMesa);
+  }
 
   /* Velo común de los paneles: difumina y tiñe la fortaleza, pero queda por
      debajo del menú para que las pestañas sigan visibles y pulsables. */
@@ -327,6 +358,7 @@ export function pintar(contenedor, opciones) {
       document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
       document.querySelector("body > .bw-panel.torres-panel")?.remove();
   document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.aliados-panel")?.remove();
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
   disparoPanel = null;
@@ -438,6 +470,7 @@ export function pintar(contenedor, opciones) {
     manPanel.classList.toggle("oculto", id !== "manuscritos");
     torresPanel.classList.toggle("oculto", id !== "torres");
     mapaPanel.classList.toggle("oculto", id !== "mapa");
+    aliadosPanel?.classList.toggle("oculto", id !== "aliados");
     manoWrap.classList.toggle("oculto", id !== "cartas");
     actualizarOverlayPaneles();
   }
@@ -452,10 +485,10 @@ export function pintar(contenedor, opciones) {
   });
   /* Se recuerda la pestaña abierta entre repintados (el servidor empuja estado
      a menudo y no queremos que el panel se cierre solo). */
-  activarTab(tabMesa);
+  activarTab(tabMesa === "aliados" && !aliadosPanel ? "cartas" : tabMesa);
 
   /* La X de la cabecera cierra el panel y devuelve la mano. */
-  [boxPanel, manPanel, torresPanel, mapaPanel].forEach((panel) => {
+  [boxPanel, manPanel, torresPanel, mapaPanel, ...(aliadosPanel ? [aliadosPanel] : [])].forEach((panel) => {
     panel.addEventListener("click", (ev) => {
       if (ev.target.closest("[data-cerrar-panel]")) activarTab("cartas");
     });
@@ -500,6 +533,18 @@ export function pintar(contenedor, opciones) {
   if (fase !== "descartar") document.getElementById("bw-modal-descartar")?.remove();
   if (fase === "descartar" && teToca && !document.getElementById("bw-modal-descartar")) {
     abrirDescarte();
+  }
+
+  /* Regalo de un aliado: la caja baja volando al empezar tus decretos y
+     después se cuenta lo que trae. Los recursos ya vienen sumados del motor. */
+  const regalos = privada?.regalos ?? [];
+  if (fase === "acciones" && teToca && !viendoJugador) {
+    const pendientes = regalos.filter((g) => !regalosVistos.has(g.id));
+    if (pendientes.length && !regaloMostrando) {
+      pendientes.forEach((g) => regalosVistos.add(g.id));
+      regaloMostrando = true;
+      setTimeout(() => mostrarRegalo(pendientes), 350);
+    }
   }
 
   /* Cajas de toque encima del tablero, solo para depurar (?zonas=1). */
@@ -861,10 +906,7 @@ function abrirDisparo({ sendero, posicion, nivel }) {
       <button class="bw-panel-x" type="button" data-cerrar-disparo aria-label="Cerrar">×</button>
     </div>
     ${html}
-    <div class="bw-disparo-botones">
-      <button type="button" class="bw-modal-usar" data-cerrar-disparo>Cerrar</button>
-      ${puede ? `<button type="button" class="bw-modal-usar bw-disparo-matar" data-disparo-matar>Matar · ${monedas} ${moneda}</button>` : ""}
-    </div>`;
+    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-disparo-matar>Matar · ${monedas} ${moneda}</button></div>` : ""}`;
   document.body.appendChild(panel);
   disparoPanel = panel;
   actualizarOverlayPaneles();
@@ -1426,8 +1468,8 @@ function pintarMiBunker(j, priv, fase) {
           <div class="capa-himalaya capa-flags"></div>
           <div class="capa-himalaya capa-flags-r"></div>
           <div class="capa-himalaya bloque-mapa">
-            <img src="${BASE_IMG}/mapas/nieve/fortress.png" class="img-fortress" alt="">
-            <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   alt="">
+            <img src="${BASE_IMG}/mapas/nieve/fortress.png" class="img-fortress" width="1178" height="1147" alt="">
+            <img src="${BASE_IMG}/mapas/nieve/stairs.png"   class="img-stairs"   width="1214" height="1812" alt="">
             <div class="fort-ui">
               <div class="fort-plat energia" style="left:20.5%;top:25.5%">
                 <div class="fort-cifra">${quedan.monedas ?? "—"}</div>
@@ -1584,35 +1626,224 @@ function pintarBox(priv) {
 }
 
 /* ── Mapa: el listado de rivales, en el mismo panel que jaulas y torres ── */
+function nombreMesa(p) {
+  if (!p.esBot && !/^bot-/i.test(p.id)) return p.nombre ?? "Jugador";
+  const bots = jugadoresMesa.filter((x) => x.esBot || /^bot-/i.test(x.id));
+  const i = bots.findIndex((x) => x.id === p.id);
+  return i <= 0 ? "Rico" : `Rico ${i + 1}`;
+}
+
 function pintarMapa() {
   const otros = jugadoresMesa.filter((p) => p.id !== yoMesa);
-  const lista = otros.length
-    ? otros.map((p) => `<button type="button" class="bw-mapa-rival" data-jugador="${esc(p.id)}">${esc(p.nombre ?? "Jugador")}</button>`).join("")
-    : `<p class="bw-mapa-vacio">No hay otros jugadores en la mesa.</p>`;
+  const enEquipos = modoMesa === "equipos";
+  const esAliado = (p) => enEquipos && (p.equipo ?? 0) === miEquipoMesa;
+  const nombreMapa = nombreMesa;
+  const tarjeta = (p) => {
+    const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
+    const torres = Array.isArray(p.bunker?.torres) ? p.bunker.torres : [];
+    const torresHtml = [0, 1, 2].map((i) => {
+      const n = Number(torres[i]?.nivel) || 0;
+      return `<span class="bw-mapa-torre ${n ? "llena" : "vacia"}" title="Torre ${i + 1}: ${n ? `nivel ${n}` : "vacía"}">${n ? `<img src="${imgTorre(n)}" alt="nivel ${n}"><b>${n}</b>` : `<i>+</i>`}</span>`;
+    }).join("");
+    const atacantes = (p.senderos ?? []).reduce((s, sd) =>
+      s + (sd.posiciones ?? []).filter((f) => f?.tipo === "atacante").length, 0);
+    return `<button type="button" class="bw-mapa-rival ${esAliado(p) ? "aliado" : "enemigo"}" data-jugador="${esc(p.id)}">
+      <span class="bw-mapa-nombre">${esc(nombreMapa(p))}</span>
+      <span class="bw-mapa-vida">Vida <b>${vida}</b>/20</span>
+      <span class="bw-mapa-torres">${torresHtml}</span>
+      <span class="bw-mapa-atac">${atacantes} atacante${atacantes === 1 ? "" : "s"}</span>
+    </button>`;
+  };
+  const aliados = enEquipos ? otros.filter(esAliado) : [];
+  const enemigos = enEquipos ? otros.filter((p) => !esAliado(p)) : otros;
+  const seccion = (titulo, lista, clase) => lista.length
+    ? `<div class="bw-mapa-seccion"><div class="bw-mapa-seccion-titulo ${clase}">${titulo}</div><div class="bw-mapa-lista">${lista.map(tarjeta).join("")}</div></div>`
+    : "";
   return `
     <div class="bw-panel-head">
-      <div class="bw-panel-label">Mapa <span class="bw-panel-sub">rivales</span></div>
+      <div class="bw-panel-label">Mapa</div>
       <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
     </div>
-    <div class="bw-mapa-lista">${lista}</div>
+    ${otros.length
+      ? `<div class="bw-mapa-secciones">${seccion("Aliados", aliados, "aliados")}${seccion("Enemigos", enemigos, "enemigos")}</div>`
+      : `<p class="bw-mapa-vacio">No hay otros jugadores en la mesa.</p>`}
   `;
 }
 
+/* ── Aliados: traspaso de monedas, decretos y monstruos ────────────────── */
+function pintarAliados(aliados) {
+  const personas = aliados.map((p) => {
+    const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
+    const huecos = Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
+    return `<button type="button" class="bw-aliados-persona" data-aliado="${esc(p.id)}">
+      <b>${esc(nombreMesa(p))}</b>
+      <small>Vida ${vida}/20 · ${huecos} hueco${huecos === 1 ? "" : "s"} de jaula</small>
+    </button>`;
+  }).join("");
+  return `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Aliados <span class="bw-panel-sub">envíos</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
+    <div class="bw-aliados-intro">Elige un aliado y lo que le mandas. Le llegará al empezar su próximo turno, antes de sus decretos.</div>
+    <div class="bw-aliados-lista">${personas}</div>
+    <div class="bw-aliados-form oculto" data-form>
+      <div class="bw-aliados-destino" data-destino></div>
+      <div class="bw-aliados-fila">
+        <span>Monedas</span>
+        <div class="bw-aliados-contador"><button type="button" data-menos="monedas">−</button><b data-valor="monedas">0</b><button type="button" data-mas="monedas">+</button></div>
+      </div>
+      <div class="bw-aliados-fila">
+        <span>Decretos</span>
+        <div class="bw-aliados-contador"><button type="button" data-menos="decretos">−</button><b data-valor="decretos">0</b><button type="button" data-mas="decretos">+</button></div>
+      </div>
+      <div class="bw-aliados-monstruos">
+        <span>Monstruos de tus jaulas</span>
+        <div class="bw-aliados-mons" data-mons></div>
+      </div>
+      <div class="bw-aliados-pie"><span data-resumen>0 monedas · 0 decretos · 0 monstruos</span><button type="button" class="bw-aliados-enviar" data-enviar disabled>Enviar</button></div>
+      <div class="bw-aliados-nota" data-nota></div>
+    </div>`;
+}
+
+function prepararAliados(panel, aliados) {
+  const form = panel.querySelector("[data-form]");
+  const destino = panel.querySelector("[data-destino]");
+  const monsWrap = panel.querySelector("[data-mons]");
+  const resumen = panel.querySelector("[data-resumen]");
+  const enviar = panel.querySelector("[data-enviar]");
+  const nota = panel.querySelector("[data-nota]");
+  let para = null;
+  let monedas = 0;
+  let decretos = 0;
+  const mons = new Set();
+
+  const huecosDe = (p) => Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
+  const maxMon = () => (para ? huecosDe(para) : 0);
+
+  const pintarMons = () => {
+    const disponibles = (boxActual ?? []).slice(0, 4).filter(Boolean);
+    if (!disponibles.length) {
+      monsWrap.innerHTML = `<p class="bw-aliados-vacio">No tienes monstruos en las jaulas.</p>`;
+      return;
+    }
+    monsWrap.innerHTML = disponibles.map((m) => `
+      <button type="button" class="bw-aliados-mon${mons.has(m.id) ? " sel" : ""}" data-mon="${esc(m.id)}" title="Monstruo nivel ${m.nivel}">
+        <img src="${imgMonstruo(m.nivel)}" alt="monstruo"><b>${m.nivel ?? "?"}</b>
+      </button>`).join("");
+  };
+
+  const refrescar = () => {
+    if (!para) return;
+    panel.querySelector('[data-valor="monedas"]').textContent = monedas;
+    panel.querySelector('[data-valor="decretos"]').textContent = decretos;
+    for (const b of monsWrap.querySelectorAll("[data-mon]")) b.classList.toggle("sel", mons.has(b.dataset.mon));
+    const total = monedas + decretos + mons.size;
+    resumen.textContent = `${monedas} moneda${monedas === 1 ? "" : "s"} · ${decretos} decreto${decretos === 1 ? "" : "s"} · ${mons.size} monstruo${mons.size === 1 ? "" : "s"}`;
+    const enFase = tocaMesa && faseMesa === "acciones";
+    enviar.disabled = !enFase || total <= 0 || mons.size > maxMon();
+    if (!tocaMesa) nota.textContent = "Espera a que te toque para enviar.";
+    else if (faseMesa !== "acciones") nota.textContent = "Solo puedes enviar en tu fase de decretos.";
+    else if (!total) nota.textContent = "Elige monedas, decretos o algún monstruo.";
+    else if (mons.size > maxMon()) nota.textContent = `En ${nombreMesa(para)} solo hay ${maxMon()} hueco(s) de jaula.`;
+    else nota.textContent = "Le llegará en su próximo turno, antes de sus decretos.";
+  };
+
+  const elegir = (p) => {
+    para = p;
+    monedas = 0;
+    decretos = 0;
+    mons.clear();
+    form.classList.remove("oculto");
+    destino.textContent = `Para ${nombreMesa(p)} · vida ${Math.max(0, 20 - (p.puntosMonsters ?? 0))}/20`;
+    pintarMons();
+    refrescar();
+  };
+
+  panel.addEventListener("click", async (ev) => {
+    const persona = ev.target.closest("[data-aliado]");
+    if (persona) {
+      const p = aliados.find((a) => a.id === persona.dataset.aliado);
+      if (p) elegir(p);
+      return;
+    }
+    if (!para) return;
+    const mas = ev.target.closest("[data-mas]");
+    const menos = ev.target.closest("[data-menos]");
+    if (mas || menos) {
+      const clave = (mas || menos).dataset[mas ? "mas" : "menos"];
+      const delta = mas ? 1 : -1;
+      if (clave === "monedas") monedas = Math.max(0, Math.min(energiaMesa, monedas + delta));
+      if (clave === "decretos") decretos = Math.max(0, Math.min(accionesRestantesMesa, decretos + delta));
+      refrescar();
+      return;
+    }
+    const mon = ev.target.closest("[data-mon]");
+    if (mon) {
+      const id = mon.dataset.mon;
+      if (mons.has(id)) mons.delete(id);
+      else if (mons.size >= maxMon()) { aviso(`En ${nombreMesa(para)} no queda ningún hueco de jaula.`, { error: true }); return; }
+      else mons.add(id);
+      refrescar();
+      return;
+    }
+    if (!ev.target.closest("[data-enviar]")) return;
+    if (!enviarAccion || !para) return;
+    const total = monedas + decretos + mons.size;
+    if (!total) return;
+    enviar.disabled = true;
+    const r = await enviarAccion({ tipo: "enviar_aliado", para: para.id, monedas, decretos, monstruos: [...mons] });
+    if (r?.error) { aviso(r.error, { error: true }); refrescar(); return; }
+    aviso(`Enviado a ${nombreMesa(para)}. Le llegará en su próximo turno.`);
+    monedas = 0;
+    decretos = 0;
+    mons.clear();
+    pintarMons();
+    refrescar();
+  });
+}
+
 /* ── Torres: un hueco por camino, con el nivel encima y el camino debajo ── */
-function pintarTorres(torres) {
+function pintarTorres(torres, senderos = []) {
   const lista = Array.isArray(torres) ? torres : [];
   const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
+  const senderosLista = Array.isArray(senderos) ? senderos : [];
   const torre = (i) => {
     const n = Number(lista[i]?.nivel) || 0;
-    const nombre = n ? `Torre ${ROMANOS[n] ?? n}` : "Torre";
     const dentro = n
       ? `<img src="${imgTorre(n)}" class="bw-box-img" alt="torre nivel ${n}">`
       : `<span class="bw-box-x">+</span>`;
+    /* Sin el texto «Torre»: el nivel va en el mismo círculo con número que
+       llevan los monstruos arriba a la derecha. */
+    const nivel = n
+      ? `<b class="bw-box-nv" title="Torre nivel ${n}">${n}</b>`
+      : "";
+    const sendero = senderosLista[i];
+    const fichas = [0, 1, 2, 3].map((paso) =>
+      sendero?.posiciones?.[paso] ?? (sendero?.monstruos ?? []).find((m) => m.pos === paso) ?? null);
+    const atacantes = fichas.filter((f) => f?.tipo === "atacante").length;
+    const hueco = (paso) => {
+      const f = fichas[paso];
+      const numero = paso + 1;
+      if (!f) {
+        return `<div class="bw-box-slot bw-torre-slot vacio" title="Peldaño ${numero}: libre"><span class="bw-torre-step">${numero}</span></div>`;
+      }
+      const nivel = f.nivel ?? f.fuerza ?? "?";
+      const atacante = f.tipo === "atacante";
+      const attrs = atacante
+        ? ` data-disparo-slot data-sendero="${sendero?.id ?? i + 1}" data-posicion="${paso}" data-nivel="${nivel}"`
+        : "";
+      const titulo = atacante
+        ? `Atacante nivel ${nivel} en el peldaño ${numero}: toca para disparar`
+        : `Tu monstruo nivel ${nivel} en el peldaño ${numero}`;
+      return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}"${attrs} title="${titulo}"><img src="${imgMonstruo(nivel, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivel}</b><span class="bw-torre-step">${numero}</span></div>`;
+    };
     return `
       <div class="bw-torre">
-        <div class="bw-torre-nv">${nombre}</div>
-        <div class="bw-box-slot ${n ? "lleno" : "vacio"}">${dentro}</div>
         <div class="bw-torre-camino">${caminos[i]}</div>
+        <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}">${dentro}${nivel}</div>
+        ${atacantes ? `<div class="bw-torre-cuenta hay">${atacantes} atacante${atacantes === 1 ? "" : "s"}</div>` : ""}
+        <div class="bw-torre-slots">${[3, 2, 1, 0].map(hueco).join("")}</div>
       </div>`;
   };
   return `
@@ -1972,6 +2203,9 @@ let lunaMesa = 1;
 let jugadoresMesa = [];
 let turnoMesa = null;
 let yoMesa = null;
+let modoMesa = "todos";
+let miEquipoMesa = 0;
+let aliadosMesa = [];
 let tabMesa = "cartas";
 /* Visita a la fortaleza de otro jugador desde la pestaña Mapa. */
 let viendoJugador = null;
@@ -1980,8 +2214,36 @@ let vistaOpciones = null;
 let vistaRival = false;
 /* Panel de matar monstruo, abierto encima del menú como los demás. */
 let disparoPanel = null;
+/* Regalos ya enseñados en esta sesión: el motor los conserva para que no se
+   pierda el aviso, y el cliente no los repite en cada repintado. */
+const regalosVistos = new Set();
+let regaloMostrando = false;
+
+function mostrarRegalo(regalos) {
+  const img = document.createElement("img");
+  img.className = "bw-regalo-volando";
+  img.src = `${BASE_IMG}/reward-box.png`;
+  img.alt = "";
+  document.body.appendChild(img);
+  setTimeout(() => {
+    img.remove();
+    const lineas = (regalos ?? []).map((g) => {
+      const cosas = [];
+      if (g.monedas) cosas.push(`${g.monedas} moneda${g.monedas === 1 ? "" : "s"}`);
+      if (g.decretos) cosas.push(`${g.decretos} decreto${g.decretos === 1 ? "" : "s"}`);
+      if (g.monstruos?.length) cosas.push(`${g.monstruos.length} monstruo${g.monstruos.length === 1 ? "" : "s"} de nivel ${g.monstruos.join(", ")}`);
+      if (g.sobran?.length) cosas.push(`${g.sobran.length} monstruo(s) no cupieron en las jaulas`);
+      return `<li><b>${esc(g.de ?? "Un aliado")}</b>: ${cosas.join(", ") || "un saludo"}.</li>`;
+    }).join("");
+    Promise.resolve(modal({
+      titulo: "Regalo de aliado",
+      html: `<p>Te ha llegado un envío a la fortaleza:</p><ul class="bw-regalo-lista">${lineas}</ul><p>Las monedas y los decretos ya están sumados; los monstruos, en las jaulas libres.</p>`,
+      botones: [{ texto: "Recoger", estilo: "principal", valor: "ok" }],
+    })).finally(() => { regaloMostrando = false; });
+  }, 1200);
+}
 function actualizarOverlayPaneles() {
-  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel"];
+  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel", ".aliados-panel"];
   const abierto = !!disparoPanel || paneles.some((s) => {
     const p = document.querySelector(`body > .bw-panel${s}`);
     return p && !p.classList.contains("oculto");
@@ -2308,6 +2570,7 @@ function pintarVistaRival(contenedor, publica, id) {
   document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
   document.querySelector("body > .bw-panel.torres-panel")?.remove();
   document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.aliados-panel")?.remove();
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
   disparoPanel = null;
@@ -2505,7 +2768,8 @@ function css() {
     }
     /* Box panel: flota encima del nav */
     .bw-panel.box-panel, .bw-panel.acciones-panel, .bw-panel.manuscritos-panel,
-    .bw-panel.torres-panel, .bw-panel.mapa-panel, .bw-panel.disparo-panel {
+    .bw-panel.torres-panel, .bw-panel.mapa-panel, .bw-panel.aliados-panel,
+    .bw-panel.disparo-panel {
       position:fixed !important;
       bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
       left:0 !important; right:0 !important;
@@ -2517,7 +2781,7 @@ function css() {
     /* El panel de jaulas flota justo encima del menú, con el ribete de piedra
        arriba y abajo (más fino que el del modal). */
     .bw-panel.box-panel, .bw-panel.manuscritos-panel, .bw-panel.torres-panel,
-    .bw-panel.mapa-panel, .bw-panel.disparo-panel {
+    .bw-panel.mapa-panel, .bw-panel.aliados-panel, .bw-panel.disparo-panel {
       padding:26px 14px 22px;
       background-color:rgba(27,23,19,.97);
       background-image:url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png');
@@ -2547,7 +2811,7 @@ function css() {
     .bw-panel-x:active { color:#fff; }
     .box-panel .bw-panel-label, .manuscritos-panel .bw-panel-label,
     .torres-panel .bw-panel-label, .mapa-panel .bw-panel-label,
-    .disparo-panel .bw-panel-label {
+    .aliados-panel .bw-panel-label, .disparo-panel .bw-panel-label {
       font:700 18px/1.25 ui-serif, Georgia, serif;
       text-transform:none; letter-spacing:.01em;
       color:#f4ecdd; text-align:center;
@@ -2579,21 +2843,119 @@ function css() {
     .bw-panel-sub { font-weight:400; text-transform:none; letter-spacing:0; }
     .bw-slot-sub { font-size:10px; color:#8b7e6b; }
     .bw-cajas { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .bw-torres { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; align-items:start; }
+    .bw-torres { display:grid; grid-template-columns:repeat(3,1fr);
+                 gap:clamp(10px, 4vw, 16px); align-items:start; }
     .bw-torre { display:flex; flex-direction:column; align-items:center; min-width:0; }
     .bw-torre-nv { font:700 13px/1.25 ui-serif, Georgia, serif; color:#d9cbb6;
                    text-align:center; margin-bottom:3px; }
     .bw-torre-camino { font:400 11px/1.25 ui-serif, Georgia, serif; color:#b8ab96;
-                       text-align:center; margin-top:3px; }
+                       text-align:center; margin:0 0 5px; }
+    /* La torre y los cuatro peldaños, todos del mismo tamaño. El lado se
+       adapta al ancho de la pantalla y al de su columna: 72 px como máximo,
+       y encoge en pantallas estrechas para no salirse del panel. */
+    .bw-box-slot.bw-torre-img { width:min(72px, 22vw, 100%); }
+    /* Los cuatro peldaños del camino, en vertical y en orden 4→1, como suben
+       los monstruos: mismo hueco cuadrado que las jaulas. */
+    .bw-torre-cuenta { margin:2px 0 0; text-align:center;
+                       font:700 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+                       color:#8b7e6b; }
+    .bw-torre-cuenta.hay { color:#e08a7e; }
+    .bw-torre-slots { display:flex; flex-direction:column; margin-top:10px;
+                      align-items:center; gap:5px; width:100%; }
+    .bw-box-slot.bw-torre-slot { position:relative; z-index:1;
+                                 width:min(72px, 22vw, 100%); cursor:default; }
+    .bw-torre-slot.vacio { cursor:default; }
+    .bw-torre-slot.defensor { cursor:default; }
+    .bw-torre-slot.atacante { cursor:pointer; border-color:#b0453a; }
+    .bw-torre-slot.atacante .bw-box-nv { background:rgba(176,58,44,.95); }
+    .bw-torre-step { position:absolute; left:3px; bottom:2px; pointer-events:none;
+                     font:700 9px/1 ui-monospace, monospace; color:rgba(244,236,221,.55); }
+    .bw-torre-slot.lleno .bw-torre-step { color:rgba(27,23,19,.62); }
+    .bw-torre-slot.vacio .bw-torre-step { position:static; font-size:10px;
+                                         color:#8b7e6b; }
+    .bw-mapa-secciones { display:flex; flex-direction:column; gap:14px; }
+    .bw-mapa-seccion-titulo { margin-bottom:6px; font:800 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+                              letter-spacing:.12em; text-transform:uppercase; }
+    .bw-mapa-seccion-titulo.aliados { color:#6cc6e0; }
+    .bw-mapa-seccion-titulo.enemigos { color:#e08a7e; }
     .bw-mapa-lista { display:flex; flex-direction:column; gap:8px; }
     .bw-mapa-rival {
-      width:100%; padding:12px 14px; border-radius:9px;
-      background:rgba(244,236,221,.07); border:1px solid rgba(244,236,221,.18);
-      color:#f4ecdd; font:700 15px/1.2 ui-serif, Georgia, serif;
-      text-align:center; cursor:pointer;
+      width:100%; display:grid; grid-template-columns:1fr auto; gap:5px 8px;
+      padding:10px 12px; border-radius:9px; border:2px solid transparent;
+      background:rgba(244,236,221,.05); color:#f4ecdd;
+      text-align:left; cursor:pointer;
     }
-    .bw-mapa-rival:active { background:rgba(244,236,221,.16); }
+    .bw-mapa-rival.enemigo { border-color:#b0453a; background:rgba(176,58,44,.12); }
+    .bw-mapa-rival.aliado { border-color:#2f8fbf; background:rgba(47,143,191,.12); }
+    .bw-mapa-rival:active { filter:brightness(1.15); }
+    .bw-mapa-nombre { font:700 15px/1.2 ui-serif, Georgia, serif; }
+    .bw-mapa-vida { align-self:center; font:700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+                    color:#d9cbb6; }
+    .bw-mapa-vida b { color:#fff; }
+    .bw-mapa-torres { grid-column:1 / -1; display:flex; gap:5px; align-items:center; }
+    .bw-mapa-torre { position:relative; width:30px; height:30px; border-radius:6px;
+                     border:1px dashed rgba(244,236,221,.28); display:grid; place-items:center;
+                     background:rgba(0,0,0,.18); }
+    .bw-mapa-torre.llena { border:1.5px solid #179494; background:#e8ddc8; }
+    .bw-mapa-torre img { width:92%; height:92%; object-fit:contain; }
+    .bw-mapa-torre b { position:absolute; top:-4px; right:-4px; min-width:13px; height:13px;
+                       border-radius:999px; background:#179494; color:#fff;
+                       font:800 8px/13px ui-monospace, monospace; text-align:center; }
+    .bw-mapa-torre i { font:800 16px/1 ui-sans-serif, system-ui, sans-serif; color:#8b7e6b; font-style:normal; }
+    .bw-mapa-atac { grid-column:1 / -1; font:700 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+                    color:#e08a7e; }
     .bw-mapa-vacio { margin:0; text-align:center; color:#8b7e6b; font-size:13px; }
+    /* Aliados: el mismo panel de mapa, con contadores y monstruos del box. */
+    .bw-aliados-intro { margin:-8px 0 10px; color:#b8ab96; font:400 11px/1.35 ui-serif, Georgia, serif;
+                        text-align:center; }
+    .bw-aliados-lista { display:flex; flex-direction:column; gap:7px; }
+    .bw-aliados-persona { width:100%; display:flex; flex-direction:column; gap:3px; text-align:left;
+                          padding:10px 12px; border-radius:9px; cursor:pointer;
+                          border:1px solid rgba(47,143,191,.65); background:rgba(47,143,191,.12);
+                          color:#f4ecdd; }
+    .bw-aliados-persona b { font:700 15px/1.2 ui-serif, Georgia, serif; }
+    .bw-aliados-persona small { font:400 10px/1.2 ui-sans-serif, system-ui, sans-serif; color:#9fc9df; }
+    .bw-aliados-persona:active { filter:brightness(1.15); }
+    .bw-aliados-form { margin-top:12px; padding-top:12px; border-top:1px solid rgba(244,236,221,.16);
+                       display:flex; flex-direction:column; gap:9px; }
+    .bw-aliados-form.oculto { display:none; }
+    .bw-aliados-destino { font:700 13px/1.25 ui-serif, Georgia, serif; color:#8fd4ea; text-align:center; }
+    .bw-aliados-fila { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                       font:700 12px/1.2 ui-sans-serif, system-ui, sans-serif; color:#d9cbb6; }
+    .bw-aliados-contador { display:flex; align-items:center; gap:8px; }
+    .bw-aliados-contador button { width:30px; height:30px; border-radius:7px; border:1px solid rgba(244,236,221,.3);
+                                  background:rgba(244,236,221,.1); color:#f4ecdd; font:800 17px/1 ui-sans-serif; cursor:pointer; }
+    .bw-aliados-contador button:active { background:rgba(244,236,221,.24); }
+    .bw-aliados-contador b { min-width:18px; text-align:center; font:800 14px/1 ui-monospace, monospace; color:#fff; }
+    .bw-aliados-monstruos { display:flex; flex-direction:column; gap:5px;
+                            font:700 12px/1.2 ui-sans-serif, system-ui, sans-serif; color:#d9cbb6; }
+    .bw-aliados-mons { display:flex; gap:6px; flex-wrap:wrap; }
+    .bw-aliados-mon { position:relative; width:52px; aspect-ratio:1; border-radius:8px; overflow:hidden;
+                      border:1.5px solid rgba(244,236,221,.25); background:#e8ddc8; cursor:pointer; padding:0; }
+    .bw-aliados-mon img { width:100%; height:100%; object-fit:contain; }
+    .bw-aliados-mon b { position:absolute; top:2px; right:2px; min-width:15px; height:15px; border-radius:999px;
+                        background:rgba(23,148,148,.95); color:#fff; font:800 9px/15px ui-monospace; text-align:center; }
+    .bw-aliados-mon.sel { border-color:#f4ecdd; box-shadow:0 0 0 2px #179494; }
+    .bw-aliados-vacio { margin:0; color:#8b7e6b; font:400 11px/1.3 ui-serif, Georgia, serif; }
+    .bw-aliados-pie { display:flex; align-items:center; justify-content:space-between; gap:10px;
+                      padding-top:2px; }
+    .bw-aliados-pie span { font:700 10px/1.25 ui-sans-serif, system-ui, sans-serif; color:#b8ab96; }
+    .bw-aliados-enviar { flex:0 0 auto; padding:12px 18px; border-radius:9px; border:0; cursor:pointer;
+                         background:linear-gradient(180deg,#7fc9dd,#2f8fbf 55%,#226f96); color:#08222c;
+                         font:800 13px/1.2 ui-serif, Georgia, serif; }
+    .bw-aliados-enviar:disabled { opacity:.4; cursor:default; }
+    .bw-aliados-nota { font:400 10px/1.3 ui-serif, Georgia, serif; color:#8b7e6b; text-align:center; }
+    /* Caja del regalo que baja desde arriba al empezar los decretos. */
+    .bw-regalo-lista { margin:8px 0 0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
+    .bw-regalo-volando { position:fixed; z-index:9500; left:50%; top:-100px; width:86px; height:auto;
+                         transform:translateX(-50%); pointer-events:none;
+                         filter:drop-shadow(0 8px 12px rgba(0,0,0,.55));
+                         animation:bw-regalo-baja 1.2s cubic-bezier(.2,.7,.3,1) forwards; }
+    @keyframes bw-regalo-baja {
+      0% { top:-100px; transform:translateX(-50%) rotate(-7deg); }
+      70% { top:42vh; transform:translateX(-50%) rotate(3deg); }
+      100% { top:52vh; transform:translateX(-50%) rotate(0deg); opacity:1; }
+    }
     /* Velo de los paneles: por debajo del menú, para que se siga viendo. */
     .bw-panel-overlay {
       position:fixed; inset:0; z-index:280;
@@ -2602,10 +2964,14 @@ function css() {
     }
     .bw-panel-overlay.oculto { display:none; }
     .bw-panel.disparo-panel { max-height:80vh; overflow-y:auto; z-index:290; }
-    .bw-disparo-botones { display:flex; gap:8px; margin-top:14px; }
+    /* Torres necesita más alto: cuatro peldaños en vertical bajo cada una. */
+    .bw-panel.torres-panel { max-height:70vh; padding-bottom:34px; }
+    .bw-panel.mapa-panel { padding-bottom:34px; }
+    .bw-panel.aliados-panel { max-height:70vh; }
+    .bw-disparo-botones { margin-top:14px; }
     .bw-disparo-botones .bw-modal-usar {
-      flex:1; width:auto; padding:10px 12px; border-radius:9px;
-      font:700 13px/1.2 ui-serif, Georgia, serif;
+      width:100%; padding:16px 12px; border-radius:9px;
+      font:700 14px/1.2 ui-serif, Georgia, serif;
     }
     .bw-disparo-botones .bw-disparo-matar {
       background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
@@ -3235,7 +3601,8 @@ function cssAdicional() {
     }
     body.bw-himalaya .bw-panel.box-panel, body.bw-himalaya .bw-panel.acciones-panel,
     body.bw-himalaya .bw-panel.manuscritos-panel, body.bw-himalaya .bw-panel.torres-panel,
-    body.bw-himalaya .bw-panel.mapa-panel, body.bw-himalaya .bw-panel.disparo-panel {
+    body.bw-himalaya .bw-panel.mapa-panel, body.bw-himalaya .bw-panel.aliados-panel,
+    body.bw-himalaya .bw-panel.disparo-panel {
       bottom: var(--alto-nav, 34px) !important;
       /* Mismo negro que la barra del menú */
       background: #000 !important;
@@ -3247,6 +3614,7 @@ function cssAdicional() {
     body.bw-himalaya .bw-panel.manuscritos-panel,
     body.bw-himalaya .bw-panel.torres-panel,
     body.bw-himalaya .bw-panel.mapa-panel,
+    body.bw-himalaya .bw-panel.aliados-panel,
     body.bw-himalaya .bw-panel.disparo-panel {
       bottom: var(--alto-nav, 34px) !important;
       background-color: rgba(27,23,19,.97) !important;
@@ -3640,11 +4008,16 @@ function cssAdicional() {
     .bloque-mapa .img-fortress {
       display:block;
       width:96%; margin:0 auto;
+      /* El alto se reserva con la proporción del arte antes de que la imagen
+         llegue: si no, la escalera y el tablero se colocaban con el hueco a 0
+         y las fichas aparecían descolocadas hasta el siguiente repintado. */
+      height:auto; aspect-ratio:1178 / 1147;
       position:relative; z-index:1;
     }
     .bloque-mapa .img-stairs {
       display:block;
       width:100%;
+      height:auto; aspect-ratio:1214 / 1812;
       /* El solape va en % del ancho (ver --solape-escalera en .mundo): fijo en
          px, la escalera se despegaba de la fortaleza al cambiar el tamaño. */
       margin-top:calc(-1 * var(--solape-escalera));
