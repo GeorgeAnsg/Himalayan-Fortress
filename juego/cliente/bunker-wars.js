@@ -226,6 +226,13 @@ export function pintar(contenedor, opciones) {
   torresPanel.innerHTML = pintarTorres(yo?.bunker?.torres ?? [], yo?.senderos ?? []);
   document.body.appendChild(torresPanel);
   torresPanel.addEventListener("click", (ev) => {
+    /* El hueco de la torre (el + o la torre ya construida) abre el mismo panel
+       que el hueco de la fortaleza: construir o mejorar desde los dos sitios. */
+    const torreSlot = ev.target.closest("[data-torre-pos]");
+    if (torreSlot) {
+      abrirTorre(Number(torreSlot.dataset.torrePos));
+      return;
+    }
     const slot = ev.target.closest("[data-disparo-slot]");
     if (!slot) return;
     abrirDisparo({
@@ -399,57 +406,7 @@ export function pintar(contenedor, opciones) {
   /* Torres: el hueco con el + abre construir y la torre abre mejorarla. El
      nivel 3 es el máximo y para subir hace falta la armería del nivel nuevo. */
   for (const el of contenedor.querySelectorAll("[data-pos-torre]")) {
-    el.addEventListener("click", async () => {
-      const pos = Number(el.dataset.posTorre);
-      const torres = yo?.bunker?.torres ?? [];
-      const t = torres[pos - 1] ?? null;
-      const armeria = yo?.bunker?.armeria ?? 0;
-      if (faseMesa !== "acciones" || !tocaMesa) {
-        aviso("Las torres se construyen en tu fase de decretos.", { error: true });
-        return;
-      }
-      if (accionesRestantesMesa <= 0) {
-        aviso("Ya no te quedan decretos este turno.", { error: true });
-        return;
-      }
-      if (!t) {
-        if (energiaMesa < 1) { aviso("Construir una torre cuesta 1 moneda.", { error: true }); return; }
-        const r = await modal({
-          titulo: "Torre",
-          texto: `Escalera ${pos}. Construir una torre de nivel 1 cuesta 1 moneda y 1 decreto.`,
-          botones: [
-            { texto: "Cancelar", estilo: "secundario", valor: null },
-            { texto: "Construir", estilo: "principal", valor: "ok" },
-          ],
-        });
-        if (r !== "ok" || !enviarAccion) return;
-        const res = await enviarAccion({ tipo: "construir_torreta", posicion: pos });
-        if (res?.error) aviso(res.error, { error: true });
-        return;
-      }
-      const nv = t.nivel ?? 1;
-      const siguiente = nv + 1;
-      const alTope = nv >= 3;
-      const faltaArmeria = !alTope && siguiente > armeria;
-      const puedeSubir = !alTope && !faltaArmeria && energiaMesa >= 1;
-      const motivo = alTope
-        ? "Ya está en el nivel máximo (3)."
-        : faltaArmeria
-          ? `Para subir al nivel ${siguiente} necesitas armería ${siguiente} (tienes ${armeria}).`
-          : energiaMesa < 1
-            ? "Subir de nivel cuesta 1 moneda y no te queda ninguna."
-            : `Subir al nivel ${siguiente} cuesta 1 moneda y 1 decreto.`;
-      const botones = [{ texto: "Cerrar", estilo: "secundario", valor: null }];
-      if (puedeSubir) botones.push({ texto: `Subir a nivel ${siguiente}`, estilo: "principal", valor: "ok" });
-      const r = await modal({
-        titulo: `Torre nivel ${nv}`,
-        texto: `Escalera ${pos}. Dispara a su propia escalera con ${nv} de daño (1 menos en las demás). ${motivo}`,
-        botones,
-      });
-      if (r !== "ok" || !enviarAccion) return;
-      const res = await enviarAccion({ tipo: "evolucionar_torreta", posicion: pos });
-      if (res?.error) aviso(res.error, { error: true });
-    });
+    el.addEventListener("click", () => abrirTorre(Number(el.dataset.posTorre)));
   }
 
   /* Atacantes: al tocar una ficha que sube, el cálculo de las torres para
@@ -888,7 +845,6 @@ function abrirDisparo({ sendero, posicion, nivel }) {
 
   const html = `
     <div class="bw-disparo">
-      <div class="bw-disparo-cab">Atacante nivel <b>${nivel}</b> en la escalera <b>${sendero}</b>, peldaño <b>${posicion + 1}</b>.</div>
       ${filas || `<div class="bw-disparo-cab">No tienes torres construidas.</div>`}
       <div class="bw-disparo-total"><span>Daño total</span><b>${plan.alcanza ? nivel : plan.capacidad} / ${nivel}</b></div>
       <div class="bw-disparo-coste"><span>Coste</span><b>${plan.alcanza ? `${monedas} ${moneda} + 1 decreto` : "—"}</b></div>
@@ -915,6 +871,89 @@ function abrirDisparo({ sendero, posicion, nivel }) {
     if (!ev.target.closest("[data-disparo-matar]")) return;
     if (!accion || !enviarAccion) return;
     const res = await enviarAccion(accion);
+    if (res?.error) aviso(res.error, { error: true });
+    cerrarDisparo();
+  });
+}
+
+/* ── Torre: construir o mejorar, en el mismo panel inferior ───────────────
+   Es el mismo panel que «Matar monstruo»: sube desde abajo, sobre el menú y
+   con el velo detrás. Se abre desde el hueco de la fortaleza y desde el hueco
+   de la pestaña Torres. Sin la línea «Atacante…»: aquí no hay atacante, y el
+   monstruo ya se ve en el tablero. */
+function abrirTorre(posicion) {
+  const pos = Number(posicion);
+  if (!pos || pos < 1 || pos > 3) return;
+
+  const yo = jugadoresMesa.find((p) => p.id === yoMesa) ?? null;
+  const torres = yo?.bunker?.torres ?? [];
+  const t = torres[pos - 1] ?? null;
+  const nv = Number(t?.nivel) || 0;
+  const esNueva = nv <= 0;
+  const siguiente = nv + 1;
+  const armeria = yo?.bunker?.armeria ?? 0;
+  const alTope = !esNueva && nv >= 3;
+  const faltaArmeria = !esNueva && !alTope && siguiente > armeria;
+  const enDecretos = tocaMesa && faseMesa === "acciones";
+  const sinDecretos = accionesRestantesMesa <= 0;
+  const sinMoneda = energiaMesa < 1;
+  const puede = enDecretos && !sinDecretos && !sinMoneda
+    && (esNueva || (!alTope && !faltaArmeria));
+
+  let problema = "";
+  if (!tocaMesa) {
+    problema = "No es tu turno: espera a que te toque.";
+  } else if (!enDecretos) {
+    problema = "Las torres se construyen en tu fase de decretos.";
+  } else if (sinDecretos) {
+    problema = "No te quedan decretos este turno.";
+  } else if (esNueva && sinMoneda) {
+    problema = "Construir una torre cuesta 1 moneda.";
+  } else if (alTope) {
+    problema = "Ya está en el nivel máximo (3).";
+  } else if (faltaArmeria) {
+    problema = `Para subir al nivel ${siguiente} necesitas armería ${siguiente} (tienes ${armeria}).`;
+  } else if (!esNueva && sinMoneda) {
+    problema = "Subir de nivel cuesta 1 moneda.";
+  }
+
+  const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
+  const html = `
+    <div class="bw-disparo">
+      <div class="bw-disparo-cab">Escalera <b>${pos}</b> · ${caminos[pos - 1]}.</div>
+      <div class="bw-disparo-fila">
+        <span class="bw-disparo-t">${esNueva ? "Torre sin construir" : "Torre"}</span>
+        <span class="bw-disparo-n">${esNueva ? "hueco libre" : `nivel ${nv}`}</span>
+        <b class="bw-disparo-d">${esNueva ? "—" : nv}</b>
+      </div>
+      <div class="bw-disparo-total"><span>Coste</span><b>1 moneda + 1 decreto</b></div>
+      ${!esNueva ? `<div class="bw-disparo-coste"><span>Daño</span><b>${nv} en su escalera</b></div>` : ""}
+      ${problema ? `<div class="bw-disparo-aviso">${problema}</div>` : ""}
+    </div>`;
+
+  /* Mismo panel que el ataque: fijo abajo, encima del menú y con el velo. */
+  disparoPanel?.remove();
+  const panel = document.createElement("div");
+  panel.className = "bw-panel disparo-panel";
+  panel.innerHTML = `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">${esNueva ? "Construir torre" : `Torre nivel ${nv}`}</div>
+      <button class="bw-panel-x" type="button" data-cerrar-torre aria-label="Cerrar">×</button>
+    </div>
+    ${html}
+    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-torre-accion>${esNueva ? "Construir" : `Subir a nivel ${siguiente}`} · 1 moneda</button></div>` : ""}`;
+  document.body.appendChild(panel);
+  disparoPanel = panel;
+  actualizarOverlayPaneles();
+
+  panel.addEventListener("click", async (ev) => {
+    if (ev.target.closest("[data-cerrar-torre]")) { cerrarDisparo(); return; }
+    const boton = ev.target.closest("[data-torre-accion]");
+    if (!boton || !enviarAccion) return;
+    boton.disabled = true;
+    const res = await enviarAccion(esNueva
+      ? { tipo: "construir_torreta", posicion: pos }
+      : { tipo: "evolucionar_torreta", posicion: pos });
     if (res?.error) aviso(res.error, { error: true });
     cerrarDisparo();
   });
@@ -1821,7 +1860,6 @@ function pintarTorres(torres, senderos = []) {
     const sendero = senderosLista[i];
     const fichas = [0, 1, 2, 3].map((paso) =>
       sendero?.posiciones?.[paso] ?? (sendero?.monstruos ?? []).find((m) => m.pos === paso) ?? null);
-    const atacantes = fichas.filter((f) => f?.tipo === "atacante").length;
     const hueco = (paso) => {
       const f = fichas[paso];
       const numero = paso + 1;
@@ -1841,8 +1879,7 @@ function pintarTorres(torres, senderos = []) {
     return `
       <div class="bw-torre">
         <div class="bw-torre-camino">${caminos[i]}</div>
-        <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}">${dentro}${nivel}</div>
-        ${atacantes ? `<div class="bw-torre-cuenta hay">${atacantes} atacante${atacantes === 1 ? "" : "s"}</div>` : ""}
+        <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}" data-torre-pos="${i + 1}" title="${n ? `Torre nivel ${n}: toca para mejorar` : "Hueco libre: toca para construir"}">${dentro}${nivel}</div>
         <div class="bw-torre-slots">${[3, 2, 1, 0].map(hueco).join("")}</div>
       </div>`;
   };
