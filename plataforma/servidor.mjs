@@ -143,6 +143,7 @@ function jugadoresPublicos(sala, usuarioId) {
     listo: !!j.listo,
     conectado: mesas.vivoDe(sala, j.id).conectado,
     tu: j.id === usuarioId,
+    esBot: !!j.esBot,
     equipo: sala.datos.opciones?.modo === "equipos"
       ? (sala.datos.opciones.equipos?.[j.id] ?? 0)
       : null,
@@ -158,7 +159,7 @@ function vistaPara(sala, usuarioId) {
       tipo: "vestibulo",
       version: versionAhora(),
       codigo: sala.codigo,
-      juego: { id: sala.juego, nombre: juego?.nombre ?? sala.juego },
+      juego: { id: sala.juego, nombre: juego?.nombre ?? sala.juego, sinPersonalizacion: juego?.sinPersonalizacion ?? false },
       min: juego?.min ?? 2,
       max: juego?.max ?? 8,
       fase: sala.fase,
@@ -171,6 +172,14 @@ function vistaPara(sala, usuarioId) {
       personalizacion: {
         modo: sala.datos.opciones?.modo ?? "todos",
         equipos: { ...(sala.datos.opciones?.equipos ?? {}) },
+        personajes: { ...(sala.datos.opciones?.personajes ?? {}) },
+        registroTotal: sala.datos.opciones?.registroTotal ?? true,
+        habsConfig: sala.datos.opciones?.habsConfig ?? null,
+        habsInicio: sala.datos.opciones?.habsInicio ?? null,
+        /* Tamaño de la mesa elegido por el anfitrión (humanos + bots). */
+        nJugadores: Number.isFinite(sala.datos.opciones?.nJugadores)
+          ? sala.datos.opciones.nJugadores
+          : null,
       },
       log: sala.log.slice(-20),
     };
@@ -209,6 +218,19 @@ function vistaPara(sala, usuarioId) {
       }
     : null;
 
+  /* El cuaderno de cada uno (cuántos definitivos lleva) para el ranking. En la
+     app original lo llevaba el servidor por socket y por eso el ranking se
+     actualizaba solo: aquí los clientes avisan al rellenar y esto lo reparte. */
+  const ranking = jugadores.map((j) => {
+    const c = sala.datos.cuadernos?.[j.id];
+    return {
+      id: j.id,
+      nombre: j.nombre,
+      definitivos: c?.definitivos ?? 0,
+      total: c?.total ?? 0,
+    };
+  });
+
   return {
     tipo: "vista",
     version: versionAhora(),
@@ -219,6 +241,7 @@ function vistaPara(sala, usuarioId) {
     soyAnfitrion: sala.anfitrion === usuarioId,
     tu: usuarioId,
     jugadores,
+    ranking,
     turno,
     esMiTurno: turno === usuarioId,
     publica,
@@ -277,6 +300,21 @@ const httpServidor = http.createServer(async (req, res) => {
       io.emit("version", { version: v });
     }
     return json(res, 200, { version: v, arte: arteAhora() });
+  }
+
+  /* TEMPORAL: el móvil manda sus medidas para localizar el desajuste del pie
+     de la partida. Se apunta a un fichero y se quita cuando esté el arreglo. */
+  if (ruta === "/api/medir" && req.method === "POST") {
+    const cuerpo = await cuerpoJSON(req, 8000);
+    if (cuerpo) {
+      try {
+        fs.appendFileSync(
+          path.join(RAIZ, "datos", "medidas.jsonl"),
+          JSON.stringify({ cuando: new Date().toISOString(), ...cuerpo }) + "\n"
+        );
+      } catch { /* sin fichero no pasa nada */ }
+    }
+    return json(res, 200, { ok: true });
   }
 
   if (ruta === "/api/juegos") {
@@ -501,6 +539,24 @@ io.on("connection", (socket) => {
     if (typeof acuse === "function") acuse(valor);
     else if (valor?.error) socket.emit("error", { texto: valor.error });
   };
+
+  /* Cuaderno: cuántos definitivos lleva cada uno. No es una jugada (no gasta
+     acción ni toca el estado del juego), así que no pasa por `conMesa`: solo se
+     apunta y se reparte la mesa con el ranking nuevo. */
+  socket.on("cuaderno", (datos, acuse) => {
+    const actual = mesas.deUsuario(usuario.id);
+    if (!actual) return responder(acuse, { error: "No estás en ninguna madriguera." });
+    const numero = (x) => Math.max(0, Math.min(32, Math.trunc(Number(x) || 0)));
+    actual.datos.cuadernos = {
+      ...(actual.datos.cuadernos ?? {}),
+      [usuario.id]: {
+        definitivos: numero(datos?.definitivos),
+        total: numero(datos?.total),
+      },
+    };
+    difundir(actual);
+    responder(acuse, { ok: true });
+  });
 
   socket.on("crear", ({ juego } = {}, acuse) => {
     if (socket.data.version !== versionAhora()) {

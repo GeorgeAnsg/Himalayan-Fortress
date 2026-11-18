@@ -28,8 +28,19 @@ export function pintar(contenedor, opciones) {
   document.body.classList.add("bw-himalaya", "mapa-himalaya");
 
   accionesMesa = acciones ?? [];
+  /* Antes de sustituir el estado, se recuerda qué monstruos había en las
+     jaulas: si en esta vista uno aparece en la lanzadera, se le hace volar
+     desde su jaula en lugar de aparecer con un fade. */
+  const boxAntes = Array.isArray(boxActual) ? boxActual.slice() : [];
   boxActual = privada?.box ?? [];
   lanzaderasMesa = privada?.lanzaderas ?? [];
+  const lanzaderaMovidas = (lanzaderasMesa ?? []).flatMap((m, i) => {
+    if (!m?.id) return [];
+    const boxIdx = boxAntes.findIndex((x) => x?.id === m.id);
+    return boxIdx >= 0 && boxIdx < 4
+      ? [{ id: m.id, nivel: m.nivel, boxIdx, lanzadera: i }]
+      : [];
+  });
   energiaMesa = privada?.energia ?? 0;
   accionesRestantesMesa = privada?.accionesRestantes ?? 0;
   faseMesa = fase ?? null;
@@ -44,6 +55,7 @@ export function pintar(contenedor, opciones) {
     .sort((a, b) => (a.id === tu ? -1 : b.id === tu ? 1 : 0));
   turnoMesa = turnoActual ?? null;
   yoMesa = tu ?? null;
+  miTableroMesa = yo ?? null;
   /* En «por equipos», los aliados son los vivos del mismo equipo (también
      los bots del equipo); en «todos contra todos» no hay aliados. */
   modoMesa = publica.modo ?? "todos";
@@ -52,28 +64,51 @@ export function pintar(contenedor, opciones) {
     ? jugadoresMesa.filter((p) =>
         p.id !== yoMesa && p.vivo !== false && (p.equipo ?? 0) === miEquipoMesa)
     : [];
+  peticionesMesa = privada?.peticiones ?? [];
+  enviosPendientesMesa = privada?.enviosPendientes ?? [];
+  const hayPeticionesAjenas = peticionesMesa.some((p) => p.de !== yoMesa);
 
   /* Sin decretos no queda nada que decidir en la fase de acciones: se manda el
      pase solo, porque la pestaña de acciones ya no existe. */
-  if (teToca && fase === "acciones" && (privada?.accionesRestantes ?? 0) <= 0 && !pasandoAuto) {
+  /* Solo se pasa solo cuando no queda ni una moneda ni un decreto y no hay
+     aliados humanos a los que pedir ayuda: con cualquiera de esas opciones
+     todavía hay algo que el jugador puede decidir. */
+  if (teToca && fase === "acciones"
+      && (privada?.energia ?? 0) <= 0
+      && (privada?.accionesRestantes ?? 0) <= 0
+      && !aliadosMesa.some((a) => !a.esBot && !/^bot-/i.test(a.id))
+      && !pasandoAuto) {
     pasandoAuto = true;
     Promise.resolve(enviarAccion?.({ tipo: "pasar" })).finally(() => { pasandoAuto = false; });
   }
-
-  /* El repintado reconstruye todo el HTML del contenedor y eso devolvía la
-     vista arriba del todo. Se guarda dónde estaba mirando el jugador (el que
-     scrollea es #pantalla, no el contenedor) para dejarlo otra vez ahí, salvo
-     cuando toca bajar al tablero a ver el avance. */
-  const pantallaScroll = document.getElementById("pantalla");
-  /* La app vacía #pantalla antes de pedir este repintado, así que su
-     scrollTop ya vale 0: el sitio donde miraba el jugador llega en `scroll`. */
-  const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
   /* El CSS va a <head> y se queda ahí. Antes viajaba con el marcado, así que
      cada repintado (la app vacía #pantalla) lo borraba y volvía a pegarlo: se
      llegaba a ver el HUD sin estilos, texto blanco sobre negro, antes de que
      todo se recolocara. */
   instalarCss();
+
+  /* Al empezar otro turno (o otra luna) se cierra todo lo que quedara abierto
+     del turno anterior: paneles, cartas, descartes y avisos de la partida. Lo
+     único que puede abrirse a partir de aquí es el aviso de turno nuevo y, si
+     toca, la fase de lanzaderas. */
+  const claveTurno = `${luna}:${turnoActual}`;
+  if (claveTurno !== claveTurnoVista) {
+    claveTurnoVista = claveTurno;
+    cerrarUiDeTurno();
+    /* Los marcadores de la jornada son del turno anterior: si no se limpian,
+       una partida nueva con la misma luna y jugador puede saltarse la carta o
+       el avance porque cree que esa fase ya se enseñó. */
+    faseAutoHecha = null;
+    rivalLanzarElegido = null;
+    clearTimeout(relojConfirmar);
+    bloquearPorAvance(false);
+    /* La pestaña abierta se recuerda entre repintados, pero no debe sobrevivir
+       al cambio de turno: si no, el panel de aliados se reconstruye abierto en
+       cuanto llega el turno nuevo. */
+    tabMesa = "cartas";
+    viendoJugador = null;
+  }
 
   /* Modo visita: la fortaleza de otro jugador, en su estado y sin controles. */
   if (viendoJugador && publica.jugadores?.[viendoJugador]) {
@@ -86,64 +121,25 @@ export function pintar(contenedor, opciones) {
     ${yo ? pintarMiBunker(yo, privada, fase) : ""}
 
   `;
-  /* Las fichas que han avanzado esta ronda se deslizan hasta su casilla en vez
-     de aparecer de golpe en ella. Solo cuenta como ronda de monstruos lo que
-     se mueve sin ser tuyo (los que atacan tu búnker o los del enemigo) y los
-     que acaban de aparecer: ahí se baja la vista al tablero y no se puede
-     tocar nada mientras dura el deslizamiento. */
-  /* Carta de Destino que anuncia algo de las escaleras: si va a salir ahora,
-     las fichas esperan a que se cierre la carta y la vista baje al tablero. */
-  const destino = privada?.cartaDestino ?? null;
-  const tope = totalesBunker(yo?.bunker);
-  const sinGastar = (privada?.energia ?? 0) >= tope.monedas
-    && (privada?.accionesRestantes ?? 0) >= tope.monjes;
-  const esMiCarta = destino?.jugadorId === tu;
-  const saleDestino = !!destino && teToca && esMiCarta
-    && fase === "acciones" && sinGastar && claveDestino(destino) !== destinoVisto;
-  const esperaCarta = saleDestino && DESTINO_ESCALERAS.has(destino.tipo);
+  /* La jornada empieza por la lanzadera y sigue con el avance de atacantes,
+     el de defensores y la carta. Esas fases las conduce `programarJornada`
+     después de montar el tablero, para que cada movimiento tenga su tiempo. */
+  const estrenaTurno = teToca && (fase === "lanzar" || fase === "avance")
+    && claveTurno !== turnoEmpezado;
 
-  /* El estreno del turno: la primera vez que te llega en esta luna se te avisa
-     con un modal y la vista NO baja al tablero hasta que pulsas «Comenzar tu
-     turno». Cuenta cualquier fase con decisión tuya, también «lanzar»: antes
-     solo miraba «acciones», así que el modal de lanzar se adelantaba al aviso
-     y tapaba el avance de los monstruos. */
-  const claveTurno = `${luna}:${turnoActual}`;
-  const estrenaTurno = teToca && fase !== "descartar" && claveTurno !== turnoEmpezado;
+  /* La app vacía #pantalla antes de este repintado; el scroll que tenía el
+     jugador llega en `scroll`. Se devuelve para que la bajada al tablero no se
+     pierda al pasar de avance a defensores, carta, etc. */
+  const pantallaScroll = document.getElementById("pantalla");
+  const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
-  const { movidas: fichasMovidas, ajenas: ajenasMovidas, reproducir } = animarFichas(contenedor, { diferir: esperaCarta || estrenaTurno });
-  /* Si la mesa se repinta mientras el aviso de turno está abierto, las fichas
-     nuevas vuelven a quedarse en su casilla de salida y su `reproducir` es el
-     bueno: el aviso usará este, no el del pintado viejo (ya desmontado). */
-  reproducirPendiente = estrenaTurno ? reproducir : null;
-  const ajenasAhora = contenedor.querySelectorAll(".ficha.atacante, .ficha.ajena").length;
-  const aparecen = ajenasPrevias !== null && ajenasAhora > ajenasPrevias;
-  ajenasPrevias = ajenasAhora;
-  const rondaDeMonstruos = ajenasMovidas > 0 || aparecen;
-  /* Al empezar los decretos también cuentan los monstruos tuyos: son los que
-     acaban de avanzar en la fase de lanzar. Sin esto, la carta de Destino
-     salía encima del movimiento y no daba tiempo a verlo. */
-  const avanceDeTurno = rondaDeMonstruos || (saleDestino && fichasMovidas > 0);
-  avanceRetenido = esperaCarta && (fichasMovidas > 0 || aparecen) ? reproducir : null;
-  if (estrenaTurno) {
-    /* Orden del turno: aviso, avance de monstruos, lanzadera y carta. */
-    avisarTurnoNuevo(claveTurno, reproducir, {
-      hayAvance: avanceDeTurno,
-      alTerminar: () => {
-        if (fase === "lanzar") abrirLanzarSiToca();
-        else soltarTrasAvance();
-      },
+  const anim = animarFichas(contenedor);
+  if (lanzaderaMovidas.length) animarEntradaLanzadera(contenedor, lanzaderaMovidas);
+  if (entradasPendientes.length) animarEntradaBunker(contenedor, entradasPendientes);
+  if (!estrenaTurno && scrollPrevio > 0 && pantallaScroll) {
+    requestAnimationFrame(() => {
+      if (pantallaScroll.isConnected) pantallaScroll.scrollTop = scrollPrevio;
     });
-  } else if (avanceDeTurno && !esperaCarta) {
-    bajarAlTablero();
-    bloquearPorAvance(true);
-    /* El movimiento va primero y, cuando acaba, sale la carta de Destino. */
-    setTimeout(soltarTrasAvance, MS_AVANCE);
-  } else if (!rondaDeMonstruos) {
-    bloquearPorAvance(false);
-  }
-  /* Ni el aviso de turno ni la ronda mueven la vista: se queda donde estaba. */
-  if (!rondaDeMonstruos && !estrenaTurno && scrollPrevio > 0 && pantallaScroll && pantallaScroll.scrollTop !== scrollPrevio) {
-    pantallaScroll.scrollTop = scrollPrevio;
   }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */
@@ -157,6 +153,7 @@ export function pintar(contenedor, opciones) {
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
   document.querySelector("body > .bw-panel.aliados-panel")?.remove();
+
   disparoPanel = null;
 
   const navEl2 = document.createElement("nav");
@@ -175,12 +172,14 @@ export function pintar(contenedor, opciones) {
     <button class="bw-nav-tab" data-tab="mapa" type="button">
       <span>Mapa</span>
     </button>
-    <button class="bw-nav-tab" data-tab="manuscritos" type="button">
-      <span>Manuscritos</span>
-    </button>
     ${aliadosMesa.length ? `<button class="bw-nav-tab" data-tab="aliados" type="button">
-      <span>Aliados</span>
-    </button>` : ""}`;
+      <span class="bw-nav-label">Aliados${hayPeticionesAjenas
+        ? `<span class="bw-nav-badge" title="Hay peticiones de otros aliados" aria-label="Hay peticiones de otros aliados">!</span>`
+        : ""}</span>
+    </button>` : ""}
+    <button class="bw-nav-tab" data-tab="manuscritos" type="button">
+      <span>Reglas</span>
+    </button>`;
   document.body.appendChild(navEl2);
 
   /* Alto real de la barra y del menú, en vivo: de ahí cuelgan el escenario, la
@@ -233,6 +232,17 @@ export function pintar(contenedor, opciones) {
       abrirTorre(Number(torreSlot.dataset.torrePos));
       return;
     }
+    /* Un monstruo mío en su peldaño: encima sale el panel de avanzar/atacar. */
+    const mio = ev.target.closest("[data-mover-slot]");
+    if (mio) {
+      abrirMonstruo({
+        sendero: Number(mio.dataset.sendero),
+        posicion: Number(mio.dataset.posicion),
+        id: mio.dataset.ficha,
+        nivel: Number(mio.dataset.nivel),
+      });
+      return;
+    }
     const slot = ev.target.closest("[data-disparo-slot]");
     if (!slot) return;
     abrirDisparo({
@@ -260,7 +270,7 @@ export function pintar(contenedor, opciones) {
   if (aliadosMesa.length) {
     aliadosPanel = document.createElement("div");
     aliadosPanel.className = "bw-panel aliados-panel oculto";
-    aliadosPanel.innerHTML = pintarAliados(aliadosMesa);
+    aliadosPanel.innerHTML = pintarAliados(aliadosMesa, peticionesMesa, enviosPendientesMesa);
     document.body.appendChild(aliadosPanel);
     prepararAliados(aliadosPanel, aliadosMesa);
   }
@@ -324,6 +334,14 @@ export function pintar(contenedor, opciones) {
       return;
     }
     abrirCarta(carta);
+  });
+
+  /* Enlace «pasar turno» de la franja del HUD. */
+  contenedor.querySelector(".bw-hud-pasar")?.addEventListener("click", async (ev) => {
+    if (!enviarAccion || !tocaMesa) return;
+    ev.currentTarget.disabled = true;
+    const r = await enviarAccion({ tipo: "saltar_turno" });
+    if (r?.error) { aviso(r.error, { error: true }); ev.currentTarget.disabled = false; }
   });
 
   /* Acciones legales */
@@ -419,6 +437,21 @@ export function pintar(contenedor, opciones) {
     }));
   }
 
+  /* Mis monstruos en mis escaleras: avanzar o atacar. En la visita a otra
+     fortaleza esas fichas no son mías y no responden. */
+  for (const el of contenedor.querySelectorAll(".ficha.mia")) {
+    if (vistaRival) break;
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      abrirMonstruo({
+        sendero: Number(el.dataset.sendero),
+        posicion: Number(el.dataset.pos),
+        id: el.dataset.fid,
+        nivel: Number(el.dataset.nivel),
+      });
+    });
+  }
+
   /* Tabs de navegación inferior */
   function activarTab(id) {
     tabMesa = id;
@@ -451,58 +484,39 @@ export function pintar(contenedor, opciones) {
     });
   });
 
-  /* Carta de Destino: sale sola al empezar TU turno, una sola vez.
-     El motor resuelve «carta» y «monedas» de golpe, así que la pista de que
-     estás al principio del turno es que no has gastado nada: monedas y
-     decretos siguen en su tope. Con eso, si ya has jugado una carta o gastado
-     un decreto, o refrescas la app después, la carta no vuelve a salir; y en
-     monstruos, avance o lanzadera tampoco, porque en esas fases ya se gastó.
-
-     Si la carta habla de las escaleras, al cerrarla se baja al tablero y el
-     movimiento de las fichas empieza cuando la vista está abajo del todo. */
-  if (saleDestino) {
-    marcarDestinoVisto(claveDestino(destino));
-    const abrir = () => abrirDestino(destino, {
-      alCerrar: () => {
-        const retenido = avanceRetenido;
-        avanceRetenido = null;
-        if (!retenido) { bajarAlTablero(); return; }
-        bloquearPorAvance(true);
-        bajarYDespues(retenido);
-      },
-    });
-    /* La carta de Destino es POSTERIOR a la ronda de monstruos: si las fichas
-       están avanzando (o esperan a que se acepte el aviso de turno), la carta
-       sale cuando terminan de moverse. Solo las cartas de escaleras se
-       adelantan, porque son las que cuentan lo que va a pasar en el tablero. */
-    /* La carta espera a que no quede nada que enseñar antes: ni aviso de
-       turno, ni avance de fichas. Si lo hay, sale al terminar. */
-    if (!estrenaTurno && (esperaCarta || !avanceDeTurno)) abrir();
-    else trasAvance = abrir;
-  }
-
-  /* Fase LANZAR: el rival se elige en un modal, no en la lista de acciones.
-     Pero solo cuando ya se ha aceptado el turno y ha terminado el avance; si
-     no, el modal tapa justo lo que hay que ver. */
-  if (!estrenaTurno && !document.body.classList.contains("bw-avanzando")) abrirLanzarSiToca();
-
-  /* Fase DESCARTAR: la mano entera en un modal, para elegir qué se tira. */
-  if (fase !== "descartar") document.getElementById("bw-modal-descartar")?.remove();
-  if (fase === "descartar" && teToca && !document.getElementById("bw-modal-descartar")) {
-    abrirDescarte();
+  /* Fase DESCARTAR: la mano entera en un modal, para elegir qué se tira. Se
+     abre al final del repintado, cuando ya se sabe cuánto dura la animación
+     de la jugada que ha cerrado el turno (ver `programarDescarte`). */
+  if (fase !== "descartar") {
+    document.getElementById("bw-modal-descartar")?.remove();
+    clearTimeout(relojDescarte);
   }
 
   /* Regalo de un aliado: la caja baja volando al empezar tus decretos y
      después se cuenta lo que trae. Los recursos ya vienen sumados del motor. */
   const regalos = privada?.regalos ?? [];
   if (fase === "acciones" && teToca && !viendoJugador) {
-    const pendientes = regalos.filter((g) => !regalosVistos.has(g.id));
+    const pendientes = regalos.filter((g) => !regalosVistos.has(g.id) && !regalosCerrados.has(g.id));
     if (pendientes.length && !regaloMostrando) {
       pendientes.forEach((g) => regalosVistos.add(g.id));
       regaloMostrando = true;
-      setTimeout(() => mostrarRegalo(pendientes), 350);
+      if (regaloProgramado) clearTimeout(regaloProgramado);
+      regaloProgramado = setTimeout(() => {
+        regaloProgramado = null;
+        mostrarRegalo(pendientes);
+      }, 350);
     }
   }
+
+  /* La secuencia de la jornada se lanza después de montar el tablero: aviso
+     de inicio, lanzaderas, atacantes, defensores y carta. */
+  programarJornada(anim, { estrenaTurno, claveTurno });
+  /* Las jugadas sueltas (avanzar, atacar, disparar…) no las anima la jornada:
+     sin esto, la ficha se quedaba en la casilla vieja hasta el repintado
+     siguiente y el movimiento no se veía nunca. El descarte espera a que esa
+     animación acabe. */
+  animarJugadaSuelta(anim);
+  if (fase === "descartar" && teToca) programarDescarte();
 
   /* Cajas de toque encima del tablero, solo para depurar (?zonas=1). */
   pintarZonas();
@@ -569,18 +583,43 @@ function pintarZonas() {
 
 /* Última casilla conocida de cada ficha, para saber cuáles se han movido. */
 const fichasPrevias = new Map();
+/* Entradas en el búnker detectadas al pintar mi tablero: un atacante que
+   estaba en la puerta y ya no está. Se animan al final del repintado. */
+let entradasPendientes = [];
+/* Vida (puntosMonsters) de mi búnker en el repintado anterior: el que entra
+   deja la casilla de la puerta vacía, pero una torre o una carta también, así
+   que solo se anima la entrada si la vida ha bajado lo que vale ese monstruo. */
+let puntosPreviosMio = null;
+/* ¿La última foto de fichas era la de mi tablero? Al volver de visitar la
+   fortaleza de otro jugador no se comparan fotos: no son las mismas fichas. */
+let fotoMia = true;
 /* Fichas de monstruos (ajenas o atacantes) que había en el tablero la última
    vez: si ahora hay más, es que acaban de aparecer. */
 let ajenasPrevias = null;
 
-/* Devuelve cuántas fichas se han movido, cuántas de ellas son monstruos que no
-   son tuyos y una función para lanzar el deslizamiento cuando toque.
+/* Ritmo de la jornada. Cada ficha se mueve por separado, con una pausa corta
+   antes de la siguiente. */
+const MS_ATAQUE = 1000;  // duración del deslizamiento de cada ficha
+const MS_PAUSA = 150;    // separación entre fichas
+const MS_BAJADA = 650;   // bajada de la vista hasta el tablero
+const MS_ESPERA_BAJADA = 250;   // quieto abajo antes de mover atacantes
+const MS_ESPERA_ATAQUE = 250;   // quieto antes de que empiece el primer atacante
+const MS_ESPERA_DEFENSA = 250;  // quieto antes de que empiece la defensa
+const MS_ESPERA_EFECTO = 300;   // quieto antes de animar lo que ha hecho la carta
+const MS_ESPERA_FIN = 300;      // margen después del último movimiento
+const MS_FICHA = MS_ATAQUE;
+const MS_LANZADERA = 700; // vuelo de la jaula a la lanzadera
+const MS_NUBE = 700;      // la nube del combate, del choque al humo
+const MS_LUCHA = MS_FICHA + MS_NUBE + 420; // fantasma + nube + desvanecido
+const duracionGrupo = (n) => (n > 0 ? n * (MS_FICHA + MS_PAUSA) - MS_PAUSA : 0);
 
-   Con `diferir` las fichas se quedan pintadas en su casilla de salida y el
-   movimiento no empieza hasta llamar a `reproducir()`: así, cuando la carta de
-   Destino anuncia algo de las escaleras, primero se cierra la carta y se baja
-   al tablero, y solo entonces se ve aparecer o avanzar a los monstruos. */
-function animarFichas(raiz, { diferir = false } = {}) {
+/* Devuelve cuántas fichas se han movido, cuántas son atacantes y funciones
+   para lanzar el deslizamiento por grupos. Todas las fichas se quedan en su
+   casilla de salida hasta que se llama a la función de su grupo.
+
+   Los atacantes se animan en la fase de avance y los defensores en la suya:
+   así nunca se mueven a la vez. */
+function animarFichas(raiz, { diferir = true } = {}) {
   let movidas = 0;
   let ajenas = 0;
   const esAjena = (el) => el.classList.contains("atacante") || el.classList.contains("ajena");
@@ -591,132 +630,430 @@ function animarFichas(raiz, { diferir = false } = {}) {
     const ot = el.dataset.ot;
     const finL = el.style.left;
     const finT = el.style.top;
+    const atacante = esAjena(el);
     el.removeAttribute("data-ol");
     el.removeAttribute("data-ot");
     if (diferir) { el.style.left = `${ol}%`; el.style.top = `${ot}%`; }
-    pendientes.push({ el, ol, ot, finL, finT });
+    pendientes.push({ el, ol, ot, finL, finT, atacante });
     movidas++;
-    if (esAjena(el)) ajenas++;
+    if (atacante) ajenas++;
   }
 
-  const reproducir = () => {
-    for (const { el, ol, ot, finL, finT } of pendientes) {
-      el.style.left = finL;
-      el.style.top = finT;
-      /* Web Animations: no hace falta que el navegador pinte antes la casilla de
-         salida, así que la ficha se desliza siempre (2 s de casilla a casilla). */
-      el.animate?.(
-        [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }],
-        { duration: 2000, easing: "cubic-bezier(.45,.05,.3,1)" }
+  /* Primero la ficha que va delante en el sentido de la marcha: así deja libre
+     la casilla en la que entra la que viene detrás y no se solapan.
+     Los atacantes suben hacia la fortaleza, o sea que el de delante es el que
+     está más arriba en el mapa (menos top). Mis monstruos bajan hacia la
+     lanzadera: empiezan los de la casilla 1, la más alejada de la fortaleza,
+     y siguen 2, 3 y 4 (la más cercana). */
+  pendientes.sort((a, b) => {
+    const da = parseFloat(a.ot) || 0;
+    const db = parseFloat(b.ot) || 0;
+    if (a.atacante !== b.atacante) return a.atacante ? -1 : 1;
+    return a.atacante ? da - db : db - da;
+  });
+
+  const reproducirLista = (lista, retardoBase = 0) => {
+    lista.forEach(({ el, ol, ot, finL, finT }, i) => {
+      const retardo = retardoBase + i * (MS_FICHA + MS_PAUSA);
+      const mover = () => {
+        /* La ficha se queda en la casilla anterior hasta su turno; solo
+           entonces se le pone el destino y se lanza el deslizamiento. Con
+           delay + fill, iOS la pintaba directamente en el destino y se veía
+           el «ploc» en vez del movimiento. */
+        el.style.left = finL;
+        el.style.top = finT;
+        el.animate?.(
+          [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }],
+          {
+            duration: MS_FICHA,
+            easing: "cubic-bezier(.45,.05,.3,1)",
+          }
+        );
+      };
+      if (retardo > 0) setTimeout(mover, retardo);
+      else mover();
+    });
+  };
+
+  /* ── Combates: el fantasma del caído y la nube del choque ──
+     El que cae se queda un momento en el tablero: si murió atacando, se
+     desliza hasta el que le planta cara; si el otro le ha quitado la casilla,
+     espera donde estaba y el ganador se le echa encima. Después sale la nube
+     de polvo, se apaga y se queda el que ha ganado. */
+  const fantasmas = [...raiz.querySelectorAll(".ficha.fantasma[data-lucha]")];
+  /* `llegada`: cuánto tarda en llegar el que ataca a la casilla del otro. La
+     nube entra con su fundido justo antes, así que se abre del todo cuando el
+     que se acerca ya está encima. */
+  const pelear = (fantasma, llegada = null) => {
+    if (fantasma.dataset.hecha) return;
+    fantasma.dataset.hecha = "1";
+    const nube = raiz.querySelector(`.bw-nube[data-nube="${fantasma.dataset.lucha}"]`);
+    const dl = `${fantasma.dataset.dl}%`;
+    const dt = `${fantasma.dataset.dt}%`;
+    fantasma.style.display = "block";
+    /* Si el que cae murió atacando, es él quien se acerca al otro. */
+    let propia = 0;
+    if (fantasma.style.left !== dl || fantasma.style.top !== dt) {
+      const ol = fantasma.style.left;
+      const ot = fantasma.style.top;
+      fantasma.style.left = dl;
+      fantasma.style.top = dt;
+      fantasma.animate?.(
+        [{ left: ol, top: ot }, { left: dl, top: dt }],
+        { duration: MS_FICHA, easing: "cubic-bezier(.45,.05,.3,1)" },
       );
+      propia = MS_FICHA;
     }
+    const entra = Math.max(0, (llegada ?? propia) - 160);
+    setTimeout(() => {
+      nube?.classList.add("on");
+      /* El caído se va ya tapado por la nube, sin otro fundido a la vista: al
+         irse la nube queda solo el que ha ganado. */
+      setTimeout(() => fantasma.remove(), 220);
+      setTimeout(() => nube?.classList.add("sale"), MS_NUBE);
+      setTimeout(() => nube?.remove(), MS_NUBE + 420);
+    }, entra);
+  };
+  const reproducirLuchas = (grupo, retardoBase = 0, movers = []) => {
+    const luchasG = fantasmas.filter((g) => g.dataset.grupo === grupo);
+    for (const g of luchasG) {
+      const id = g.dataset.ganador;
+      const i = id ? movers.findIndex((p) => p.el.dataset.fid === id) : -1;
+      const llegada = i >= 0 ? i * (MS_FICHA + MS_PAUSA) + MS_FICHA : null;
+      setTimeout(() => pelear(g, llegada), retardoBase);
+    }
+    return luchasG.length;
+  };
+
+  const reproducir = (retardoBase = 0) => reproducirLista(pendientes, retardoBase);
+  const reproducirAtacantes = (retardoBase = 0) => {
+    const lista = pendientes.filter(p => p.atacante);
+    reproducirLista(lista, retardoBase);
+    reproducirLuchas("atacantes", retardoBase, lista);
+  };
+  const reproducirDefensores = (retardoBase = 0) => {
+    const lista = pendientes.filter(p => !p.atacante);
+    reproducirLista(lista, retardoBase);
+    reproducirLuchas("defensores", retardoBase, lista);
   };
 
   if (!diferir) reproducir();
-  return { movidas, ajenas, reproducir };
-}
-
-/* Lleva la pantalla hasta abajo y, cuando deja de moverse, hace lo que le
-   manden. Se usa para que la animación no se gaste mientras todavía se está
-   desplazando la vista. */
-function bajarYDespues(alBajar) {
-  const pantalla = document.getElementById("pantalla");
-  if (!pantalla?.scrollTo) { alBajar?.(); return; }
-  pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" });
-  let ultima = pantalla.scrollTop;
-  let quieta = 0;
-  let frames = 0;
-  const paso = () => {
-    const y = pantalla.scrollTop;
-    quieta = Math.abs(y - ultima) < 1 ? quieta + 1 : 0;
-    ultima = y;
-    /* Dos frames sin moverse o 1,2 s de tope: la vista ya está abajo. */
-    if (quieta >= 2 || ++frames > 72) { alBajar?.(); return; }
-    requestAnimationFrame(paso);
+  const luchasDe = (grupo) => fantasmas.filter((g) => g.dataset.grupo === grupo).length;
+  return {
+    movidas, ajenas, reproducir,
+    reproducirAtacantes, reproducirDefensores,
+    ataques: pendientes.filter(p => p.atacante).length,
+    defensores: pendientes.filter(p => !p.atacante).length,
+    /* Lo que dura de más la pelea de ese grupo (0 si no hay ninguna). */
+    extraLuchas: (grupo) => (luchasDe(grupo) ? MS_LUCHA : 0),
   };
-  requestAnimationFrame(paso);
 }
 
-/* Tipos de carta de Destino que hablan de las escaleras: monstruos que llegan,
-   que avanzan, que se retiran, que cambian de nivel… Si sale una de estas, la
-   vista baja al tablero antes de que se muevan las fichas. */
-const DESTINO_ESCALERAS = new Set([
-  "amenaza", "amenaza_doble", "amenaza_triple", "amenaza_rival",
-  "colocar_monstruos", "aniquilar_entrada", "aniquilar_nivel", "matar_mayor",
-  "avanzar_extra", "miedo", "convertir_aliado", "subir_monstruos", "bajar_monstruos",
-]);
-/* Avance retenido a la espera de que se cierre la carta de Destino. */
-let avanceRetenido = null;
+/* Una ficha que va de una jaula a su lanzadera vuela hasta el círculo. El
+   repintado reconstruye el tablero, así que la jaula de origen ya no tiene la
+   imagen: se toma el hueco y se anima una copia desde su centro hasta la
+   lanzadera. La imagen real queda oculta hasta que termina el vuelo. */
+function animarEntradaLanzadera(raiz, movidas) {
+  requestAnimationFrame(() => {
+    for (const m of movidas) {
+      const origen = raiz.querySelectorAll(".fort-slot")[m.boxIdx];
+      const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${m.lanzadera + 1}"]`);
+      const img = destino?.querySelector(".lanzadera-img");
+      if (!origen || !destino || !img) continue;
 
-/* Lo que se suelta cuando termina la ronda de monstruos (2 s de deslizamiento):
-   ahora mismo, la carta de Destino del turno. */
-const MS_AVANCE = 2100;
-let trasAvance = null;
-/* Último `reproducir()` de un pintado con el aviso de turno abierto. */
-let reproducirPendiente = null;
-function soltarTrasAvance() {
-  const f = trasAvance;
-  trasAvance = null;
-  f?.();
+      const caja = origen.getBoundingClientRect();
+      const fin = img.getBoundingClientRect();
+      if (!caja.width || !fin.width) continue;
+
+      destino.classList.add("lz-recibiendo");
+      const fantasma = document.createElement("img");
+      fantasma.src = img.src;
+      fantasma.alt = "";
+      fantasma.className = "bw-lz-vuelo";
+
+      const ini = {
+        left: caja.left + caja.width / 2,
+        top: caja.top + caja.height / 2,
+        width: Math.max(22, caja.width * 0.72),
+      };
+      ini.height = ini.width * (fin.height / fin.width);
+      const finPunto = {
+        left: fin.left + fin.width / 2,
+        top: fin.top + fin.height / 2,
+        width: fin.width,
+        height: fin.height,
+      };
+      Object.assign(fantasma.style, {
+        left: `${ini.left}px`, top: `${ini.top}px`,
+        width: `${ini.width}px`, height: `${ini.height}px`,
+      });
+      document.body.appendChild(fantasma);
+
+      const terminar = () => {
+        fantasma.remove();
+        destino.classList.remove("lz-recibiendo");
+      };
+      const animacion = fantasma.animate?.(
+        [
+          { left: `${ini.left}px`, top: `${ini.top}px`, width: `${ini.width}px`, height: `${ini.height}px` },
+          { left: `${finPunto.left}px`, top: `${finPunto.top}px`, width: `${finPunto.width}px`, height: `${finPunto.height}px` },
+        ],
+        { duration: MS_LANZADERA, easing: "cubic-bezier(.45,.05,.3,1)" }
+      );
+      if (animacion?.finished) animacion.finished.then(terminar, terminar);
+      else if (animacion) setTimeout(terminar, MS_LANZADERA);
+      else terminar();
+    }
+  });
 }
 
-/* Ronda de monstruos: la vista baja sola hasta el tablero, que es donde ocurre
-   el avance, para no perderse la animación de 2 s. */
-function bajarAlTablero() {
-  const pantalla = document.getElementById("pantalla");
-  if (!pantalla?.scrollTo) return;
-  /* Dos pasadas: la primera coloca el final actual y la segunda, tras el
-     repintado, ajusta por si la escena ha cambiado de alto. */
-  pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" });
-  requestAnimationFrame(() => pantalla.scrollTo({ top: pantalla.scrollHeight, behavior: "smooth" }));
+/* ── Entrada en el búnker ─────────────────────────────────────────────────
+   Cuando un atacante pisa la puerta y entra, desaparece del tablero y la vida
+   baja. Sin nada en pantalla parecía que la vida se perdía sola, así que se
+   dibuja una copia en la puerta, sube hacia las torres y se desvanece, con la
+   nube del combate a los pies: ha peleado en la puerta para quitarnos vida. */
+const SUBIDA_ENTRADA = 4.4; // % del alto del tablero: ~30 px en un móvil
+/* La vida que se lleva, en un círculo rojo que sale de la puerta y sube
+   apagándose: «-1» (o el nivel que sea), junto al humo, para que se vea de
+   dónde sale la vida que baja. */
+const SUBIDA_VIDA = 7.6;  // % del alto: el número pasa por encima de las torres
+const MS_VIDA = 1150;     // lo que tarda en salir y desvanecerse
+function animarEntradaBunker(raiz, entradas) {
+  const capa = raiz.querySelector(".bw-fichas");
+  if (!capa) return;
+  entradas.forEach(({ l, t, nivel }, i) => {
+    const ficha = document.createElement("div");
+    ficha.className = "ficha atacante bw-entrando";
+    ficha.style.left = `${l}%`;
+    ficha.style.top = `${t}%`;
+    ficha.innerHTML = `<img src="${imgMonstruo(nivel, true)}" alt="" class="ficha-img"><b class="ficha-nv">${nivel}</b>`;
+    const nube = document.createElement("div");
+    nube.className = "bw-nube bw-nube-puerta";
+    nube.style.left = `${l}%`;
+    nube.style.top = `${t}%`;
+    nube.innerHTML = `<img src="${BASE_IMG}/nube-combate.png" alt="">`;
+    const vida = document.createElement("div");
+    vida.className = "bw-vida";
+    vida.style.left = `${l}%`;
+    vida.style.top = `${t}%`;
+    vida.textContent = `-${nivel}`;
+    capa.append(ficha, nube, vida);
+
+    /* De una en una, como las demás fichas de la jornada. */
+    const arranque = i * (MS_FICHA / 2);
+    setTimeout(() => {
+      nube.classList.add("on");
+      ficha.animate?.(
+        [
+          { top: `${t}%`, opacity: 1 },
+          { top: `${Number(t) - SUBIDA_ENTRADA}%`, opacity: 0 },
+        ],
+        { duration: MS_ATAQUE * 0.7, easing: "ease-in", fill: "forwards" },
+      );
+      if (!ficha.animate) ficha.style.opacity = "0";
+      /* El «-N» sale de la puerta, sube y se apaga. */
+      vida.animate?.(
+        [
+          { top: `${t - 0.6}%`, opacity: 0, transform: "translate(-50%,-50%) scale(.55)" },
+          { top: `${t - SUBIDA_VIDA * 0.35}%`, opacity: 1, offset: 0.3, transform: "translate(-50%,-50%) scale(1)" },
+          { top: `${t - SUBIDA_VIDA}%`, opacity: 0, transform: "translate(-50%,-50%) scale(.92)" },
+        ],
+        { duration: MS_VIDA, easing: "ease-out", fill: "forwards" },
+      );
+    }, arranque);
+    setTimeout(() => nube.classList.add("sale"), arranque + MS_NUBE);
+    setTimeout(() => { nube.remove(); ficha.remove(); }, arranque + MS_NUBE + 420);
+    setTimeout(() => vida.remove(), arranque + MS_VIDA + 120);
+  });
 }
 
 /* Turno cuyo aviso de «Es tu turno» ya se ha aceptado. Se guarda en el propio
    navegador para que, si cierras la app a mitad de turno y vuelves, no se repita
-   ni el aviso ni el desplazamiento: la clave lleva la luna y el jugador, así que
-   en el turno siguiente vuelve a salir. */
+   el aviso: la clave lleva la luna y el jugador, así que en el turno siguiente
+   vuelve a salir. */
 const LS_TURNO = "bw-turno-empezado";
 const leerTurnoEmpezado = () => { try { return localStorage.getItem(LS_TURNO); } catch { return null; } };
 function guardarTurnoEmpezado(clave) { try { localStorage.setItem(LS_TURNO, clave); } catch { /* sin almacenamiento */ } }
 let turnoEmpezado = leerTurnoEmpezado();
 
-/* Aviso de turno nuevo: se ve como el resto de modales de la app, con el texto
-   arriba y un solo botón. Al pulsarlo se cierra y solo entonces la vista baja
-   al tablero para ver la ronda de monstruos. */
-function avisarTurnoNuevo(clave, reproducir, { hayAvance = false, alTerminar = null } = {}) {
-  /* Si hay otro modal encima (carta de Destino, aviso de la mesa) no se pisa:
-     ya saldrá en el siguiente repintado. */
-  if (document.querySelector(".bw-modal-fondo")) return;
-  const capa = document.getElementById("capa");
-  if (capa && !capa.hidden) return;
-  /* Mismo modal que el aviso de versión nueva: el marco de piedra con el texto
-     dentro y el botón gris debajo, a lo ancho. */
-  modal({
-    titulo: "",
-    texto: "Es tu turno",
-    clase: "modal-version",
-    botones: [{ texto: "Comenzar tu turno", estilo: "boton", valor: "ok" }],
-    obligatorio: true,
-  }).then(() => {
-    turnoEmpezado = clave;
-    guardarTurnoEmpezado(clave);
-    /* Se bloquea ya, antes de empezar a bajar la vista: si el servidor empuja
-       estado mientras la pantalla se desplaza, el modal de lanzar no puede
-       colarse por delante de la animación. */
-    bloquearPorAvance(true);
-    bajarYDespues(() => {
-      (reproducirPendiente ?? reproducir)?.();
-      reproducirPendiente = null;
-      const soltar = () => {
-        bloquearPorAvance(false);
-        alTerminar?.();
-      };
-      /* Con movimiento, deja que se vea entero (2 s) antes de abrir nada: la
-         lanzadera o la carta de Destino. */
-      if (hayAvance) setTimeout(soltar, MS_AVANCE);
-      else soltar();
-    });
+/* ── Secuencia de la jornada ──────────────────────────────────────────────
+   El motor para en cada fase para que se vea: avance de atacantes, avance de
+   defensores, carta y carta resuelta. Aquí se encadenan las animaciones y se
+   manda el «confirmar» cuando la pantalla ha terminado de enseñar cada paso. */
+let faseAutoHecha = null;
+let claveTurnoVista = null;
+let relojConfirmar = null;
+let avisoInicioAbierto = false;
+/* Rival elegido en el modal de lanzaderas: se conserva al lanzar una de las
+   dos lanzaderas para que la segunda siga en la misma fortaleza. */
+let rivalLanzarElegido = null;
+
+/* Baja la vista hasta el tablero con una duración fija: primero se ve el
+   terreno y después se mueven las fichas. */
+function bajarAlTablero(ms = MS_BAJADA) {
+  const pantalla = document.getElementById("pantalla");
+  if (!pantalla) return Promise.resolve();
+  const desde = pantalla.scrollTop;
+  const hasta = Math.max(0, pantalla.scrollHeight - pantalla.clientHeight);
+  if (Math.abs(hasta - desde) < 2) return Promise.resolve();
+  return new Promise((resolver) => {
+    const t0 = performance.now();
+    const paso = (ahora) => {
+      const k = Math.min(1, (ahora - t0) / ms);
+      const suave = 1 - Math.pow(1 - k, 3);
+      pantalla.scrollTop = desde + (hasta - desde) * suave;
+      if (k < 1) requestAnimationFrame(paso);
+      else resolver();
+    };
+    requestAnimationFrame(paso);
   });
+}
+
+function confirmarFase(ms = 0) {
+  clearTimeout(relojConfirmar);
+  relojConfirmar = setTimeout(async () => {
+    if (!enviarAccion) return;
+    bloquearPorAvance(false);
+    const r = await enviarAccion({ tipo: "confirmar" });
+    if (r?.error) aviso(r.error, { error: true });
+  }, ms);
+}
+
+function animarYConfirmar(anim, fn, n, { antes = 0, despues = MS_ESPERA_FIN } = {}) {
+  bloquearPorAvance(true);
+  /* Se llama siempre: sin fichas que mover puede haber una pelea que enseñar. */
+  if (fn) fn(antes);
+  confirmarFase(antes + duracionGrupo(n) + despues);
+}
+
+function iniciarFase(anim) {
+  if (!tocaMesa || viendoJugador) return;
+  if (faseMesa === "lanzar") { abrirLanzarSiToca(); return; }
+
+  const clave = `${lunaMesa}:${turnoMesa}:${faseMesa}`;
+  if (faseAutoHecha === clave) return;
+
+  if (faseMesa === "avance") {
+    /* El motor todavía no ha movido nada: primero se baja al tablero, se deja
+       un instante de espera y al confirmar se aplica el avance de atacantes.
+       Sin un solo atacante en los caminos no hay avance que enseñar: se pasa
+       al tirón y la carta de Destino sale sin ese hueco. */
+    faseAutoHecha = clave;
+    if (!hayAtacantesEnCaminos()) { confirmarFase(0); return; }
+    bloquearPorAvance(true);
+    bajarAlTablero().then(() => confirmarFase(MS_ESPERA_BAJADA));
+    return;
+  }
+  if (faseMesa === "defensores") {
+    /* Aquí llegan los atacantes ya movidos: se animan antes de pasar a la
+       carta. Si no se ha movido ninguno ni hay pelea, no se espera. */
+    faseAutoHecha = clave;
+    const extra = anim.extraLuchas("atacantes");
+    if (!anim.ataques && !extra) { confirmarFase(0); return; }
+    animarYConfirmar(anim, anim.reproducirAtacantes, anim.ataques, {
+      antes: MS_ESPERA_ATAQUE,
+      despues: MS_ESPERA_FIN + extra,
+    });
+    return;
+  }
+  if (faseMesa === "carta") {
+    /* Aquí llegan los defensores ya movidos: se animan y, al terminar, se
+       pide la carta. Sin defensores que mover (ni pelea), directo a la carta. */
+    faseAutoHecha = clave;
+    const extra = anim.extraLuchas("defensores");
+    if (!anim.defensores && !extra) { confirmarFase(0); return; }
+    animarYConfirmar(anim, anim.reproducirDefensores, anim.defensores, {
+      antes: MS_ESPERA_DEFENSA,
+      despues: MS_ESPERA_FIN + extra,
+    });
+    return;
+  }
+  if (faseMesa === "carta_ver") {
+    faseAutoHecha = clave;
+    const carta = privadaMesa?.cartaDestino ?? null;
+    if (!carta) { confirmarFase(0); return; }
+    marcarDestinoVisto(claveDestino(carta));
+    abrirDestino(carta, {
+      alCerrar: () => {
+        /* El efecto se aplica en el servidor al confirmar; no se anima hasta
+           que llegue la fase carta_efecto, ya sin el modal delante. */
+        bloquearPorAvance(true);
+        confirmarFase(0);
+      },
+    });
+    return;
+  }
+  if (faseMesa === "carta_efecto") {
+    /* La carta ya está cerrada: ahora se ve lo que ha hecho (entradas,
+       retrocesos, avances extra…) antes de pasar a monedas. */
+    faseAutoHecha = clave;
+    animarYConfirmar(anim, anim.reproducir, anim.movidas, {
+      antes: MS_ESPERA_EFECTO,
+      despues: MS_ESPERA_FIN,
+    });
+  }
+}
+
+/* ¿Queda algún atacante en mis caminos? Si no hay ninguno, la fase de avance
+   no tiene nada que enseñar y se salta. */
+function hayAtacantesEnCaminos() {
+  return (miTableroMesa?.senderos ?? []).some((s) =>
+    (s.posiciones ?? []).some((f) => f?.tipo === "atacante"));
+}
+
+/* Fases que conduce la jornada: esas ya se animan solas, una detrás de otra. */
+const FASES_JORNADA = new Set(["lanzar", "avance", "defensores", "carta", "carta_ver", "carta_efecto"]);
+
+/* Respiro antes de lanzar el movimiento: si la posición se cambia en el mismo
+   fotograma que se pinta la ficha, iOS salta directo al destino. */
+const RETARDO_SUELTA = 40;
+
+/* Jugada que no es de la jornada (decretos, descarte, fin de turno): el
+   repintado ya trae el movimiento y la pelea, solo hay que reproducirlos.
+   Devuelve lo que tarda en verse entera para poder encadenar el descarte. */
+function animarJugadaSuelta(anim) {
+  if (!tocaMesa || viendoJugador || FASES_JORNADA.has(faseMesa)) return 0;
+  const peleaA = anim.extraLuchas("atacantes");
+  const peleaD = anim.extraLuchas("defensores");
+  if (!anim.movidas && !peleaA && !peleaD) return 0;
+  const lanzar = () => {
+    anim.reproducirAtacantes(0);
+    anim.reproducirDefensores(0);
+  };
+  requestAnimationFrame(() => setTimeout(lanzar, RETARDO_SUELTA));
+  const total = Math.max(
+    duracionGrupo(anim.ataques) + peleaA,
+    duracionGrupo(anim.defensores) + peleaD,
+  ) + RETARDO_SUELTA + MS_ESPERA_FIN;
+  descarteEspera = performance.now() + total;
+  return total;
+}
+
+function programarJornada(anim, { estrenaTurno, claveTurno }) {
+  if (!tocaMesa || viendoJugador) return;
+
+  if (estrenaTurno) {
+    if (avisoInicioAbierto) return;
+    if (document.querySelector(".bw-modal-fondo")) return;
+    const capa = document.getElementById("capa");
+    if (capa && !capa.hidden) return;
+    avisoInicioAbierto = true;
+    modal({
+      titulo: "",
+      texto: "Es tu turno",
+      clase: "modal-version",
+      botones: [{ texto: "Comenzar tu turno", estilo: "boton", valor: "ok" }],
+      obligatorio: true,
+    }).then(async () => {
+      avisoInicioAbierto = false;
+      turnoEmpezado = claveTurno;
+      guardarTurnoEmpezado(claveTurno);
+      iniciarFase(anim);
+    });
+    return;
+  }
+
+  iniciarFase(anim);
 }
 
 /* Mientras dura la fase de avance ninguna acción del usuario responde: no se
@@ -765,6 +1102,81 @@ function planDisparo(nivel, senderoId, bunker) {
   };
 }
 
+/* ── Disparo de las torres: dos bolas y la nube del impacto ────────────────
+   Dos bolas negras de 3×3 círculos salen de las torres que disparan y cruzan
+   el tablero hasta el atacante. En cuanto llegan, la nube de la pelea se abre
+   encima, el monstruo desaparece debajo y la nube se va con fundido. Va en una
+   capa fija sobre la pantalla: el repintado del turno cambia las fichas, y si
+   la animación viviera dentro del tablero se cortaría a la mitad. */
+function rectDe(el) {
+  const r = el?.getBoundingClientRect?.();
+  return r && r.width && r.height ? r : null;
+}
+
+function dispararConTorres({ sendero, posicion, plan }) {
+  const tablero = document.querySelector(".tablero");
+  if (!tablero) return;
+  const ficha = tablero.querySelector(`.ficha[data-sendero="${sendero}"][data-pos="${posicion}"]`);
+  const rFicha = rectDe(ficha);
+  if (!rFicha) return;
+  const img = ficha.querySelector("img");
+  const rImg = rectDe(img) ?? rFicha;
+  const centro = (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+  /* Una bola por torre que dispara; si solo hay una, las dos salen de ella. */
+  const torres = (plan?.usadas ?? [])
+    .map((t) => rectDe(tablero.querySelector(`[data-pos-torre="${t.pos}"]`)))
+    .filter(Boolean);
+  /* Disparo lanzado desde la lista de acciones: sin reparto a mano, la bola
+     sale de la torre de esa calle y, si no hay, de la primera torre. */
+  if (!torres.length) {
+    const propia = rectDe(tablero.querySelector(`[data-pos-torre="${sendero}"]`))
+      ?? rectDe(tablero.querySelector(".torre[data-pos-torre]"));
+    if (propia) torres.push(propia);
+  }
+  const origenes = (torres.length ? torres : [rFicha]).map(centro);
+  const destino = centro(rFicha);
+  const ladoBola = Math.max(12, Math.round(rFicha.width * 0.4));
+
+  const capa = document.createElement("div");
+  capa.className = "bw-disparo-capa";
+  capa.innerHTML = `
+    <img class="bw-disparo-fantasma" src="${esc(img?.getAttribute("src") ?? "")}" alt=""
+         style="left:${rImg.left}px;top:${rImg.top}px;width:${rImg.width}px;height:${rImg.height}px">
+    ${[0, 1].map((k) => {
+      const o = origenes[Math.min(k, origenes.length - 1)];
+      return `<div class="bw-bola" style="left:${o.x}px;top:${o.y}px;width:${ladoBola}px;height:${ladoBola}px" data-ox="${o.x}" data-oy="${o.y}">${"<i></i>".repeat(9)}</div>`;
+    }).join("")}
+    <div class="bw-nube-disparo" style="left:${destino.x}px;top:${destino.y}px;width:${Math.round(rFicha.width * 1.9)}px">
+      <img src="${BASE_IMG}/nube-combate.png" alt="">
+    </div>`;
+  document.body.appendChild(capa);
+
+  const VUELO = 420;
+  [...capa.querySelectorAll(".bw-bola")].forEach((bola, k) => {
+    const ox = Number(bola.dataset.ox);
+    const oy = Number(bola.dataset.oy);
+    /* Un poco de arco: van perdiendo altura a mitad de camino. */
+    const arco = -Math.min(110, 40 + Math.abs(destino.y - oy) * 0.22);
+    bola.animate?.(
+      [
+        { left: `${ox}px`, top: `${oy}px`, offset: 0 },
+        { left: `${(ox + destino.x) / 2}px`, top: `${(oy + destino.y) / 2 + arco}px`, offset: 0.5 },
+        { left: `${destino.x}px`, top: `${destino.y}px`, offset: 1 },
+      ],
+      { duration: VUELO, delay: k * 90, easing: "ease-in", fill: "both" },
+    );
+  });
+
+  const nube = capa.querySelector(".bw-nube-disparo");
+  setTimeout(() => {
+    nube?.classList.add("on");
+    capa.querySelector(".bw-disparo-fantasma")?.remove();
+    capa.querySelectorAll(".bw-bola").forEach((b) => b.remove());
+    setTimeout(() => nube?.classList.add("sale"), 560);
+    setTimeout(() => capa.remove(), 560 + 440);
+  }, VUELO + 100);
+}
+
 /* Plantilla común de los modales de monstruo: título en borgoña, ribete de
    piedra arriba y abajo, y el botón gris de casa para cerrar. La usan tanto
    el monstruo de la jaula (mover o lanzar) como el ataque con torres. */
@@ -791,7 +1203,7 @@ function ajustarFondoModal() {
 
 function modalMonstruo({ titulo, html = "", botones = [], clase = "" }) {
   ajustarFondoModal();
-  return modal({ titulo, html, botones, clase: `modal-monstruo${clase ? ` ${clase}` : ""}` });
+  return modal({ titulo, html, botones, clase: `modal-monstruo bw-hoja-modal${clase ? ` ${clase}` : ""}` });
 }
 
 function abrirDisparo({ sendero, posicion, nivel }) {
@@ -870,6 +1282,9 @@ function abrirDisparo({ sendero, posicion, nivel }) {
     if (ev.target.closest("[data-cerrar-disparo]")) { cerrarDisparo(); return; }
     if (!ev.target.closest("[data-disparo-matar]")) return;
     if (!accion || !enviarAccion) return;
+    /* Las dos bolas salen al pulsar: se mide el tablero antes de mandar la
+       jugada, que el repintado se lleva las fichas. */
+    dispararConTorres({ sendero, posicion, plan });
     const res = await enviarAccion(accion);
     if (res?.error) aviso(res.error, { error: true });
     cerrarDisparo();
@@ -918,6 +1333,15 @@ function abrirTorre(posicion) {
   }
 
   const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
+  /* Mis monstruos de esta escalera también se mueven desde el panel de la
+     torre: una fila por monstruo que tenga algo que hacer. */
+  /* Todos mis monstruos de esta escalera salen aquí, tengan o no monedas:
+     el panel del monstruo ya dirá si en este momento no se puede mover. */
+  const mios = monstruosEnEscalera(pos);
+  const moverHtml = mios.length
+    ? `<div class="bw-torre-mover">${mios.map((m) =>
+        `<button type="button" class="bw-modal-usar" data-torre-mover="${esc(m.id)}" data-mover-pos="${m.posicion}" data-mover-nv="${m.nivel}">${tipoDeMover(pos, m.posicion) === "atacar" ? "Atacar" : "Avanzar"} con el monstruo ${m.nivel} · peldaño ${m.posicion + 1}</button>`).join("")}</div>`
+    : "";
   const html = `
     <div class="bw-disparo">
       <div class="bw-disparo-cab">Escalera <b>${pos}</b> · ${caminos[pos - 1]}.</div>
@@ -941,13 +1365,25 @@ function abrirTorre(posicion) {
       <button class="bw-panel-x" type="button" data-cerrar-torre aria-label="Cerrar">×</button>
     </div>
     ${html}
-    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-torre-accion>${esNueva ? "Construir" : `Subir a nivel ${siguiente}`} · 1 moneda</button></div>` : ""}`;
+    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-torre-accion>${esNueva ? "Construir" : `Subir a nivel ${siguiente}`} · 1 moneda</button></div>` : ""}
+    ${moverHtml}`;
   document.body.appendChild(panel);
   disparoPanel = panel;
   actualizarOverlayPaneles();
 
   panel.addEventListener("click", async (ev) => {
     if (ev.target.closest("[data-cerrar-torre]")) { cerrarDisparo(); return; }
+    /* Mover un monstruo de esta escalera desde el panel de la torre. */
+    const mov = ev.target.closest("[data-torre-mover]");
+    if (mov) {
+      abrirMonstruo({
+        sendero: pos,
+        posicion: Number(mov.dataset.moverPos),
+        id: mov.dataset.torreMover,
+        nivel: Number(mov.dataset.moverNv),
+      });
+      return;
+    }
     const boton = ev.target.closest("[data-torre-accion]");
     if (!boton || !enviarAccion) return;
     boton.disabled = true;
@@ -968,6 +1404,10 @@ function abrirLanzarSiToca() {
   const ops = accionesMesa.filter(a => a.tipo === "lanzar");
   if (faseMesa !== "lanzar" || !tocaMesa || !ops.length) return false;
   if (document.querySelector(".bw-modal-fondo") || document.getElementById("bw-modal-lanzar")) return false;
+
+  /* La fase abre directamente la elección de rival: sin cartel intermedio. */
+  const capa = document.getElementById("capa");
+  if (capa && !capa.hidden) return false;
   abrirLanzar(ops);
   return true;
 }
@@ -979,13 +1419,18 @@ function abrirLanzar(ops) {
   fondo.id = "bw-modal-lanzar";
   fondo.className = "bw-modal-fondo";
   document.body.appendChild(fondo);
+  document.body.classList.add("bw-lanzando");
 
-  const cerrar = () => fondo.remove();
+  const cerrar = () => {
+    fondo.remove();
+    document.body.classList.remove("bw-lanzando");
+  };
   const noLanzar = accionesMesa.find(a => a.tipo === "no_lanzar") ?? null;
 
   const enviar = async (accion, boton) => {
     if (!accion || !enviarAccion) return;
     if (boton) boton.disabled = true;
+    if (accion.tipo === "no_lanzar") rivalLanzarElegido = null;
     /* Se cierra antes de enviar: si queda la otra lanzadera, el repintado
        vuelve a abrir el modal con la que falta. */
     cerrar();
@@ -993,63 +1438,114 @@ function abrirLanzar(ops) {
     if (r?.error) aviso(r.error, { error: true });
   };
 
-  /* Un rival visto como su fortaleza, en la misma orientación que la tuya: las
-     torres arriba con su nivel, las tres escaleras bajando hacia la lanzadera
-     y lo que hay en cada peldaño (rojo si es suyo, morado si es tuyo). */
-  const tableroRival = (id, { elegir = false } = {}) => {
-    const r = jugadoresMesa.find(x => x.id === id) ?? {};
+  /* Cada calle enseña cinco huecos: arriba la torre y debajo sus cuatro
+     peldaños. En el detalle se añade un botón cuadrado de lanzar bajo cada
+     calle; en la lista de rivales solo se ve el resumen. */
+  const callesRival = (r, { rivalId = null, elegir = false, bloqueado = false } = {}) => {
     const torres = r.bunker?.torres ?? [];
-    const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+    const senderos = r.senderos ?? [];
     const dos = lanzaderasMesa.filter(Boolean).length > 1;
 
-    /* De arriba abajo: el peldaño 4 es el que pega con la fortaleza y el 1 el
-       que queda junto a la lanzadera. */
-    const peldanos = (s) => [3, 2, 1, 0].map(k => {
-      const f = s?.posiciones?.[k];
-      if (!f) return `<i class="bw-lz-cas" title="Peldaño ${k + 1}: libre"></i>`;
-      const mio = f.tipo === "atacante";
-      return `<i class="bw-lz-cas ${mio ? "at" : "suyo"}" title="Peldaño ${k + 1}: ${mio ? "tu monstruo" : "suyo"} de nivel ${f.nivel}">${f.nivel}</i>`;
-    }).join("");
+    return `<span class="bw-lz-calles${elegir ? " detalle" : ""}">${[0, 1, 2].map(i => {
+      const sid = senderos[i]?.id ?? i + 1;
+      const nTorre = Number(torres[i]?.nivel) || 0;
+      const fichas = [3, 2, 1, 0].map(paso => {
+        const f = senderos[i]?.posiciones?.[paso]
+          ?? (senderos[i]?.monstruos ?? []).find(m => m.pos === paso)
+          ?? null;
+        /* El peldaño de entrada (el de abajo del todo) se marca en rojo si el
+           rival no tiene ninguna calle legal para recibir monstruos. */
+        const entradaCerrada = bloqueado && paso === 0 ? "lz-sin-envio" : "";
+        if (!f) return cuadroLz(0, "bz-vacio", `Peldaño ${paso + 1}: libre`, entradaCerrada);
+        const n = f.nivel ?? f.fuerza ?? "?";
+        const atacante = f.tipo === "atacante";
+        return cuadroLz(n, atacante ? "bz-at" : "bz-def",
+          `${atacante ? "Atacante" : "Defensor"} nivel ${n} en el peldaño ${paso + 1}`, entradaCerrada);
+      }).join("");
 
-    const columnas = (r.senderos ?? []).map(s => {
-      const suyas = elegir ? ops.filter(a => a.rivalId === id && a.sendero === s.id) : [];
-      const dentro = `
-        <span class="bw-lz-cid" title="Escalera ${s.id}: la ${escaleraDe(s.id)}">${s.id}</span>
-        ${peldanos(s)}
-        ${suyas.map(a => {
-          const mon = lanzaderasMesa[a.lanzadera] ?? null;
-          const txt = dos ? `M${mon?.nivel ?? "?"} · L${a.lanzadera + 1}` : "Lanzar";
-          return `<button type="button" class="bw-lz-lanzar" data-op="${accionesMesa.indexOf(a)}" title="Lanzar por la escalera ${s.id} (la ${escaleraDe(s.id)})">${txt}</button>`;
-        }).join("")}`;
-      return `<span class="bw-lz-calle${elegir && !suyas.length ? " apagada" : ""}">${dentro}</span>`;
-    }).join("");
+      const suyas = elegir && rivalId
+        ? ops.filter(a => a.rivalId === rivalId && a.sendero === sid)
+        : [];
+      const botones = elegir
+        ? (suyas.length
+          ? suyas.map(a => {
+            const mon = lanzaderasMesa[a.lanzadera] ?? null;
+            const txt = dos ? `L${a.lanzadera + 1}` : "Lanzar";
+            return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="Lanzar monstruo ${mon?.nivel ?? "?"} por la escalera ${sid} (la ${escaleraDe(sid)})">${txt}</button>`;
+          }).join("")
+          : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`)
+        : "";
 
-    return `
-      <div class="bw-lz-cab">
-        <b>${esc(r.nombre ?? "Rival")}</b>
-        <span class="bw-lz-vida">❤ ${vida} / 20</span>
-      </div>
-      <div class="bw-lz-fort">
-        ${[0, 1, 2].map(i => `<span class="bw-lz-torre${torres[i]?.nivel ? " tiene" : ""}" title="Torre ${i + 1}${torres[i]?.nivel ? `: nivel ${torres[i].nivel}` : ": vacía"}">${torres[i]?.nivel ? `T${torres[i].nivel}` : "—"}</span>`).join("")}
-      </div>
-      <div class="bw-lz-mapa">${columnas}</div>`;
+      return `<span class="bw-lz-calle">
+        ${cuadroLz(nTorre, "bz-torre", `Torre ${i + 1}: ${nTorre ? `nivel ${nTorre}` : "vacía"}`)}
+        ${fichas}
+        ${botones}
+      </span>`;
+    }).join("")}</span>`;
   };
 
-  const listaRivales = () => [...new Set(ops.map(a => a.rivalId))].map(id => {
+  /* El detalle de lanzamiento es el mismo bloque grande que el panel de
+     Torres, pero con el rival como protagonista: torre + cuatro peldaños por
+     calle y su botón de lanzar debajo. */
+  const tableroRival = (id, { elegir = false } = {}) => {
     const r = jugadoresMesa.find(x => x.id === id) ?? {};
-    return `
-      <button type="button" class="bw-lz-rival" data-rival="${esc(id)}" title="Lanzar a ${esc(r.nombre ?? "rival")}">
-        ${tableroRival(id)}
-      </button>`;
-  }).join("");
+    const dos = lanzaderasMesa.filter(Boolean).length > 1;
+
+    const accionesDe = (sendero, i) => {
+      if (!elegir) return "";
+      const sid = sendero?.id ?? i + 1;
+      const suyas = ops.filter(a => a.rivalId === id && a.sendero === sid);
+      const botones = suyas.length
+        ? suyas.map(a => {
+          const mon = lanzaderasMesa[a.lanzadera] ?? null;
+          const txt = dos ? `L${a.lanzadera + 1}` : "Lanzar";
+          return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="Lanzar monstruo ${mon?.nivel ?? "?"} por la escalera ${sid} (la ${escaleraDe(sid)})">${txt}</button>`;
+        }).join("")
+        : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`;
+      return `<div class="bw-torre-lanzar">${botones}</div>`;
+    };
+
+    return `<div class="bw-lz-torres">${bloqueTorres(r.bunker?.torres ?? [], r.senderos ?? [], {
+      interactivo: false,
+      lanzar: accionesDe,
+    })}</div>`;
+  };
+
+  const listaRivales = () => (jugadoresMesa ?? [])
+    .filter(p => p.id !== yoMesa && !aliadosMesa.some(a => a.id === p.id))
+    .map(r => {
+      const id = r.id;
+      const suyas = ops.filter(a => a.rivalId === id);
+      const bloqueado = suyas.length === 0;
+      const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+      /* Cuántos atacantes lleva encima: es lo que explica por qué sus entradas
+         están cerradas y lo que no se veía en el resumen. */
+      const atacantes = (r.senderos ?? []).reduce((s, sd) =>
+        s + (sd.posiciones ?? []).filter(f => f?.tipo === "atacante").length, 0);
+      return `
+        <button type="button" class="bw-lz-rival${bloqueado ? " bloqueado" : ""}" data-rival="${esc(id)}"
+                title="${bloqueado ? "No puedes lanzar a " : "Lanzar a "}${esc(nombreMesa(r))}"${bloqueado ? " disabled" : ""}>
+          <span class="bw-lz-rival-cab">
+            <b class="bw-lz-rival-nombre">${esc(nombreMesa(r))}</b>
+            <span class="bw-lz-rival-vida">❤ ${vida} / 20</span>
+          </span>
+          ${callesRival(r, { bloqueado })}
+          <span class="bw-lz-rival-atac">${atacantes} atacante${atacantes === 1 ? "" : "s"} en sus caminos</span>
+        </button>`;
+    }).join("");
 
   const pasoRivales = () => {
+    rivalLanzarElegido = null;
+    fondo.classList.remove("lz-detalle");
+    fondo.classList.add("lz-inicial");
     fondo.innerHTML = `
-      <div class="bw-lz">
-        <div class="bw-lz-tit">Lanzar monstruo</div>
-        <p class="bw-lz-sub">Elige a qué rival mandas lo que tienes en la lanzadera.</p>
+      <div class="bw-lz bw-lz-hoja">
+        <div class="bw-lz-head">
+          <div class="bw-lz-tit">Fase de lanzaderas</div>
+        </div>
+        <p class="bw-lz-sub">Elige una fortaleza enemiga para lanzar tus monstruos.</p>
         <div class="bw-lz-lista">${listaRivales()}</div>
-        <div class="bw-lz-pie">
+        <div class="bw-lz-pie${noLanzar ? " con-linea" : ""}">
           ${noLanzar ? `<button type="button" class="bw-modal-usar bw-lz-nolanzar">No lanzar</button>` : ""}
         </div>
       </div>`;
@@ -1060,34 +1556,67 @@ function abrirLanzar(ops) {
   };
 
   const pasoCaminos = (rivalId) => {
+    rivalLanzarElegido = rivalId;
     const rival = jugadoresMesa.find(x => x.id === rivalId) ?? {};
+    const vida = Math.max(0, 20 - (rival.puntosMonsters ?? 0));
+    /* El detalle sale desde abajo, con el mismo ribete de piedra que el panel
+       de Torres: no es otro modal centrado. */
+    fondo.classList.remove("lz-inicial");
+    fondo.classList.add("lz-detalle");
     fondo.innerHTML = `
-      <div class="bw-lz">
-        <div class="bw-lz-tit">¿Por qué camino de ${esc(rival.nombre ?? "el rival")}?</div>
-        <p class="bw-lz-sub">Toca «Lanzar» bajo la escalera a la que quieres mandarlo.</p>
-        <div class="bw-lz-lista solo">${tableroRival(rivalId, { elegir: true })}</div>
+      <div class="bw-lz bw-lz-hoja">
+        <div class="bw-lz-head bw-lz-cab-detalle">
+          <b class="bw-lz-tit">Fortaleza de ${esc(nombreMesa(rival))}</b>
+          <span class="bw-lz-vida">❤ ${vida} / 20</span>
+        </div>
+        <div class="bw-lz-tablero">${tableroRival(rivalId, { elegir: true })}</div>
         <div class="bw-lz-pie">
-          <button type="button" class="bw-lz-atras">Atrás</button>
+          <button type="button" class="bw-modal-usar bw-lz-atras">Atrás</button>
         </div>
       </div>`;
-    for (const b of fondo.querySelectorAll(".bw-lz-lanzar")) {
-      b.addEventListener("click", () => enviar(accionesMesa[Number(b.dataset.op)], b));
+    for (const b of fondo.querySelectorAll(".bw-lz-lanzar[data-op]")) {
+      b.addEventListener("click", () => enviar(ops[Number(b.dataset.op)], b));
     }
     fondo.querySelector(".bw-lz-atras").addEventListener("click", pasoRivales);
   };
 
-  pasoRivales();
+  const rivalInicial = rivalLanzarElegido
+    && ops.some(a => a.rivalId === rivalLanzarElegido)
+    && !aliadosMesa.some(a => a.id === rivalLanzarElegido)
+    ? rivalLanzarElegido
+    : null;
+  if (rivalInicial) pasoCaminos(rivalInicial);
+  else pasoRivales();
 }
 
 /* ── Modal de descarte: la mano en 2×2, se marcan y se tiran ─────────────── */
 
+/* El descarte sale cuando la ficha de la última jugada ha terminado de
+   moverse: antes el modal se abría de golpe y no se veía la animación. */
+let descarteEspera = 0;
+let relojDescarte = null;
+function programarDescarte() {
+  if (document.getElementById("bw-modal-descartar")) return;
+  const falta = Math.max(0, descarteEspera - performance.now());
+  clearTimeout(relojDescarte);
+  if (!falta) { abrirDescarte(); return; }
+  relojDescarte = setTimeout(() => {
+    if (faseMesa === "descartar" && tocaMesa && !document.getElementById("bw-modal-descartar")) abrirDescarte();
+  }, falta);
+}
+
 function abrirDescarte() {
   document.getElementById("bw-modal-descartar")?.remove();
   const mano = privadaMesa?.mano ?? [];
-  if (!mano.length) return;
+  if (!mano.length) {
+    /* Sin mano no hay nada que elegir: se cierra la fase y se roba. */
+    enviarAccion?.({ tipo: "descartar", cartaIds: [] });
+    return;
+  }
 
-  /* Descartar es opcional: hasta 2 cartas por turno, o ninguna. */
+  /* Si no se jugó ninguna carta, descartar una es obligatorio. */
   const maxDesc = 2;
+  const puedeNo = accionesMesa.some(a => a.tipo === "descartar" && !(a.cartaIds?.length));
 
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-descartar";
@@ -1114,10 +1643,10 @@ function abrirDescarte() {
     <div class="bw-modal bw-desc-modal" role="dialog" aria-modal="true" aria-label="Descartar cartas">
       <div class="bw-desc-tit">Descartar cartas</div>
       <div class="bw-desc-grid">${mano.map(celda).join("")}</div>
-      <p class="bw-desc-nota"></p>
+      <p class="bw-desc-nota">${puedeNo ? "" : "No has usado cartas este turno: debes descartar 1."}</p>
       <div class="bw-modal-acciones">
         <button type="button" class="bw-modal-usar bw-desc-ok" disabled>Descartar</button>
-        <button type="button" class="bw-modal-usar bw-desc-no">No descartar</button>
+        ${puedeNo ? `<button type="button" class="bw-modal-usar bw-desc-no">No descartar</button>` : ""}
       </div>
     </div>`;
   document.body.appendChild(fondo);
@@ -1155,9 +1684,9 @@ function abrirDescarte() {
     const ids = [...fondo.querySelectorAll(".bw-desc-celda.sel")].map(el => el.dataset.uid);
     if (ids.length) enviar(ids, ok);
   });
-  fondo.querySelector(".bw-desc-no").addEventListener("click", (ev) => enviar([], ev.currentTarget));
+  fondo.querySelector(".bw-desc-no")?.addEventListener("click", (ev) => enviar([], ev.currentTarget));
   /* Sin X: se sale con «Descartar» o con «No descartar». */
-  fondo.addEventListener("click", (ev) => { if (ev.target === fondo) enviar([]); });
+  fondo.addEventListener("click", (ev) => { if (ev.target === fondo && puedeNo) enviar([]); });
 }
 
 /* ── Modal de la carta de Destino del turno ───────────────────────────────── */
@@ -1189,10 +1718,12 @@ const BESTIARIO_PL = { 1: "rastreadores", 2: "carroñeros", 3: "yetis", 5: "colo
 const ESCALERAS = { 1: "de la izquierda", 2: "central", 3: "de la derecha" };
 const escaleraDe = (i) => ESCALERAS[i] ?? "central";
 
+
 function nombreMonstruo(n) { return BESTIARIO[n] ?? `monstruo de nivel ${n}`; }
 function pluralMonstruo(n) { return BESTIARIO_PL[n] ?? `monstruos de nivel ${n}`; }
 
 function tituloDestino(d) {
+  if (d.titulo) return d.titulo;
   switch (d.tipo) {
     case "amenaza":           return "Avistamiento";
     case "amenaza_triple":    return "La horda avanza";
@@ -1201,10 +1732,11 @@ function tituloDestino(d) {
     case "calma":             return "Calma";
     case "aniquilar_entrada": return "El viento purga";
     case "aniquilar_nivel":   return "Los débiles caen";
-    case "matar_mayor":       return "Cae el más fuerte";
+    case "matar_mayor":       return "Los más fuertes";
     case "avanzar_extra":     return "El paso se acelera";
     case "miedo":             return "Miedo";
     case "convertir_aliado":  return "Traición";
+    case "desercion":         return "Deserción";
     case "subir_monstruos":   return "Ascenso";
     case "bajar_monstruos":   return "Degradación";
     case "colocar_monstruos": return "Los criaderos despiertan";
@@ -1221,6 +1753,7 @@ function relatoDestino(d) {
   const uno = `<strong>${esc(nombreMonstruo(n))}</strong>`;
   const varios = `<strong>${esc(pluralMonstruo(n))}</strong>`;
   const E = esc(escalera);
+  if (d.descripcion) return esc(String(d.descripcion));
   switch (d.tipo) {
     case "amenaza":
       return `Un ${uno} acaba de ser avistado desde la fortaleza: sube por la escalera ${E}.`;
@@ -1233,17 +1766,19 @@ function relatoDestino(d) {
     case "calma":
       return "No hay monstruos nuevos en el horizonte: la montaña calla.";
     case "aniquilar_entrada":
-      return "Una ventisca barre los primeros peldaños: lo que esperaba abajo desaparece.";
+      return "Una ventisca barre la entrada: los atacantes que esperaban abajo desaparecen.";
     case "aniquilar_nivel":
-      return "Los monstruos de nivel 3 o menos son arrastrados por la nieve.";
+      return "Los monstruos de nivel 3 o menos de todos los caminos son arrastrados por la nieve.";
     case "matar_mayor":
-      return "El monstruo más poderoso que trepa tu fortaleza cae fulminado.";
+      return "Los monstruos de mayor nivel de los caminos caen fulminados.";
     case "avanzar_extra":
       return "Los atacantes de tus escaleras redoblan el paso: suben un peldaño más.";
     case "miedo":
       return "Un rugido en la montaña hace retroceder a todos los atacantes de la mesa.";
     case "convertir_aliado":
-      return "Un atacante despierta leal: cambia de bando y defiende tu fortaleza.";
+      return "Un atacante de nivel 5 o menos despierta leal: cambia de bando y defiende tu fortaleza.";
+    case "desercion":
+      return "Uno de tus defensores se vuelve contra ti: abandona su puesto y ataca tu búnker.";
     case "subir_monstruos":
       return "Tus monstruos de nivel 5 o menos suben de rango bajo la bendición.";
     case "bajar_monstruos":
@@ -1274,6 +1809,7 @@ function imgDestino(d) {
     avanzar_extra: "avanzar",
     miedo: "retirar",
     convertir_aliado: "defensa",
+    desercion: "ataque",
     subir_monstruos: "monstruo-nv3",
     bajar_monstruos: "monstruo-nv1",
     carta_roja: "vida",
@@ -1335,7 +1871,7 @@ function totalesBunker(bunker) {
   };
 }
 
-function pintarMiBunker(j, priv, fase) {
+function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* En la visita a otra fortaleza las monedas y los decretos son privados:
      se pasan como null y se pintan «—». */
   const energia    = priv && "energia" in priv ? priv.energia : 0;
@@ -1347,6 +1883,10 @@ function pintarMiBunker(j, priv, fase) {
   const box  = priv?.box ?? [];
   privadaMesa = priv ?? null;
   const lanzaderas = priv?.lanzaderas ?? [null, null];
+  /* Las entradas en el búnker se detectan abajo y se animan al final del
+     pintado, con la nube de la pelea en la puerta. */
+  entradasPendientes = [];
+  const puntosAntes = opciones.sinLuchas ? null : puntosPreviosMio;
   const s    = j?.senderos ?? [{}, {}, {}];
   const torres = j?.bunker?.torres ?? [null, null, null];
   /* Las dos cifras de la fortaleza son lo que te queda AHORA, no la producción
@@ -1398,6 +1938,10 @@ function pintarMiBunker(j, priv, fase) {
     t: (2 * Number(a.t) - Number(b.t)).toFixed(2),
   }));
 
+  /* Foto de las fichas del repintado anterior, antes de sobrescribirla: de
+     ahí salen los fantasmas de las que han caído en un combate. */
+  const fotoPrevia = new Map(fichasPrevias);
+
   /* Fichas reales */
   const fichasHtml = [0,1,2].flatMap(i =>
     [0,1,2,3].map(paso => {
@@ -1410,7 +1954,7 @@ function pintarMiBunker(j, priv, fase) {
          a la nueva: así se ve el avance del turno. Si no la habíamos visto
          nunca y entra por el primer peldaño, sale de la casilla virtual de
          abajo: es la entrada desde la bruma. */
-      const antes = f.id ? fichasPrevias.get(f.id) : null;
+      const antes = f.id ? fotoPrevia.get(f.id) : null;
       /* Solo se anima el avance dentro de su propia calle. Si la ficha aparece
          en otra calle (o es la primera vez que se ve), se pinta ya en su
          casilla: nunca se la ve cruzar el tablero de una calle a otra. */
@@ -1418,7 +1962,7 @@ function pintarMiBunker(j, priv, fase) {
           const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
-      if (f.id) fichasPrevias.set(f.id, { calle: i, paso });
+      if (f.id) fichasPrevias.set(f.id, { calle: i, paso, nivel: nivelDe(f), tipo: f.tipo });
       const desdeAttr = desde ? ` data-ol="${desde.l}" data-ot="${desde.t}"` : "";
       /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
@@ -1427,6 +1971,75 @@ function pintarMiBunker(j, priv, fase) {
       return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
+
+  /* ── Fantasmas de los combates ──
+     Una ficha que estaba en los caminos en el repintado anterior y ya no está
+     ha caído. Se pinta en su casilla para que el que llega se vea chocar con
+     ella (o se desliza ella hasta el que le planta cara si murió atacando) y
+     encima de los dos sale la nube de la pelea. En la visita a otra fortaleza
+     no se comparan fotos: los fantasmas de una visita no son tuyos. */
+  const luchas = [];
+  /* Atacantes que este repintado han pisado la puerta del búnker. */
+  const puertaVacia = [];
+  const entradas = [];
+  if (!opciones.sinLuchas && fotoMia) {
+    const vivos = new Set();
+    for (let i = 0; i < 3; i++) for (let paso = 0; paso < 4; paso++) {
+      const f = fichaEn(s[i], paso);
+      if (f?.id) vivos.add(f.id);
+    }
+    for (const [id, antes] of fotoPrevia) {
+      if (vivos.has(id)) continue;
+      /* La caída se enseña una sola vez: la ficha sale de la foto. */
+      fichasPrevias.delete(id);
+      if (antes.calle == null) continue;
+      const esAtacante = antes.tipo === "atacante";
+      const esRival = (f) => f && (f.tipo === "atacante") !== esAtacante;
+      const paso = antes.paso;
+      const suCasilla = fichaEn(s[antes.calle], paso);
+      const delante = fichaEn(s[antes.calle], paso + (esAtacante ? 1 : -1));
+      /* Un atacante del último peldaño con la casilla vacía ha entrado en el
+         búnker: en el tablero no hay nadie que lo haya matado. */
+      if (esAtacante && paso === 3 && !suCasilla) {
+        puertaVacia.push({ calle: antes.calle, nivel: antes.nivel });
+      }
+      /* Si su casilla la ocupa ahora un rival, ese ha ganado y se le ve entrar;
+         si está vacía, murió al atacar la casilla de delante. */
+      const destino = esRival(suCasilla) ? paso : (esRival(delante) ? paso + (esAtacante ? 1 : -1) : null);
+      if (destino == null || destino < 0 || destino > 3) continue;
+      const ganador = fichaEn(s[antes.calle], destino);
+      if (!ganador || ganador.id === id) continue;
+      luchas.push({
+        calle: antes.calle, origen: paso, destino,
+        nivel: antes.nivel, esAtacante,
+        /* Quién ha ganado: sirve para saber cuándo llega y abrir la nube. */
+        ganadorId: ganador.id ?? "",
+        /* Se enseña en la fase que anima al grupo del que ha ganado. */
+        grupo: ganador.tipo === "atacante" ? "atacantes" : "defensores",
+      });
+    }
+    /* Solo las que de verdad han quitado vida: una torre o una carta dejan la
+       puerta vacía sin sumar puntos al búnker. */
+    if (puertaVacia.length && puntosAntes != null) {
+      let vidaBaja = Math.max(0, (j?.puntosMonsters ?? 0) - puntosAntes);
+      for (const p of puertaVacia) {
+        if (vidaBaja < p.nivel) continue;
+        vidaBaja -= p.nivel;
+        const puerta = LOSAS[p.calle][3];
+        entradas.push({ l: puerta.l, t: puerta.t, nivel: p.nivel });
+      }
+    }
+  }
+  fotoMia = !opciones.sinLuchas;
+  const luchasHtml = luchas.map((l, k) => {
+    const ini = LOSAS[l.calle][l.origen];
+    const fin = LOSAS[l.calle][l.destino];
+    return `
+        <div class="ficha fantasma ${l.esAtacante ? "atacante" : "mia"}" data-lucha="${k}" data-grupo="${l.grupo}" data-ganador="${esc(l.ganadorId ?? "")}" data-dl="${fin.l}" data-dt="${fin.t}" data-nivel="${l.nivel}" style="left:${ini.l}%;top:${ini.t}%">
+          <img src="${imgMonstruo(l.nivel, l.esAtacante)}" alt="" class="ficha-img"><b class="ficha-nv">${l.nivel}</b>
+        </div>
+        <div class="bw-nube" data-nube="${k}" style="left:${fin.l}%;top:${fin.t}%"><img src="${BASE_IMG}/nube-combate.png" alt=""></div>`;
+  }).join("");
 
   /* Torres */
   const torresHtml = [0,1,2].map(i => {
@@ -1441,7 +2054,6 @@ function pintarMiBunker(j, priv, fase) {
     return `
       <div class="torre nv${nv}${t.inhabilitada ? " bloqueada" : ""}" data-pos-torre="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">
         <i class="torre-zona"></i>
-        <div class="anillo"><span></span></div>
         <div class="planta"></div>
         <div class="alzado"></div>
         ${t.inhabilitada ? `<div class="bloqueo">✕</div>` : ""}
@@ -1456,7 +2068,7 @@ function pintarMiBunker(j, priv, fase) {
        pastilla con su fuerza, entrando desde la escalera. Antes era un texto
        oscuro sobre un círculo transparente, o sea, nada. */
     const dentro = l
-      ? `<img src="${imgMonstruo(nivelDe(l))}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
+      ? `<img src="${imgMonstruo(nivelDe(l), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
       : "";
     return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
   }).join("");
@@ -1472,7 +2084,7 @@ function pintarMiBunker(j, priv, fase) {
      mundo) para que sigan en su sitio al girar el móvil. */
   const slotPos = [
     { l:"37.6%",                            t:"calc(63.5% - 1.28 * var(--u))" },  // 5 px arriba
-    { l:"calc(37.6% + 0.51 * var(--u))",   t:"calc(73.1% - 1.28 * var(--u))" },  // 5 arriba, 2 dcha
+    { l:"calc(37.6% - 0.4 * var(--u))",    t:"calc(73.1% - 1.28 * var(--u))" },  // 5 arriba, 5 izda
     { l:"calc(62.7% + 0.51 * var(--u))",   t:"calc(64.1% - 2.56 * var(--u))" },  // 10 arriba, 2 dcha
     { l:"63.1%",                            t:"calc(72.7% - 0.51 * var(--u))" },  // 2 px arriba
   ];
@@ -1481,10 +2093,17 @@ function pintarMiBunker(j, priv, fase) {
     // pos.l y pos.t ya traen su unidad (% o calc), así que no se les añade otra
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
-    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}" data-box="${i < 2 ? 0 : 1}"${mon?.id ? ` data-mon-id="${esc(mon.id)}"` : ""} style="left:${pos.l};top:${pos.t}">${
-      mon ? `<img src="${imgMonstruo(mon.nivel)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
+    return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}${i % 2 === 0 ? " fort-slot-arriba" : ""}" data-box="${i < 2 ? 0 : 1}"${mon?.id ? ` data-mon-id="${esc(mon.id)}"` : ""} style="left:${pos.l};top:${pos.t}">${
+      mon ? `<img src="${imgMonstruo(mon.nivel, false, true)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
+
+  /* La vida de este pintado es la referencia del siguiente, y las entradas
+     detectadas se animan en cuanto el tablero esté en el documento. */
+  if (!opciones.sinLuchas) {
+    puntosPreviosMio = j?.puntosMonsters ?? 0;
+    entradasPendientes = entradas;
+  }
 
   /* Los tres edificios de la fortaleza, con el mismo modelo: arriba la
      pastilla borgoña con un hueco por nivel, y debajo la imagen del edificio
@@ -1546,7 +2165,8 @@ function pintarMiBunker(j, priv, fase) {
           <div class="bw-layer">${lanzHtml}</div>
           <div class="bw-layer">${losasHtml}</div>
           <div class="bw-layer">${torresHtml}</div>
-          <div class="bw-layer">${fichasHtml}</div>
+          <div class="bw-layer bw-fichas">${fichasHtml}</div>
+          <div class="bw-layer">${luchasHtml}</div>
         </div>
       </div>
     </section>
@@ -1563,6 +2183,7 @@ function pintarHud(j, priv) {
   const energia = priv && "energia" in priv ? priv.energia : 0;
   const acciones = priv && "accionesRestantes" in priv ? priv.accionesRestantes : 0;
   const vida = Math.max(0, 20 - (j?.puntosMonsters ?? 0));
+  const esAliadoHud = (p) => modoMesa === "equipos" && (p?.equipo ?? 0) === miEquipoMesa;
 
   /* Las mejoras de la fortaleza: armería (torres de ataque) y criadero
      (crear monstruos). Los nombres internos siguen siendo armeria y
@@ -1579,7 +2200,7 @@ function pintarHud(j, priv) {
   /* La unidad de la partida es la luna: cada luna nueva, tantas monedas. */
   const recurso = (icono, nombre, turno, quedan) => `
         <div class="bw-rec" title="${nombre}: ${turno} por ciclo. Te quedan ${quedan == null ? "—" : quedan}.">
-          <img src="${ICONO(icono)}" alt="">
+          <img src="${ICONO(icono + (vistaRival && !esAliadoHud(j) ? "-ic" : "-ic-b"))}" alt="">
           <b>${turno}<em>/ciclo</em></b>
         </div>`;
   /* Un hueco de la fila de abajo: icono, nombre y, o los puntos de nivel, o
@@ -1604,7 +2225,7 @@ function pintarHud(j, priv) {
   return `
     <div class="bw-hud">
       <div class="bw-hud-aviso" title="Turno en curso">
-        <span class="bw-hud-aviso-texto">${vistaRival ? `Fortaleza de ${esc(j?.nombre ?? "un rival")}` : tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}</span>
+        <span class="bw-hud-aviso-texto">${vistaRival ? `Fortaleza de ${esc(j?.nombre ?? "un rival")}` : tocaMesa ? "¡Es tu turno!" : "Espera tu turno"}${tocaMesa ? ` <button type="button" class="bw-hud-pasar">pasar turno &gt;</button>` : ""}</span>
         <div class="bw-hud-turnos aviso" style="grid-template-columns:repeat(${nTurnos},minmax(0,1fr))">${turnos}</div>
       </div>
       <div class="bw-hud-caja" title="Fortaleza: producción, vida y edificios">
@@ -1641,7 +2262,7 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.nivel)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${m.nivel}</b></div>`
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo"><b class="bw-box-nv">${m.nivel}</b></div>`
         : `<div class="bw-box-slot vacio" data-box="${b}" title="Jaula ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     /* La jaula 1 alimenta el camino izquierdo y el central; la 2, el central
@@ -1672,6 +2293,16 @@ function nombreMesa(p) {
   return i <= 0 ? "Rico" : `Rico ${i + 1}`;
 }
 
+/* Cuadro de una calle: el mismo que usa la selección de la lanzadera. */
+function cuadroLz(n, tipo, titulo, extra = "") {
+  const nivel = Number(n) || 0;
+  /* Sin torre, el hueco se marca con una X roja; sin monstruo, queda vacío. */
+  return `<span class="bw-lz-cuadro ${tipo}${nivel ? " lleno" : ""}${extra ? ` ${extra}` : ""}" title="${esc(titulo)}">${
+    nivel ? `<b class="bw-lz-punto">${nivel}</b>`
+      : (tipo === "bz-torre" ? `<i class="bw-torre-x" aria-hidden="true"></i>` : "")
+  }</span>`;
+}
+
 function pintarMapa() {
   const otros = jugadoresMesa.filter((p) => p.id !== yoMesa);
   const enEquipos = modoMesa === "equipos";
@@ -1680,16 +2311,30 @@ function pintarMapa() {
   const tarjeta = (p) => {
     const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
     const torres = Array.isArray(p.bunker?.torres) ? p.bunker.torres : [];
-    const torresHtml = [0, 1, 2].map((i) => {
-      const n = Number(torres[i]?.nivel) || 0;
-      return `<span class="bw-mapa-torre ${n ? "llena" : "vacia"}" title="Torre ${i + 1}: ${n ? `nivel ${n}` : "vacía"}">${n ? `<img src="${imgTorre(n)}" alt="nivel ${n}"><b>${n}</b>` : `<i>+</i>`}</span>`;
+    const senderos = Array.isArray(p.senderos) ? p.senderos : [];
+    const calles = [0, 1, 2].map((i) => {
+      const nTorre = Number(torres[i]?.nivel) || 0;
+      const fichas = [3, 2, 1, 0].map((paso) => {
+        const f = senderos[i]?.posiciones?.[paso]
+          ?? (senderos[i]?.monstruos ?? []).find((m) => m.pos === paso)
+          ?? null;
+        if (!f) return cuadroLz(0, "bz-vacio", `Peldaño ${paso + 1}: libre`);
+        const n = f.nivel ?? f.fuerza ?? "?";
+        const atacante = f.tipo === "atacante";
+        return cuadroLz(n, atacante ? "bz-at" : "bz-def",
+          `${atacante ? "Atacante" : "Defensor"} nivel ${n} en el peldaño ${paso + 1}`);
+      }).join("");
+      return `<span class="bw-lz-calle">
+        ${cuadroLz(nTorre, "bz-torre", `Torre ${i + 1}: ${nTorre ? `nivel ${nTorre}` : "vacía"}`)}
+        ${fichas}
+      </span>`;
     }).join("");
-    const atacantes = (p.senderos ?? []).reduce((s, sd) =>
+    const atacantes = senderos.reduce((s, sd) =>
       s + (sd.posiciones ?? []).filter((f) => f?.tipo === "atacante").length, 0);
-    return `<button type="button" class="bw-mapa-rival ${esAliado(p) ? "aliado" : "enemigo"}" data-jugador="${esc(p.id)}">
+    return `<button type="button" class="bw-mapa-rival ${esAliado(p) ? "aliado" : (atacantes > 0 ? "con-atacantes" : "enemigo")}" data-jugador="${esc(p.id)}">
       <span class="bw-mapa-nombre">${esc(nombreMapa(p))}</span>
       <span class="bw-mapa-vida">Vida <b>${vida}</b>/20</span>
-      <span class="bw-mapa-torres">${torresHtml}</span>
+      <span class="bw-lz-calles bw-mapa-calles">${calles}</span>
       <span class="bw-mapa-atac">${atacantes} atacante${atacantes === 1 ? "" : "s"}</span>
     </button>`;
   };
@@ -1710,7 +2355,7 @@ function pintarMapa() {
 }
 
 /* ── Aliados: traspaso de monedas, decretos y monstruos ────────────────── */
-function pintarAliados(aliados) {
+function pintarAliados(aliados, peticiones = [], enviosPendientes = []) {
   const personas = aliados.map((p) => {
     const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
     const huecos = Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
@@ -1719,29 +2364,88 @@ function pintarAliados(aliados) {
       <small>Vida ${vida}/20 · ${huecos} hueco${huecos === 1 ? "" : "s"} de jaula</small>
     </button>`;
   }).join("");
+
+  const unir = (cosas) => cosas.length < 2
+    ? (cosas[0] ?? "")
+    : `${cosas.slice(0, -1).join(", ")} y ${cosas[cosas.length - 1]}`;
+
+  const slots = [];
+  for (const g of enviosPendientes) {
+    const cosas = [];
+    if (g.monedas) cosas.push(`${g.monedas} moneda${g.monedas === 1 ? "" : "s"}`);
+    if (g.decretos) cosas.push(`${g.decretos} decreto${g.decretos === 1 ? "" : "s"}`);
+    const niveles = (g.monstruos ?? []).map((m) => m?.nivel ?? m).filter((n) => Number(n) > 0);
+    if (niveles.length) cosas.push(`${niveles.length} monstruo${niveles.length === 1 ? "" : "s"} de nivel ${niveles.join(", ")}`);
+    slots.push(`<div class="bw-aliados-slot bw-aliados-slot-envio">
+      <b>${esc(g.deNombre ?? "Un aliado")}</b>
+      <span>Te envía ${esc(unir(cosas))}.</span>
+      <small>Para tu próximo turno</small>
+    </div>`);
+  }
+  for (const p of peticiones) {
+    const cosas = [
+      p.monedas ? "monedas" : "",
+      p.decretos ? "decretos" : "",
+      p.monstruos ? "monstruos" : "",
+    ].filter(Boolean);
+    const propia = p.de === yoMesa;
+    const nombre = propia ? "Tú" : esc(p.deNombre ?? "Un aliado");
+    const cancelar = propia && tocaMesa && faseMesa === "acciones"
+      ? `<button type="button" class="bw-aliados-cancelar" data-cancelar-peticion>Cancelar petición</button>`
+      : "";
+    slots.push(`<div class="bw-aliados-slot bw-aliados-slot-peticion${propia ? " bw-aliados-slot-propia" : ""}">
+      <b>${nombre}</b>
+      <span>${propia ? "Pides" : "Pide"} ${esc(unir(cosas))}.</span>
+      ${cancelar}
+    </div>`);
+  }
+  const visibles = slots.slice(0, 4);
+  const columnas = Math.max(1, Math.min(3, visibles.length));
+  const cuadricula = visibles.length
+    ? `<div class="bw-aliados-slots bw-aliados-slots-${columnas}">${visibles.join("")}</div>`
+    : `<div class="bw-aliados-slots bw-aliados-slots-1"><div class="bw-aliados-slot bw-aliados-slot-vacio">No hay peticiones ni envíos pendientes.</div></div>`;
+
   return `
     <div class="bw-panel-head">
-      <div class="bw-panel-label">Aliados <span class="bw-panel-sub">envíos</span></div>
+      <div class="bw-panel-label">Aliados</div>
       <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
     </div>
-    <div class="bw-aliados-intro">Elige un aliado y lo que le mandas. Le llegará al empezar su próximo turno, antes de sus decretos.</div>
-    <div class="bw-aliados-lista">${personas}</div>
-    <div class="bw-aliados-form oculto" data-form>
-      <div class="bw-aliados-destino" data-destino></div>
-      <div class="bw-aliados-fila">
-        <span>Monedas</span>
-        <div class="bw-aliados-contador"><button type="button" data-menos="monedas">−</button><b data-valor="monedas">0</b><button type="button" data-mas="monedas">+</button></div>
+    <div class="bw-aliados-intro">Manda recursos a tus aliados y pide lo que necesites. Pedir no gasta decretos ni acciones.</div>
+
+    <div class="bw-aliados-bloque">
+      <div class="bw-aliados-titulo">Envíos</div>
+      <div class="bw-aliados-lista">${personas}</div>
+      <div class="bw-aliados-form oculto" data-form>
+        <div class="bw-aliados-destino" data-destino></div>
+        <div class="bw-aliados-fila">
+          <span>Monedas</span>
+          <div class="bw-aliados-contador"><button type="button" data-menos="monedas">−</button><b data-valor="monedas">0</b><button type="button" data-mas="monedas">+</button></div>
+        </div>
+        <div class="bw-aliados-fila">
+          <span>Decretos</span>
+          <div class="bw-aliados-contador"><button type="button" data-menos="decretos">−</button><b data-valor="decretos">0</b><button type="button" data-mas="decretos">+</button></div>
+        </div>
+        <div class="bw-aliados-monstruos">
+          <span>Monstruos de tus jaulas</span>
+          <div class="bw-aliados-mons" data-mons></div>
+        </div>
+        <div class="bw-aliados-pie"><span data-resumen>0 monedas · 0 decretos · 0 monstruos</span><button type="button" class="bw-aliados-enviar" data-enviar disabled>Enviar</button></div>
+        <div class="bw-aliados-nota" data-nota></div>
       </div>
-      <div class="bw-aliados-fila">
-        <span>Decretos</span>
-        <div class="bw-aliados-contador"><button type="button" data-menos="decretos">−</button><b data-valor="decretos">0</b><button type="button" data-mas="decretos">+</button></div>
+    </div>
+
+    <div class="bw-aliados-bloque">
+      <div class="bw-aliados-titulo">Peticiones</div>
+      <div class="bw-aliados-pedir">
+        <div class="bw-aliados-chips">
+          <button type="button" class="bw-aliados-chip" data-peticion="monedas">Monedas</button>
+          <button type="button" class="bw-aliados-chip" data-peticion="decretos">Decretos</button>
+          <button type="button" class="bw-aliados-chip" data-peticion="monstruos">Monstruos</button>
+        </div>
+        <div class="bw-aliados-nota" data-peticion-nota>No cuesta decretos ni acciones.</div>
+        <button type="button" class="bw-aliados-enviar bw-aliados-pedir-btn" data-pedir disabled>Hacer petición</button>
       </div>
-      <div class="bw-aliados-monstruos">
-        <span>Monstruos de tus jaulas</span>
-        <div class="bw-aliados-mons" data-mons></div>
-      </div>
-      <div class="bw-aliados-pie"><span data-resumen>0 monedas · 0 decretos · 0 monstruos</span><button type="button" class="bw-aliados-enviar" data-enviar disabled>Enviar</button></div>
-      <div class="bw-aliados-nota" data-nota></div>
+      ${cuadricula}
     </div>`;
 }
 
@@ -1752,10 +2456,26 @@ function prepararAliados(panel, aliados) {
   const resumen = panel.querySelector("[data-resumen]");
   const enviar = panel.querySelector("[data-enviar]");
   const nota = panel.querySelector("[data-nota]");
+  const pedir = panel.querySelector("[data-pedir]");
+  const peticionNota = panel.querySelector("[data-peticion-nota]");
+  const chips = [...panel.querySelectorAll("[data-peticion]")];
+  const peticion = { monedas: false, decretos: false, monstruos: false };
   let para = null;
   let monedas = 0;
   let decretos = 0;
   const mons = new Set();
+
+  const refrescarPeticion = () => {
+    for (const chip of chips) chip.classList.toggle("sel", !!peticion[chip.dataset.peticion]);
+    const hay = peticion.monedas || peticion.decretos || peticion.monstruos;
+    const enFase = tocaMesa && faseMesa === "acciones";
+    pedir.disabled = !enFase || !hay;
+    if (!tocaMesa) peticionNota.textContent = "Espera a que te toque para pedir.";
+    else if (faseMesa !== "acciones") peticionNota.textContent = "Solo puedes pedir en tu fase de decretos.";
+    else if (!hay) peticionNota.textContent = "Elige qué necesitas. No cuesta decretos ni acciones.";
+    else peticionNota.textContent = "No cuesta decretos ni acciones.";
+  };
+  refrescarPeticion();
 
   const huecosDe = (p) => Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
   const maxMon = () => (para ? huecosDe(para) : 0);
@@ -1768,7 +2488,7 @@ function prepararAliados(panel, aliados) {
     }
     monsWrap.innerHTML = disponibles.map((m) => `
       <button type="button" class="bw-aliados-mon${mons.has(m.id) ? " sel" : ""}" data-mon="${esc(m.id)}" title="Monstruo nivel ${m.nivel}">
-        <img src="${imgMonstruo(m.nivel)}" alt="monstruo"><b>${m.nivel ?? "?"}</b>
+        <img src="${imgMonstruo(m.nivel, false, true)}" alt="monstruo"><b>${m.nivel ?? "?"}</b>
       </button>`).join("");
   };
 
@@ -1804,6 +2524,34 @@ function prepararAliados(panel, aliados) {
     if (persona) {
       const p = aliados.find((a) => a.id === persona.dataset.aliado);
       if (p) elegir(p);
+      return;
+    }
+    const chip = ev.target.closest("[data-peticion]");
+    if (chip) {
+      const clave = chip.dataset.peticion;
+      if (clave in peticion) peticion[clave] = !peticion[clave];
+      refrescarPeticion();
+      return;
+    }
+    if (ev.target.closest("[data-cancelar-peticion]")) {
+      if (!enviarAccion || !tocaMesa || faseMesa !== "acciones") return;
+      const r = await enviarAccion({ tipo: "cancelar_peticion" });
+      if (r?.error) aviso(r.error, { error: true });
+      else aviso("Petición cancelada.");
+      return;
+    }
+    if (ev.target.closest("[data-pedir]")) {
+      if (!enviarAccion) return;
+      const hay = peticion.monedas || peticion.decretos || peticion.monstruos;
+      if (!hay || !tocaMesa || faseMesa !== "acciones") return;
+      pedir.disabled = true;
+      const r = await enviarAccion({ tipo: "pedir_aliado", ...peticion });
+      if (r?.error) { aviso(r.error, { error: true }); refrescarPeticion(); return; }
+      aviso("Petición enviada a tus aliados.");
+      peticion.monedas = false;
+      peticion.decretos = false;
+      peticion.monstruos = false;
+      refrescarPeticion();
       return;
     }
     if (!para) return;
@@ -1843,15 +2591,23 @@ function prepararAliados(panel, aliados) {
 }
 
 /* ── Torres: un hueco por camino, con el nivel encima y el camino debajo ── */
-function pintarTorres(torres, senderos = []) {
+
+/* El bloque visual compartido por el panel de Torres y el detalle del rival.
+   En el panel propio las torres se pueden tocar; en el rival es solo lectura
+   y, si se pide, debajo de cada camino aparecen los botones de lanzamiento. */
+function bloqueTorres(torres, senderos = [], { interactivo = true, lanzar = null, marcar = null, huecoTorre = null } = {}) {
   const lista = Array.isArray(torres) ? torres : [];
   const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
   const senderosLista = Array.isArray(senderos) ? senderos : [];
   const torre = (i) => {
     const n = Number(lista[i]?.nivel) || 0;
     const dentro = n
-      ? `<img src="${imgTorre(n)}" class="bw-box-img" alt="torre nivel ${n}">`
-      : `<span class="bw-box-x">+</span>`;
+      ? `<img src="${imgTorre(n)}" class="bw-box-img bw-torre-ficha" alt="torre nivel ${n}">`
+      /* En el rival no hay un «+» que pulsar: si no hay torre, el hueco queda
+         vacío. En el panel propio sí se mantiene el «+». */
+      : (huecoTorre === "nada" ? ""
+        : (huecoTorre === "x" || !interactivo) ? `<i class="bw-torre-x" aria-hidden="true"></i>`
+          : `<span class="bw-box-x">+</span>`);
     /* Sin el texto «Torre»: el nivel va en el mismo círculo con número que
        llevan los monstruos arriba a la derecha. */
     const nivel = n
@@ -1866,29 +2622,46 @@ function pintarTorres(torres, senderos = []) {
       if (!f) {
         return `<div class="bw-box-slot bw-torre-slot vacio" title="Peldaño ${numero}: libre"><span class="bw-torre-step">${numero}</span></div>`;
       }
-      const nivel = f.nivel ?? f.fuerza ?? "?";
+      const nivelFicha = f.nivel ?? f.fuerza ?? "?";
       const atacante = f.tipo === "atacante";
-      const attrs = atacante
-        ? ` data-disparo-slot data-sendero="${sendero?.id ?? i + 1}" data-posicion="${paso}" data-nivel="${nivel}"`
-        : "";
-      const titulo = atacante
-        ? `Atacante nivel ${nivel} en el peldaño ${numero}: toca para disparar`
-        : `Tu monstruo nivel ${nivel} en el peldaño ${numero}`;
-      return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}"${attrs} title="${titulo}"><img src="${imgMonstruo(nivel, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivel}</b><span class="bw-torre-step">${numero}</span></div>`;
+      /* El modo objetivo convierte la ficha en un botón: el que llama decide
+         qué fichas se pueden tocar y con qué atributos se marcan. */
+      const marca = marcar ? marcar(sendero, i, paso) : null;
+      /* En el panel de torres, el peldaño con un atacante abre el disparo y el
+         que tiene un monstruo mío abre el panel de mover/atacar. */
+      const attrs = `${interactivo && atacante
+        ? ` data-disparo-slot data-sendero="${sendero?.id ?? i + 1}" data-posicion="${paso}" data-nivel="${nivelFicha}"`
+        : interactivo && !marca
+          ? ` data-mover-slot data-sendero="${sendero?.id ?? i + 1}" data-posicion="${paso}" data-nivel="${nivelFicha}" data-ficha="${esc(f.id ?? "")}"`
+          : ""}${marca?.attrs ?? ""}`;
+      const titulo = marca?.titulo ?? (atacante
+        ? `Atacante nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para disparar" : ""}`
+        : `${interactivo ? "Tu monstruo" : "Monstruo"} nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para avanzar o atacar" : ""}`);
+      return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}${marca ? " objetivo" : ""}"${attrs} title="${titulo}"><img src="${imgMonstruo(nivelFicha, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivelFicha}</b><span class="bw-torre-step">${numero}</span></div>`;
     };
+    const attrsTorre = interactivo
+      ? ` data-torre-pos="${i + 1}" title="${n ? `Torre nivel ${n}: toca para mejorar` : "Hueco libre: toca para construir"}"`
+      : ` title="${n ? `Torre nivel ${n}` : "Torre vacía"}"`;
+    const lanzarHtml = lanzar ? lanzar(sendero, i) : "";
     return `
       <div class="bw-torre">
         <div class="bw-torre-camino">${caminos[i]}</div>
-        <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}" data-torre-pos="${i + 1}" title="${n ? `Torre nivel ${n}: toca para mejorar` : "Hueco libre: toca para construir"}">${dentro}${nivel}</div>
+        <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}"${attrsTorre}>${dentro}${nivel}</div>
         <div class="bw-torre-slots">${[3, 2, 1, 0].map(hueco).join("")}</div>
+        ${lanzarHtml}
       </div>`;
   };
+  return `<div class="bw-torres">${[0, 1, 2].map(torre).join("")}</div>`;
+}
+
+function pintarTorres(torres, senderos = []) {
+  const lista = Array.isArray(torres) ? torres : [];
   return `
     <div class="bw-panel-head">
       <div class="bw-panel-label">Torres <span class="bw-panel-sub">${lista.filter(t => t?.nivel).length} / 3</span></div>
       <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
     </div>
-    <div class="bw-torres">${[0, 1, 2].map(torre).join("")}</div>
+    ${bloqueTorres(lista, senderos)}
   `;
 }
 
@@ -1942,7 +2715,7 @@ function abrirModalAcciones() {
 
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-acciones";
-  fondo.className = "bw-modal-fondo";
+  fondo.className = "bw-modal-fondo bw-hoja-modal";
   fondo.innerHTML = `
     <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Acciones">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
@@ -1960,6 +2733,10 @@ function abrirModalAcciones() {
     b.addEventListener("click", async () => {
       const accion = accionesMesa[Number(b.dataset.i)];
       if (!accion || !enviarAccion) return;
+      /* Disparar también desde la lista de acciones enseña las bolas. */
+      if (accion.tipo === "atacar_monstruo") {
+        dispararConTorres({ sendero: accion.sendero, posicion: accion.posicion, plan: null });
+      }
       b.disabled = true;
       const r = await enviarAccion(accion);
       if (r?.error) {
@@ -2031,7 +2808,7 @@ function abrirCriadero(boxInicial = null) {
 
   const fondo = document.createElement("div");
   fondo.id = "bw-modal-criadero";
-  fondo.className = "bw-modal-fondo";
+  fondo.className = "bw-modal-fondo bw-hoja-modal";
   fondo.innerHTML = `
     <div class="bw-modal bw-desc-modal" role="dialog" aria-modal="true" aria-label="Criadero">
       <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
@@ -2096,7 +2873,7 @@ function abrirCriadero(boxInicial = null) {
   });
 }
 
-/* ── Manuscritos: la referencia de reglas del juego ─────────────────────── */
+/* ── Reglas: la referencia de reglas del juego ──────────────────────────── */
 
 function pintarManuscritos() {
   const fila = (a, b, c) => `
@@ -2114,7 +2891,7 @@ function pintarManuscritos() {
 
   return `
     <div class="bw-panel-head">
-      <div class="bw-panel-label">Manuscritos <span class="bw-panel-sub">reglas de la fortaleza</span></div>
+      <div class="bw-panel-label">Reglas</div>
       <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
     </div>
 
@@ -2162,6 +2939,35 @@ function pintarManuscritos() {
       ${fila("Recursos 4", "+4 monedas, +2 decretos", "4 mon.")}
       ${parrafo("Caben 4 cartas de recursos y pueden repetirse. La ciencia ocupa 2 huecos: disparar por 1 menos, crear monstruos por 1 menos y torres que hacen su nivel en cualquier escalera, 8 monedas cada una.")}
     `)}
+
+    ${seccion("Cartas de ciencia instantánea", `
+      ${fila("Subir rango — sube un nivel a un monstruo hasta nv 5", "2 dec.", "")}
+      ${fila("Convertir aliado — convierte en aliado un atacante de nv 5 o inferior", "2 dec.", "")}
+      ${fila("Bajar rango — baja un nivel a un monstruo enemigo en tus escaleras", "2 dec.", "")}
+      ${fila("Evolucionar torre — sube una torre al siguiente nivel", "2 dec.", "")}
+      ${fila("Torre de nivel 2 — construye una torre nv 2 sin necesitar Armería 2", "3 dec.", "")}
+      ${fila("Monstruo de nivel 3 — crea un yeti en un box sin necesitar Criadero 3", "3 dec.", "")}
+      ${fila("Subir armería — sube un nivel la armería", "3 dec.", "")}
+      ${fila("Subir criadero — sube un nivel el criadero", "3 dec.", "")}
+      ${fila("Subir recursos — +1 moneda y +1 decreto por turno de forma permanente", "4 dec.", "")}
+      ${fila("Criadero o armería — sube un nivel el criadero o la armería a tu elección", "4 dec.", "")}
+      ${fila("Purga — aniquila los monstruos de los peldaños 3 y 4 de tus escaleras", "8 dec.", "")}
+    `)}
+
+    ${seccion("Fases del turno", `
+      ${fila("1. Lanzaderas", "Lanza los monstruos de tus lanzaderas a las escaleras enemigas.", "")}
+      ${fila("2. Avance atacantes", "Los atacantes en las escaleras rivales suben un peldaño. Si hay un defensor, pelean.", "")}
+      ${fila("3. Avance defensores", "Tus monstruos bajan un peldaño hacia la lanzadera.", "")}
+      ${fila("4. Carta de Destino", "Se revela una carta: puede traer amenazas, bonificaciones o eventos.", "")}
+      ${fila("5. Acciones", "Juegas cartas de tu mano: recursos, ciencia, construir torres, criar monstruos…", "")}
+      ${parrafo("Un monstruo que llega al último peldaño de la lanzadera espera ahí hasta que lo lances. Si un atacante pasa el peldaño 4 de una escalera, entra en la fortaleza y suma sus puntos de daño.")}
+    `)}
+
+    ${seccion("Equipos y mapa", `
+      ${parrafo("En modo equipos juegas con aliados contra enemigos. Desde el menú Mapa ves a todos los participantes: los aliados en azul, los enemigos en rojo.")}
+      ${parrafo("Puedes visitar la fortaleza de cualquier jugador tocando su tarjeta en el mapa. Las fortalezas aliadas se muestran en azul y las enemigas en rojo.")}
+      ${parrafo("En tu turno puedes enviar monedas, decretos y monstruos a un aliado, o pedir recursos. Pedir no cuesta acciones ni decretos.")}
+    `)}
   `;
 }
 
@@ -2174,18 +2980,29 @@ function textoDestino(d) {
     ? ` · la carta es de nivel ${d.nivel}, la luna lo deja en ${n}`
     : "";
   switch (d.tipo) {
-    case "amenaza":         return `${nombreMonstruo(n)} (Nv ${n}) por la escalera ${escaleraDe(d.prio?.[0])}${nota}`;
+    case "amenaza": {
+      const ids = Array.isArray(d.senderosDestino) ? d.senderosDestino : [];
+      const cantidad = Math.max(1, Number(d.cantidad) || ids.length || 1);
+      const monstruos = cantidad === 1
+        ? `${nombreMonstruo(n)} (Nv ${n})`
+        : `${cantidad} ${pluralMonstruo(n)} (Nv ${n})`;
+      if (!ids.length) return `${monstruos} sin hueco libre en las escaleras${nota}`;
+      if (ids.length === 1) return `${monstruos} por la escalera ${escaleraDe(ids[0])}${nota}`;
+      if (ids.length === 2) return `${monstruos} en las escaleras ${ids.map(escaleraDe).join(" y ")}${nota}`;
+      return `${monstruos}, uno por escalera${nota}`;
+    }
     case "amenaza_triple":  return `3 ${pluralMonstruo(n)}, uno por escalera${nota}`;
     case "amenaza_doble":   return `2 ${pluralMonstruo(n)} en 2 escaleras${nota}`;
     case "amenaza_rival":   return `1 ${nombreMonstruo(n)} en una escalera de cada fortaleza${nota}`;
     case "calma":           return "Calma… no hay monstruos nuevos en el horizonte";
     case "buscar_bunker":   return "Busca en el mazo una carta de búnker que necesites y colócala";
-    case "aniquilar_entrada": return "Todos los monstruos del primer peldaño son aniquilados";
-    case "aniquilar_nivel": return "Todos los monstruos de nivel 3 o inferiores mueren. Quítalos de las escaleras";
-    case "matar_mayor":     return "El monstruo de más rango que trepa tu fortaleza muere. Quítalo de la escalera";
+    case "aniquilar_entrada": return "Todos los atacantes de la entrada son aniquilados";
+    case "aniquilar_nivel": return "Todos los monstruos de nivel 3 o inferiores de los caminos mueren. Quítalos de las escaleras";
+    case "matar_mayor":     return "Los monstruos de mayor nivel de los caminos mueren. Quítalos de las escaleras";
     case "avanzar_extra":   return "Todos los atacantes de tus escaleras suben un peldaño más";
     case "miedo":           return "Todos los atacantes de la mesa retroceden una casilla";
-    case "convertir_aliado":return "Convierte un monstruo atacante en un monstruo tuyo";
+    case "convertir_aliado":return "Convierte un atacante de nivel 5 o menos en un monstruo tuyo";
+    case "desercion":       return "Convierte uno de tus monstruos en atacante";
     case "subir_monstruos": return "Tus monstruos de nivel 5 o inferior suben un rango";
     case "bajar_monstruos": return "Tus monstruos de nivel 2 o superior bajan un rango";
     case "colocar_monstruos": return `Pon ${d.cantidad ?? 3} monstruos de nivel ${n} en tus jaulas (criadero)`;
@@ -2212,12 +3029,10 @@ const NOMBRES_EFECTO = {
   monstruo_barato:      "Monstruos baratos",
   torreta_universal:    "Torres universales",
   purga:                "Purga",
-  avanzar_rival_1:      "Avanza al rival",
   subir_rango:          "Subir rango",
   convertir_aliado:     "Convertir aliado",
   bajar_nivel_enemigo:  "Bajar rango",
   evolucionar_torreta:  "Evolucionar torre",
-  vuelo_seguro:         "Vuelo seguro",
   torreta2_gratis:      "Torre de nivel 2",
   monstruo3_gratis:     "Monstruo de nivel 3",
   subir_armeria:        "Subir armería",
@@ -2240,9 +3055,14 @@ let lunaMesa = 1;
 let jugadoresMesa = [];
 let turnoMesa = null;
 let yoMesa = null;
+/* Tablero propio tal cual llega de la mesa: lo usa la elección de objetivo de
+   las ciencias que tocan fichas (convertir, bajar rango). */
+let miTableroMesa = null;
 let modoMesa = "todos";
 let miEquipoMesa = 0;
 let aliadosMesa = [];
+let peticionesMesa = [];
+let enviosPendientesMesa = [];
 let tabMesa = "cartas";
 /* Visita a la fortaleza de otro jugador desde la pestaña Mapa. */
 let viendoJugador = null;
@@ -2254,33 +3074,107 @@ let disparoPanel = null;
 /* Regalos ya enseñados en esta sesión: el motor los conserva para que no se
    pierda el aviso, y el cliente no los repite en cada repintado. */
 const regalosVistos = new Set();
+/* Avisos ya leídos (se pulsó "Muchas gracias"): aunque el motor conserve el
+   regalo y vuelva a llegar en un repintado, no se enseña otra vez. Se persiste
+   en localStorage para que un refresco no vuelva a mostrar el mismo regalo. */
+const regalosCerrados = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem("bw-regalos-cerrados") ?? "[]");
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch { return new Set(); }
+})();
+const regalosMostrados = new Set();
 let regaloMostrando = false;
+/* Aviso retrasado: si el turno cambia antes de que salga, se cancela. */
+let regaloProgramado = null;
+
+/* Envío de un aliado: la caja con su paracaídas cae sobre el velo y, cuando
+   toca el suelo, sube la hoja con lo que traía. La capa de la caja va por
+   debajo del modal (960 < 1000), así que la caja queda detrás de la hoja. */
+function cerrarRegalo() {
+  if (regaloProgramado) { clearTimeout(regaloProgramado); regaloProgramado = null; }
+  document.querySelectorAll("#bw-modal-regalo, #bw-regalo-capa").forEach((nodo) => nodo.remove());
+  document.body.classList.remove("bw-regalo-abierto");
+  for (const id of regalosMostrados) regalosCerrados.add(id);
+  try { localStorage.setItem("bw-regalos-cerrados", JSON.stringify([...regalosCerrados])); } catch {}
+  regalosMostrados.clear();
+  regaloMostrando = false;
+}
 
 function mostrarRegalo(regalos) {
-  const img = document.createElement("img");
-  img.className = "bw-regalo-volando";
-  img.src = `${BASE_IMG}/reward-box.png`;
-  img.alt = "";
-  document.body.appendChild(img);
-  setTimeout(() => {
-    img.remove();
-    const lineas = (regalos ?? []).map((g) => {
-      const cosas = [];
-      if (g.monedas) cosas.push(`${g.monedas} moneda${g.monedas === 1 ? "" : "s"}`);
-      if (g.decretos) cosas.push(`${g.decretos} decreto${g.decretos === 1 ? "" : "s"}`);
-      if (g.monstruos?.length) cosas.push(`${g.monstruos.length} monstruo${g.monstruos.length === 1 ? "" : "s"} de nivel ${g.monstruos.join(", ")}`);
-      if (g.sobran?.length) cosas.push(`${g.sobran.length} monstruo(s) no cupieron en las jaulas`);
-      return `<li><b>${esc(g.de ?? "Un aliado")}</b>: ${cosas.join(", ") || "un saludo"}.</li>`;
-    }).join("");
-    Promise.resolve(modal({
-      titulo: "Regalo de aliado",
-      html: `<p>Te ha llegado un envío a la fortaleza:</p><ul class="bw-regalo-lista">${lineas}</ul><p>Las monedas y los decretos ya están sumados; los monstruos, en las jaulas libres.</p>`,
-      botones: [{ texto: "Recoger", estilo: "principal", valor: "ok" }],
-    })).finally(() => { regaloMostrando = false; });
-  }, 1200);
+  cerrarRegalo();
+  regaloMostrando = true;
+  for (const g of regalos ?? []) if (g?.id) regalosMostrados.add(g.id);
+
+  /* La caja ya está cayendo mientras la hoja se abre: así entra por arriba,
+     se mece a un lado y a otro y acaba metiéndose por debajo del modal. */
+  const capa = document.createElement("div");
+  capa.id = "bw-regalo-capa";
+  capa.className = "bw-regalo-capa";
+  capa.innerHTML = `<div class="bw-regalo-caja"><div class="bw-regalo-balanceo">
+    <img src="${BASE_IMG}/reward-box.png" alt="">
+  </div></div>`;
+  document.body.appendChild(capa);
+  /* Mientras la hoja está abierta no se puede tocar el menú ni la mano: hay
+     que darle a "Muchas gracias" para seguir jugando. */
+  document.body.classList.add("bw-regalo-abierto");
+
+  /* Quién manda y qué trae, en dos líneas: el nombre arriba y la carga debajo,
+     sumando todas las cajas que hayan llegado juntas. */
+  const totales = (regalos ?? []).reduce((t, g) => {
+    t.monedas += g.monedas ?? 0;
+    t.decretos += g.decretos ?? 0;
+    t.monstruos += (g.monstruos?.length ?? 0) + (g.calles?.length ?? 0) + (g.sobran?.length ?? 0);
+    t.calles += g.calles?.length ?? 0;
+    t.sobran += g.sobran?.length ?? 0;
+    return t;
+  }, { monedas: 0, decretos: 0, monstruos: 0, calles: 0, sobran: 0 });
+
+  const nombres = (regalos ?? []).map((g) => esc(g.de ?? "Un aliado"));
+  const quien = nombres.length <= 1
+    ? `${nombres[0] ?? "Un aliado"} te ha enviado una caja a tu fortaleza.`
+    : `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]} te han enviado cajas a tu fortaleza.`;
+
+  /* Cuatro cuadrados como los del tablero: monedas, decretos y un cuadrado por
+     monstruo con su imagen, su nombre y el nivel en el círculo. */
+  const niveles = (regalos ?? []).flatMap((g) => [
+    ...(g.monstruos ?? []), ...(g.calles ?? []), ...(g.sobran ?? []),
+  ]);
+  const items = [];
+  if (totales.monedas) items.push({ tipo: "moneda", img: pilaCoins(totales.monedas), nv: totales.monedas });
+  if (totales.decretos) items.push({ tipo: "decreto", img: pilaDecrees(totales.decretos), nv: totales.decretos });
+  for (const nivel of niveles) items.push({ tipo: "monstruo", img: imgMonstruo(nivel), nv: nivel });
+  /* Una caja por cosa: una si manda una, dos si manda dos, tres si manda tres. */
+  const cuadros = items.map((it) => `<div class="bw-box-slot bw-regalo-cuadro ${it.tipo}">
+      <img class="bw-box-img" src="${esc(it.img)}" alt="">
+      <b class="bw-box-nv">${it.nv}</b>
+    </div>`).join("");
+
+  const fondo = document.createElement("div");
+  fondo.id = "bw-modal-regalo";
+  fondo.className = "bw-modal-fondo bw-hoja-modal";
+  fondo.innerHTML = `
+    <div class="bw-modal" role="dialog" aria-modal="true" aria-label="Envío de aliado">
+      <div class="bw-regalo-head"><b>Envío de aliado</b></div>
+      <p class="bw-regalo-intro">${quien}</p>
+      <div class="bw-regalo-slots">${cuadros}</div>
+      ${totales.calles ? `<p class="bw-regalo-pie">${totales.calles === 1 ? "El monstruo que no cabía" : "Los monstruos que no cabían"} ${totales.calles === 1 ? "ha" : "han"} ocupado ${totales.calles === 1 ? "un hueco libre" : "huecos libres"} de tus caminos.</p>` : ""}
+      ${totales.sobran ? `<p class="bw-regalo-pie">${totales.sobran === 1 ? "El monstruo que no cabe espera" : "Los monstruos que no caben esperan"} en la caja hasta que se libere una jaula.</p>` : ""}
+      <div class="bw-modal-acciones">
+        <button type="button" class="bw-modal-usar bw-regalo-ok">Muchas gracias</button>
+      </div>
+    </div>`;
+  document.body.appendChild(fondo);
+  /* Solo se cierra con el botón: es un aviso que hay que leer. El manejador va
+     en el propio botón y también en la hoja, por si el toque cae en el borde. */
+  const ok = fondo.querySelector(".bw-regalo-ok");
+  ok?.addEventListener("click", (ev) => { ev.stopPropagation(); cerrarRegalo(); });
+  fondo.addEventListener("click", (ev) => {
+    if (ev.target.closest(".bw-regalo-ok")) cerrarRegalo();
+  });
 }
 function actualizarOverlayPaneles() {
-  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel", ".aliados-panel"];
+  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel", ".aliados-panel", ".envio-panel"];
   const abierto = !!disparoPanel || paneles.some((s) => {
     const p = document.querySelector(`body > .bw-panel${s}`);
     return p && !p.classList.contains("oculto");
@@ -2291,6 +3185,22 @@ function cerrarDisparo() {
   if (disparoPanel) { disparoPanel.remove(); disparoPanel = null; }
   actualizarOverlayPaneles();
 }
+
+/* Cierra la interfaz que pertenece al turno anterior. Se llama antes de montar
+   la vista nueva, cuando cambia la luna o el jugador en turno. No toca los
+   modales de la plataforma (versión, regalo, aviso de turno): esos no son
+   `bw-modal-fondo` y el aviso de turno se abre después de este cierre. */
+function cerrarUiDeTurno() {
+  /* El envío de aliado es ahora una hoja del juego: se cierra al cambiar el
+     turno y hay que soltar el aviso, o no volvería a salir nunca más. */
+  if (document.getElementById("bw-modal-regalo") || document.getElementById("bw-regalo-capa")) cerrarRegalo();
+  document.querySelectorAll(
+    "body > .bw-modal-fondo, body > .bw-panel, body > .bw-panel-overlay"
+  ).forEach((nodo) => nodo.remove());
+  document.querySelector(".bw-carta.activa")?.classList.remove("activa");
+  document.body.classList.remove("bw-lanzando");
+  disparoPanel = null;
+}
 /* Evita mandar dos veces el pase automático al quedarse sin decretos. */
 let pasandoAuto = false;
 let energiaMesa = 0;
@@ -2299,12 +3209,15 @@ let accionesRestantesMesa = 0;
 
 const BASE_IMG   = "/app/juegos/bunker-wars/img";
 /* Láminas de monstruo disponibles por nivel. Los niveles sin arte propio
-   (5, 7…) usan la del 1 hasta que haya imagen suya. */
-const MONSTRUOS_CON_ARTE = new Set([1, 2]);
-function imgMonstruo(nivel, atras = false) {
+   (4 y 6, que no existen en el bestiario) usan la del 1. */
+const MONSTRUOS_CON_ARTE = new Set([1, 2, 3, 5, 7]);
+function imgMonstruo(nivel, atras = false, jaula = false) {
   const n = Number(nivel);
   const arte = MONSTRUOS_CON_ARTE.has(n) ? n : 1;
-  return `${BASE_IMG}/monstruos/m${arte}-${atras ? "t" : "f"}.png`;
+  /* Tres vistas por nivel: de frente (f), de espaldas (t) y dentro de la reja
+     de la jaula (j). En jaulas y lanzaderas se usa siempre la de jaula. */
+  const vista = jaula ? "j" : atras ? "t" : "f";
+  return `${BASE_IMG}/monstruos/m${arte}-${vista}.png`;
 }
 
 /* Alzado de la torre según su nivel; el 1 si faltara el arte. */
@@ -2422,17 +3335,22 @@ function conNegritas(t) {
 
 function abrirCarta(el) {
   cerrarCarta();
+  el.classList.add("activa");
   const d = el.dataset;
   const jugable = d.jugable === "1";
   const sinEnergia = d.sinEnergia === "1";
   const reemplazos = d.tipo === "ciencia" && cienciasMesa.length >= SLOTS_CIENCIA ? cienciasMesa : null;
   const opciones = accionesMesa.filter(a => a.tipo === "mejorar_bunker" && a.cartaId === d.uid);
-  const elecciones = !reemplazos && opciones.length > 1 ? opciones : null;
+  /* Avanzar al rival, Convertir aliado y Bajar rango no se eligen en una lista
+     de botones: se abre el tablero y se toca la ficha (abrirObjetivo). */
+  const conTablero = jugable && !reemplazos
+    && CON_TABLERO.includes(d.efecto) && opciones.length > 0;
+  const elecciones = !reemplazos && !conTablero && opciones.length > 1 ? opciones : null;
 
   /* Motivo por el que no se puede jugar, para el pie del modal. Las monedas se
      dicen también aunque el coste ya vaya en rojo: nunca está de más el número. */
-  const CON_OBJETIVO = ["subir_rango", "avanzar_rival_1", "convertir_aliado", "bajar_nivel_enemigo",
-    "evolucionar_torreta", "vuelo_seguro", "torreta2_gratis", "monstruo3_gratis", "subir_lab_o_arm"];
+  const CON_OBJETIVO = ["subir_rango", "convertir_aliado", "bajar_nivel_enemigo",
+    "evolucionar_torreta", "torreta2_gratis", "monstruo3_gratis", "subir_lab_o_arm"];
   const sinObjetivo = jugable && CON_OBJETIVO.includes(d.efecto) && opciones.length === 0;
   /* Si el pie dice que no hay objetivo, el botón no puede quedarse activo. */
   const puedeUsar = jugable && !sinObjetivo;
@@ -2461,7 +3379,6 @@ function abrirCarta(el) {
   fondo.className = "bw-modal-fondo";
   fondo.innerHTML = `
     <div class="bw-modal" role="dialog" aria-modal="true" aria-label="${esc(tituloCarta(d, d.titulo))}">
-      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
       <div class="bw-carta-grande">
         <span class="bw-carta-coste-grande${sinEnergia ? " sin-energia" : ""}">${d.coste}</span>
         <div class="bw-carta-grande-img"><img src="${esc(d.img ?? "")}" alt=""></div>
@@ -2473,21 +3390,35 @@ function abrirCarta(el) {
       <div class="bw-modal-acciones">
         ${reemplazos
           ? reemplazos.map(c => `<button type="button" class="bw-modal-usar" data-reemplazo="${esc(c.efecto ?? "")}"${jugable ? "" : " disabled"}>Quitar ${esc(NOMBRES_EFECTO[c.efecto] ?? c.titulo ?? c.efecto ?? "?")}</button>`).join("")
+          : conTablero
+            ? `<button type="button" class="bw-modal-usar" data-tablero="1">${esc(ETIQUETA_TABLERO[d.efecto] ?? "Elegir objetivo")}</button>`
           : elecciones
             ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable ? "" : " disabled"}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir criadero") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
             : `<button type="button" class="bw-modal-usar"${puedeUsar ? "" : " disabled"}${opciones.length === 1 ? ` data-accion="${accionesMesa.indexOf(opciones[0])}"` : ""}>Usar carta</button>`}
       </div>
+      <button type="button" class="bw-modal-cancelar">Cancelar</button>
       ${motivo ? `<p class="bw-modal-nota">${esc(motivo)}</p>` : ""}
     </div>
   `;
   document.body.appendChild(fondo);
 
-  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrarCarta);
+  fondo.querySelector(".bw-modal-cancelar").addEventListener("click", cerrarCarta);
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrarCarta(); });
   document.addEventListener("keydown", escaparCarta);
 
+  /* El botón de tablero no envía nada por sí solo: cierra la carta y abre la
+     elección sobre el tablero. */
+  const btnTablero = fondo.querySelector("[data-tablero]");
+  if (btnTablero) {
+    btnTablero.addEventListener("click", () => {
+      const listaTablero = opciones.slice();
+      cerrarCarta();
+      abrirObjetivo(d.efecto, d.uid, listaTablero);
+    });
+  }
+
   if (jugable) {
-    for (const usar of fondo.querySelectorAll(".bw-modal-usar")) {
+    for (const usar of fondo.querySelectorAll(".bw-modal-usar:not([data-tablero])")) {
       usar.addEventListener("click", () => {
         usar.disabled = true;
         usar.textContent = "Usando…";
@@ -2504,7 +3435,180 @@ function abrirCarta(el) {
 
 function cerrarCarta() {
   document.getElementById("bw-modal-carta")?.remove();
+  document.querySelector(".bw-carta.activa")?.classList.remove("activa");
   document.removeEventListener("keydown", escaparCarta);
+}
+
+/* ── Ciencia con objetivo: se elige tocando la ficha ─────────────────────
+   Estas tres no se resuelven con una lista de botones: abren el mismo tipo de
+   hoja que la fase de lanzaderas. Avanzar al rival pide primero la fortaleza
+   (como al lanzar) y luego el monstruo; Convertir aliado y Bajar rango van
+   directos al tablero propio. El motor ya manda una acción legal por objetivo,
+   así que aquí solo se agrupan y se pintan como fichas tocables. */
+const CON_TABLERO = ["convertir_aliado", "bajar_nivel_enemigo"];
+const ETIQUETA_TABLERO = {
+  convertir_aliado:    "Elegir a quién convertir",
+  bajar_nivel_enemigo: "Elegir a quién bajar",
+};
+const TITULO_TABLERO = {
+  convertir_aliado:    "Convertir aliado",
+  bajar_nivel_enemigo: "Bajar rango",
+};
+const SUB_TABLERO = {
+  convertir_aliado:    "Toca el atacante que se pasa a tu bando.",
+  bajar_nivel_enemigo: "Toca el atacante que baja un rango.",
+};
+
+function abrirObjetivo(efecto, cartaUid, opciones) {
+  document.getElementById("bw-modal-objetivo")?.remove();
+  const lista = (opciones ?? []).filter(a => a.tipo === "mejorar_bunker" && a.cartaId === cartaUid);
+  if (!lista.length) return false;
+
+  const fondo = document.createElement("div");
+  fondo.id = "bw-modal-objetivo";
+  fondo.className = "bw-modal-fondo";
+  document.body.appendChild(fondo);
+  /* La misma clase que la lanzadera: mientras la hoja está abierta, el menú de
+     abajo no abre cartas ni paneles. */
+  document.body.classList.add("bw-lanzando");
+
+  const cerrar = () => {
+    fondo.remove();
+    document.body.classList.remove("bw-lanzando");
+    document.removeEventListener("keydown", escaparObjetivo);
+  };
+  const escaparObjetivo = (ev) => { if (ev.key === "Escape") cerrar(); };
+  document.addEventListener("keydown", escaparObjetivo);
+
+  const enviar = async (accion, el) => {
+    if (!accion || !enviarAccion) return;
+    if (el) el.disabled = true;
+    /* Se cierra antes de enviar para que el repintado enseñe el avance limpio. */
+    cerrar();
+    await usarCarta({ ...accion }, null);
+  };
+
+  /* Acciones legales agrupadas por jugador (el propio o el rival según el
+     caso) y por calle+peldaño, que es lo que pinta bloqueTorres. */
+  const porJugador = (jugadorId) => {
+    const mapa = new Map();
+    for (const a of lista) {
+      const id = a.objetivo?.jugadorId ?? yoMesa;
+      if (id !== jugadorId) continue;
+      mapa.set(`${a.objetivo?.sendero}|${a.objetivo?.posicion}`, a);
+    }
+    return mapa;
+  };
+
+  /* Resumen de las tres calles para el listado de rivales. */
+  const callesResumen = (p, mapa) => [0, 1, 2].map(i => {
+    const sd = p.senderos?.[i] ?? {};
+    const sid = sd.id ?? i + 1;
+    const torre = Number(p.bunker?.torres?.[i]?.nivel) || 0;
+    const fichas = [3, 2, 1, 0].map(paso => {
+      const f = sd.posiciones?.[paso] ?? (sd.monstruos ?? []).find(m => m.pos === paso) ?? null;
+      if (!f) return cuadroLz(0, "bz-vacio", `Peldaño ${paso + 1}: libre`);
+      const n = f.nivel ?? f.fuerza ?? "?";
+      const atacante = f.tipo === "atacante";
+      return cuadroLz(n, atacante ? "bz-at" : "bz-def",
+        `${atacante ? "Atacante" : "Defensor"} nivel ${n} en el peldaño ${paso + 1}`,
+        mapa.has(`${sid}|${paso}`) ? "objetivo" : "");
+    }).join("");
+    return `<span class="bw-lz-calle">
+      ${cuadroLz(torre, "bz-torre", `Torre ${i + 1}: ${torre ? `nivel ${torre}` : "vacía"}`)}
+      ${fichas}
+    </span>`;
+  }).join("");
+
+  /* Tablero con las fichas legales marcadas y tocables. */
+  const tablero = (p, jugadorId) => {
+    const mapa = porJugador(jugadorId);
+    return `<div class="bw-lz-torres">${bloqueTorres(p.bunker?.torres ?? [], p.senderos ?? [], {
+      interactivo: false,
+      huecoTorre: "nada",
+      marcar: (sendero, i, paso) => {
+        const a = mapa.get(`${sendero?.id ?? i + 1}|${paso}`);
+        if (!a) return null;
+        return {
+          attrs: ` data-objetivo-op="${lista.indexOf(a)}"`,
+          titulo: esc(a.texto ?? a.etiqueta ?? "Toca para elegir"),
+        };
+      },
+    })}</div>`;
+  };
+
+  const pasoRivales = () => {
+    fondo.classList.remove("lz-detalle");
+    fondo.classList.add("lz-inicial");
+    const ids = [...new Set(lista.map(a => a.objetivo?.jugadorId).filter(Boolean))];
+    const filas = ids.map(id => {
+      const r = jugadoresMesa.find(x => x.id === id) ?? { id };
+      const mapa = porJugador(id);
+      const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+      return `<button type="button" class="bw-lz-rival" data-objetivo-rival="${esc(id)}"
+                title="Ver la fortaleza de ${esc(nombreMesa(r))}">
+        <span class="bw-lz-rival-cab">
+          <b class="bw-lz-rival-nombre">${esc(nombreMesa(r))}</b>
+          <span class="bw-lz-rival-vida">❤ ${vida} / 20</span>
+        </span>
+        <span class="bw-lz-calles">${callesResumen(r, mapa)}</span>
+        <span class="bw-ob-cuenta">${mapa.size} monstruo${mapa.size === 1 ? "" : "s"} de nivel 3 o menos puede${mapa.size === 1 ? "" : "n"} avanzar</span>
+      </button>`;
+    }).join("");
+    fondo.innerHTML = `
+      <div class="bw-lz bw-lz-hoja">
+        <div class="bw-lz-head"><b class="bw-lz-tit">${esc(TITULO_TABLERO[efecto] ?? "Elegir objetivo")}</b></div>
+        <p class="bw-lz-sub">${esc(SUB_TABLERO[efecto] ?? "")}</p>
+        <div class="bw-lz-lista solo">${filas}</div>
+        <div class="bw-lz-pie"><button type="button" class="bw-modal-usar bw-ob-cancelar">Cancelar</button></div>
+      </div>`;
+  };
+
+  const pasoRival = (rivalId) => {
+    const r = jugadoresMesa.find(x => x.id === rivalId) ?? { id: rivalId };
+    const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+    fondo.classList.remove("lz-inicial");
+    fondo.classList.add("lz-detalle");
+    fondo.innerHTML = `
+      <div class="bw-lz bw-lz-hoja">
+        <div class="bw-lz-head bw-lz-cab-detalle">
+          <b class="bw-lz-tit">Fortaleza de ${esc(nombreMesa(r))}</b>
+          <span class="bw-lz-vida">❤ ${vida} / 20</span>
+        </div>
+        <p class="bw-lz-sub">${esc(SUB_TABLERO[efecto] ?? "")}</p>
+        <div class="bw-lz-tablero">${tablero(r, rivalId)}</div>
+        <div class="bw-lz-pie">
+          <button type="button" class="bw-modal-usar bw-ob-atras">Atrás</button>
+          <button type="button" class="bw-modal-usar bw-ob-cancelar">Cancelar</button>
+        </div>
+      </div>`;
+  };
+
+  const pasoPropio = () => {
+    const m = miTableroMesa ?? jugadoresMesa.find(x => x.id === yoMesa) ?? {};
+    fondo.classList.remove("lz-inicial");
+    fondo.classList.add("lz-detalle");
+    fondo.innerHTML = `
+      <div class="bw-lz bw-lz-hoja">
+        <div class="bw-lz-head"><b class="bw-lz-tit">${esc(TITULO_TABLERO[efecto] ?? "Elegir objetivo")}</b></div>
+        <p class="bw-lz-sub">${esc(SUB_TABLERO[efecto] ?? "")}</p>
+        <div class="bw-lz-tablero">${tablero(m, yoMesa)}</div>
+        <div class="bw-lz-pie"><button type="button" class="bw-modal-usar bw-ob-cancelar">Cancelar</button></div>
+      </div>`;
+  };
+
+  fondo.addEventListener("click", (ev) => {
+    if (ev.target === fondo) return cerrar();
+    const op = ev.target.closest("[data-objetivo-op]");
+    if (op) return enviar(lista[Number(op.dataset.objetivoOp)], op);
+    const rv = ev.target.closest("[data-objetivo-rival]");
+    if (rv) return pasoRival(rv.dataset.objetivoRival);
+    if (ev.target.closest(".bw-ob-atras")) return pasoRivales();
+    if (ev.target.closest(".bw-ob-cancelar")) return cerrar();
+  });
+
+  pasoPropio();
+  return true;
 }
 
 /* ── Ciencia instalada: sus cartas, en el mismo papel que la carta grande ──
@@ -2555,29 +3659,82 @@ function abrirCiencia() {
   document.addEventListener("keydown", escapar);
 }
 
+/* ── Avanzar monstruo: lanzadera o casilla 4 de un camino ───────────────────
+   El mismo modal oscuro de casa (el del descarte, las acciones y el criadero),
+   con el monstruo en su cuadrado de jaula en vez de la lámina suelta sobre el
+   pergamino: antes salía como una hoja marrón distinta a todo lo demás. */
+/* El nombre del lado, no el texto interno de la jugada: «A lanzadera
+   izquierda», «A escalera central»… */
+const LADO_LANZADERA = { 0: "izquierda", 1: "derecha" };
+const LADO_ESCALERA = { 1: "izquierda", 2: "central", 3: "derecha" };
+
+function etiquetaEnvio(accion, mon) {
+  if (accion.tipo === "mover_a_lanzadera") {
+    const idx = (boxActual ?? []).findIndex((m) => m?.id === mon.id);
+    const i = idx >= 2 ? 1 : 0;
+    return { texto: `A lanzadera ${LADO_LANZADERA[i]}`, nota: "" };
+  }
+  if (accion.tipo === "mover_a_sendero") {
+    return { texto: `A escalera ${LADO_ESCALERA[accion.sendero] ?? accion.sendero}`, nota: "1 moneda" };
+  }
+  if (accion.tipo === "avanzar_monstruo") {
+    return { texto: `Avanzar al peldaño ${Number(accion.posicion) + 1}`, nota: "1 moneda" };
+  }
+  return { texto: accion.etiqueta ?? accion.texto ?? "Mover", nota: "" };
+}
+
 function abrirEnvio(mon) {
-  const opciones = accionesMesa.filter((a) => a.monstruoId === mon.id);
+  document.getElementById("bw-panel-envio")?.remove();
+  /* El cuadrado del monstruo usa la textura de pergamino de los paneles: hay
+     que medirla en píxeles reales o en un móvil Retina sale al triple. */
+  ajustarFondoModal();
+  /* Lanzadera arriba y después las escaleras de izquierda a derecha. */
+  const orden = { mover_a_lanzadera: 0, mover_a_sendero: 1, avanzar_monstruo: 2 };
+  const opciones = accionesMesa
+    .filter((a) => a.monstruoId === mon.id)
+    .sort((a, b) => (orden[a.tipo] ?? 9) - (orden[b.tipo] ?? 9)
+      || (Number(a.sendero) || 0) - (Number(b.sendero) || 0));
 
-  const html = `
-    <div class="bw-mon-cab">
-      <img src="${imgMonstruo(mon.nivel)}" class="bw-mon-img" alt="monstruo">
-      <b class="bw-mon-nv">${mon.nivel ?? "?"}</b>
+  const panel = document.createElement("div");
+  panel.id = "bw-panel-envio";
+  panel.className = "bw-panel envio-panel";
+  panel.innerHTML = `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Avanzar monstruo</div>
+      <button class="bw-panel-x" type="button" data-cerrar-envio aria-label="Cerrar">×</button>
     </div>
-    ${opciones.length
-      ? `<div class="bw-envio-opciones">${opciones.map((a, i) => `<button type="button" class="bw-envio-op" data-i="${i}">${esc(a.texto ?? "Mover")}</button>`).join("")}</div>`
-      : `<p class="bw-envio-vacio">Ese monstruo no se puede mover ahora.</p>`}`;
+    <div class="bw-envio-cuerpo">
+      <div class="bw-envio-cuadro">
+        <div class="bw-box-slot lleno">
+          <img src="${imgMonstruo(mon.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo">
+          <b class="bw-box-nv">${mon.nivel ?? "?"}</b>
+        </div>
+      </div>
+      ${opciones.length
+        ? `<div class="bw-envio-lista">${opciones.map((a, i) => {
+            const e = etiquetaEnvio(a, mon);
+            return `<button type="button" class="bw-modal-usar" data-envio-i="${i}">${esc(e.texto)}${e.nota ? `<small>${esc(e.nota)}</small>` : ""}</button>`;
+          }).join("")}</div>`
+        : `<p class="bw-modal-pie">Ese monstruo no se puede mover ahora.</p>`}
+    </div>`;
+  /* El panel de jaulas vive pegado al mismo borde: se aparta mientras el del
+     monstruo está encima y vuelve al cerrar. */
+  const tapados = [...document.querySelectorAll("body > .bw-panel")]
+    .filter((p) => !p.classList.contains("oculto"));
+  tapados.forEach((p) => p.classList.add("oculto"));
+  document.body.appendChild(panel);
+  actualizarOverlayPaneles();
 
-  modalMonstruo({
-    titulo: "Avanzar monstruo",
-    html,
-    botones: [{ texto: "Cerrar", estilo: "secundario", valor: null }],
-  });
+  const cerrar = () => {
+    panel.remove();
+    tapados.forEach((p) => { if (p.isConnected) p.classList.remove("oculto"); });
+    actualizarOverlayPaneles();
+  };
+  panel.querySelector("[data-cerrar-envio]").addEventListener("click", cerrar);
 
-  /* `modal` deja la capa pintada en el acto: las opciones ya están en el DOM. */
-  const capa = document.getElementById("capa");
-  for (const b of capa?.querySelectorAll(".bw-envio-op") ?? []) {
+  for (const b of panel.querySelectorAll("[data-envio-i]")) {
     b.addEventListener("click", async () => {
-      const accion = opciones[Number(b.dataset.i)];
+      const accion = opciones[Number(b.dataset.envioI)];
       if (!accion || !enviarAccion) return;
       b.disabled = true;
       const r = await enviarAccion(accion);
@@ -2586,9 +3743,120 @@ function abrirEnvio(mon) {
         b.disabled = false;
         return;
       }
-      cerrarModal();
+      cerrar();
     });
   }
+}
+
+/* ── Mover un monstruo de mis escaleras ─────────────────────────────────────
+   Tocar una ficha propia abre el mismo panel de la jaula: avanzar (a la
+   casilla vacía más cercana de delante) o atacar (al atacante más cercano de
+   delante). Cada jugada cuesta 1 moneda y 1 decreto, y solo se ofrece si está
+   entre las acciones legales que manda la mesa. */
+/* Nivel de una ficha: `nivel` en los monstruos y `fuerza` en los atacantes
+   antiguos. (`nivelDe` vive dentro de `pintarMiBunker` y aquí no se ve.) */
+const nivelDeFicha = (f) => f?.nivel ?? f?.fuerza ?? "?";
+
+function posicionesDe(sendero) {
+  const calle = (miTableroMesa?.senderos ?? []).find((s) => Number(s.id) === Number(sendero));
+  return calle?.posiciones ?? [];
+}
+
+function monstruosEnEscalera(sendero) {
+  return posicionesDe(sendero)
+    .map((f, i) => (f && f.tipo === "monstruo" ? { id: f.id, nivel: nivelDeFicha(f), posicion: i } : null))
+    .filter(Boolean);
+}
+
+/* Si tiene un atacante delante la jugada es atacar; si no, avanzar. Se mira la
+   calle, sin depender de que la jugada sea legal: así el título y la fila del
+   panel de la torre dicen lo que toca aunque falten monedas. */
+function tipoDeMover(sendero, posicion) {
+  const pos = posicionesDe(sendero);
+  for (let d = Number(posicion) - 1; d >= 0; d--) {
+    if (pos[d]?.tipo === "atacante") return "atacar";
+  }
+  return "avanzar";
+}
+
+/* Si tiene un atacante delante, avanzar es atacar: se lanza contra él. Sin
+   nadie delante, avanza a la casilla vacía más cercana. Una sola jugada. */
+function planMover(sendero, posicion, id) {
+  const pos = posicionesDe(sendero);
+  const busca = (destino) => accionesMesa.find((a) => a.tipo === "avanzar_monstruo"
+    && a.monstruoId === id && Number(a.sendero) === Number(sendero)
+    && Number(a.posicion) === destino) ?? null;
+
+  for (let d = Number(posicion) - 1; d >= 0; d--) {
+    const f = pos[d] ?? null;
+    if (f?.tipo !== "atacante") continue;
+    const a = busca(d);
+    if (a) return { accion: a, tipo: "atacar", destino: d, nivel: nivelDeFicha(f) };
+  }
+  for (let d = Number(posicion) - 1; d >= 0; d--) {
+    if (pos[d]) continue;
+    const a = busca(d);
+    if (a) return { accion: a, tipo: "avanzar", destino: d, nivel: null };
+  }
+  return null;
+}
+
+function abrirMonstruo({ sendero, posicion, id, nivel }) {
+  document.getElementById("bw-panel-mover")?.remove();
+  ajustarFondoModal();
+  const ficha = posicionesDe(sendero)[Number(posicion)] ?? null;
+  const nv = nivel ?? nivelDeFicha(ficha);
+  const plan = planMover(sendero, posicion, id);
+  /* El título es la jugada, no el monstruo: «Avanzar» o «Atacar». */
+  const tipo = plan?.tipo ?? tipoDeMover(sendero, posicion);
+
+  const panel = document.createElement("div");
+  panel.id = "bw-panel-mover";
+  panel.className = "bw-panel envio-panel";
+  panel.innerHTML = `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">${tipo === "atacar" ? "Atacar" : "Avanzar"}</div>
+      <button class="bw-panel-x" type="button" data-cerrar-mover aria-label="Cerrar">×</button>
+    </div>
+    <div class="bw-envio-cuerpo">
+      <div class="bw-envio-cuadro">
+        <div class="bw-box-slot lleno">
+          <img src="${imgMonstruo(nv, false, false)}" class="bw-envio-foto" alt="monstruo">
+          <b class="bw-box-nv">${nv ?? "?"}</b>
+        </div>
+      </div>
+      ${plan
+        ? `<div class="bw-envio-lista">
+             <button type="button" class="bw-modal-usar" data-mover>${plan.tipo === "atacar" ? `Atacar${plan.nivel ? ` · atacante ${plan.nivel}` : ""}` : "Avanzar"}<small>1 moneda + 1 decreto</small></button>
+           </div>`
+        : `<p class="bw-modal-pie">Ese monstruo no se puede mover ahora.</p>`}
+    </div>`;
+
+  const tapados = [...document.querySelectorAll("body > .bw-panel")]
+    .filter((p) => !p.classList.contains("oculto"));
+  tapados.forEach((p) => p.classList.add("oculto"));
+  document.body.appendChild(panel);
+  actualizarOverlayPaneles();
+
+  const cerrar = () => {
+    panel.remove();
+    tapados.forEach((p) => { if (p.isConnected) p.classList.remove("oculto"); });
+    actualizarOverlayPaneles();
+  };
+  panel.querySelector("[data-cerrar-mover]").addEventListener("click", cerrar);
+
+  const b = panel.querySelector("[data-mover]");
+  b?.addEventListener("click", async () => {
+    if (!plan || !enviarAccion) return;
+    b.disabled = true;
+    const r = await enviarAccion(plan.accion);
+    if (r?.error) {
+      aviso(r.error, { error: true });
+      b.disabled = false;
+      return;
+    }
+    cerrar();
+  });
 }
 
 /* ── Mapa: elegir jugador y visitar su fortaleza ─────────────────────────── */
@@ -2627,6 +3895,9 @@ function pintarVistaRival(contenedor, publica, id) {
   lunaMesa = publica.luna ?? 1;
   vistaRival = true;
 
+  const esAliadoRival = modoMesa === "equipos" && (rival?.equipo ?? 0) === miEquipoMesa;
+  contenedor.classList.toggle("vista-rival-aliado", esAliadoRival);
+  contenedor.classList.toggle("vista-rival-enemigo", !esAliadoRival);
   contenedor.innerHTML = `
     <div class="bw-volver-barra">
       <button type="button" class="bw-volver">Volver</button>
@@ -2638,12 +3909,13 @@ function pintarVistaRival(contenedor, publica, id) {
       box: [],
       lanzaderas: rival.lanzaderas ?? [],
       teToca: false,
-    }, publica.fase)}`;
+    }, publica.fase, { sinLuchas: true })}`;
 
   vistaRival = false;
 
   contenedor.querySelector(".bw-volver")?.addEventListener("click", () => {
     viendoJugador = null;
+    contenedor.classList.remove("vista-rival-aliado", "vista-rival-enemigo");
     /* Volver deja la fortaleza, no el mapa que abrió la visita. */
     tabMesa = "cartas";
     if (vistaContenedor && vistaOpciones) pintar(vistaContenedor, vistaOpciones);
@@ -2689,13 +3961,17 @@ function aviso(mensaje, opciones = {}) {
 
 function labelFase(fase) {
   return {
-    avance:   "Avanzando monstruos",
-    lanzar:   "Lanzar monstruo",
-    carta:    "Carta de Destino",
-    energia:  "Recogiendo monedas",
-    acciones: "Decretos",
-    descartar:"Descartar",
-    fin:      "Partida terminada",
+    lanzar:    "Lanzaderas",
+    avance:    "Avanzan atacantes",
+    defensores:"Avanzan defensores",
+    carta:     "Carta de Destino",
+    carta_ver: "Carta de Destino",
+    carta_efecto: "Carta de Destino",
+    energia:   "Recogiendo monedas",
+    acciones:  "Decretos",
+    descartar: "Descartar",
+    fin_turno: "Fin del turno",
+    fin:       "Partida terminada",
   }[fase] ?? fase ?? "—";
 }
 
@@ -2717,6 +3993,12 @@ function sinEtiquetas(texto) {
 
 function css() {
   return `<style>
+    /* Cuánto se suben las láminas de monstruo dentro de su hueco. El arte nuevo
+       trae los pies en el borde de abajo, así que centrada parecía caerse:
+       va en % del propio sprite para que se vea igual en la ficha pequeña del
+       tablero y en el cuadrado grande del envío. */
+    :root { --bw-subida-monstruo: 8%; --bw-subida-lanzadera: 18%; }
+
     /* Cabecera — flota sobre la fortaleza */
     .bw-top {
       position:fixed; top:env(safe-area-inset-top, 0px); left:0; right:0; z-index:200;
@@ -2788,6 +4070,14 @@ function css() {
       position:relative;
     }
     .bw-nav-tab svg { width:22px; height:22px; }
+    .bw-nav-label { display:inline-flex; align-items:center; justify-content:center; gap:4px; }
+    .bw-nav-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:15px; height:15px; border-radius:50%; flex:0 0 15px;
+      background:#179494; color:#fff;
+      font:800 10px/1 ui-monospace, monospace;
+      box-shadow:0 0 0 1px rgba(0,0,0,.35);
+    }
     .bw-nav-tab.activo { color:rgba(234,227,211,.98); }
     .bw-nav-tab.activo::after {
       content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
@@ -2806,7 +4096,7 @@ function css() {
     /* Box panel: flota encima del nav */
     .bw-panel.box-panel, .bw-panel.acciones-panel, .bw-panel.manuscritos-panel,
     .bw-panel.torres-panel, .bw-panel.mapa-panel, .bw-panel.aliados-panel,
-    .bw-panel.disparo-panel {
+    .bw-panel.disparo-panel, .bw-panel.envio-panel {
       position:fixed !important;
       bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
       left:0 !important; right:0 !important;
@@ -2819,12 +4109,8 @@ function css() {
        arriba y abajo (más fino que el del modal). */
     .bw-panel.box-panel, .bw-panel.manuscritos-panel, .bw-panel.torres-panel,
     .bw-panel.mapa-panel, .bw-panel.aliados-panel, .bw-panel.disparo-panel {
-      padding:26px 14px 22px;
+      padding:0 14px 22px;
       background-color:rgba(27,23,19,.97);
-      background-image:url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png');
-      background-position:left top, left bottom;
-      background-size:auto 11px, auto 11px;
-      background-repeat:repeat-x, repeat-x;
     }
     /* Cabecera común de los paneles: título centrado, algo más grande y una X
        para cerrar a la derecha del todo. */
@@ -2848,7 +4134,8 @@ function css() {
     .bw-panel-x:active { color:#fff; }
     .box-panel .bw-panel-label, .manuscritos-panel .bw-panel-label,
     .torres-panel .bw-panel-label, .mapa-panel .bw-panel-label,
-    .aliados-panel .bw-panel-label, .disparo-panel .bw-panel-label {
+    .aliados-panel .bw-panel-label, .disparo-panel .bw-panel-label,
+    .envio-panel .bw-panel-label {
       font:700 18px/1.25 ui-serif, Georgia, serif;
       text-transform:none; letter-spacing:.01em;
       color:#f4ecdd; text-align:center;
@@ -2915,16 +4202,22 @@ function css() {
                               letter-spacing:.12em; text-transform:uppercase; }
     .bw-mapa-seccion-titulo.aliados { color:#6cc6e0; }
     .bw-mapa-seccion-titulo.enemigos { color:#e08a7e; }
-    .bw-mapa-lista { display:flex; flex-direction:column; gap:8px; }
+    /* Dos tarjetas por fila: así el mapa no ocupa todo el ancho con una
+       sola tarjeta y las tres calles quedan a la vista sin apretarse. */
+    .bw-mapa-lista { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; align-items:start; }
     .bw-mapa-rival {
       width:100%; display:grid; grid-template-columns:1fr auto; gap:5px 8px;
-      padding:10px 12px; border-radius:9px; border:2px solid transparent;
+      padding:10px 12px; border-radius:9px; box-sizing:border-box;
+      border:1px solid transparent;
       background:rgba(244,236,221,.05); color:#f4ecdd;
       text-align:left; cursor:pointer;
     }
-    .bw-mapa-rival.enemigo { border-color:#b0453a; background:rgba(176,58,44,.12); }
-    .bw-mapa-rival.aliado { border-color:#2f8fbf; background:rgba(47,143,191,.12); }
+    .bw-mapa-rival.enemigo,
+    .bw-mapa-rival.con-atacantes { border-color:rgba(176,58,44,.62); background:rgba(176,58,44,.12); }
+    .bw-mapa-rival.aliado { border-color:rgba(47,143,191,.65); background:rgba(47,143,191,.12); }
     .bw-mapa-rival:active { filter:brightness(1.15); }
+    /* Las tres calles del mapa son las mismas de la selección de lanzadera. */
+    .bw-mapa-calles { grid-column:1 / -1; margin-top:8px; padding:0 2px; }
     .bw-mapa-nombre { font:700 15px/1.2 ui-serif, Georgia, serif; }
     .bw-mapa-vida { align-self:center; font:700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
                     color:#d9cbb6; }
@@ -2945,6 +4238,46 @@ function css() {
     /* Aliados: el mismo panel de mapa, con contadores y monstruos del box. */
     .bw-aliados-intro { margin:-8px 0 10px; color:#b8ab96; font:400 11px/1.35 ui-serif, Georgia, serif;
                         text-align:center; }
+    .bw-aliados-bloque { display:flex; flex-direction:column; gap:8px; }
+    .bw-aliados-bloque + .bw-aliados-bloque {
+      margin-top:14px; padding-top:14px; border-top:1px solid rgba(244,236,221,.16);
+    }
+    .bw-aliados-titulo { font:800 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+                          letter-spacing:.09em; text-transform:uppercase; color:#8fd4ea; }
+    .bw-aliados-pedir { display:flex; flex-direction:column; gap:8px;
+                        padding:9px 10px; border:1px dashed rgba(244,236,221,.24);
+                        border-radius:9px; }
+    .bw-aliados-chips { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+    .bw-aliados-chip { padding:7px 10px; border-radius:999px; cursor:pointer;
+                       border:1px solid rgba(244,236,221,.24); background:rgba(244,236,221,.08);
+                       color:#d9cbb6; font:700 10.5px/1.2 ui-sans-serif, system-ui, sans-serif; }
+    .bw-aliados-chip.sel { border-color:#d9b97a; background:rgba(217,185,122,.2); color:#fff0ce; }
+    .bw-aliados-chip:active { filter:brightness(1.15); }
+    .bw-aliados-pedir-btn { width:100%; }
+    .bw-aliados-slots { display:grid; gap:7px; }
+    .bw-aliados-slots-1 { grid-template-columns:1fr; }
+    .bw-aliados-slots-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .bw-aliados-slots-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .bw-aliados-slot { min-height:68px; display:flex; flex-direction:column; gap:3px;
+                       padding:8px 9px; border-radius:8px; overflow:hidden;
+                       background:rgba(244,236,221,.06); border:1px solid rgba(244,236,221,.18);
+                       color:#d9cbb6; font:400 10.5px/1.3 ui-serif, Georgia, serif; }
+    .bw-aliados-slot b { font:700 12px/1.2 ui-serif, Georgia, serif; color:#f4ecdd; }
+    .bw-aliados-slot span { flex:1; }
+    .bw-aliados-slot small { font:700 9px/1.2 ui-sans-serif, system-ui, sans-serif; color:#9fc9df; }
+    .bw-aliados-slot-peticion { background:rgba(217,185,122,.09); border-color:rgba(217,185,122,.28); }
+    .bw-aliados-slot-peticion b { color:#f4e4c4; }
+    .bw-aliados-slot-propia { border-color:rgba(244,236,221,.38); }
+    .bw-aliados-cancelar { width:100%; margin-top:2px; padding:5px 7px; border-radius:6px;
+                            border:1px dashed rgba(244,236,221,.3); background:rgba(244,236,221,.06);
+                            color:#e7d6b4; font:700 9px/1.2 ui-sans-serif, system-ui, sans-serif;
+                            cursor:pointer; }
+    .bw-aliados-cancelar:active { background:rgba(244,236,221,.16); }
+    .bw-aliados-slot-envio { background:rgba(47,143,191,.1); border-color:rgba(47,143,191,.3); }
+    .bw-aliados-slot-vacio { align-items:center; justify-content:center; text-align:center;
+                             border-style:dashed; border-color:rgba(244,236,221,.22);
+                             background:transparent; color:#8b7e6b;
+                             font:400 11px/1.35 ui-serif, Georgia, serif; }
     .bw-aliados-lista { display:flex; flex-direction:column; gap:7px; }
     .bw-aliados-persona { width:100%; display:flex; flex-direction:column; gap:3px; text-align:left;
                           padding:10px 12px; border-radius:9px; cursor:pointer;
@@ -2971,7 +4304,7 @@ function css() {
                       border:1.5px solid rgba(244,236,221,.25); background:#e8ddc8; cursor:pointer; padding:0; }
     .bw-aliados-mon img { width:100%; height:100%; object-fit:contain; }
     .bw-aliados-mon b { position:absolute; top:2px; right:2px; min-width:15px; height:15px; border-radius:999px;
-                        background:rgba(23,148,148,.95); color:#fff; font:800 9px/15px ui-monospace; text-align:center; }
+                        background:rgba(var(--c-propio),.95); color:#fff; font:800 9px/15px ui-monospace; text-align:center; }
     .bw-aliados-mon.sel { border-color:#f4ecdd; box-shadow:0 0 0 2px #179494; }
     .bw-aliados-vacio { margin:0; color:#8b7e6b; font:400 11px/1.3 ui-serif, Georgia, serif; }
     .bw-aliados-pie { display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -2982,17 +4315,92 @@ function css() {
                          font:800 13px/1.2 ui-serif, Georgia, serif; }
     .bw-aliados-enviar:disabled { opacity:.4; cursor:default; }
     .bw-aliados-nota { font:400 10px/1.3 ui-serif, Georgia, serif; color:#8b7e6b; text-align:center; }
-    /* Caja del regalo que baja desde arriba al empezar los decretos. */
-    .bw-regalo-lista { margin:8px 0 0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
-    .bw-regalo-volando { position:fixed; z-index:9500; left:50%; top:-100px; width:86px; height:auto;
-                         transform:translateX(-50%); pointer-events:none;
-                         filter:drop-shadow(0 8px 12px rgba(0,0,0,.55));
-                         animation:bw-regalo-baja 1.2s cubic-bezier(.2,.7,.3,1) forwards; }
-    @keyframes bw-regalo-baja {
-      0% { top:-100px; transform:translateX(-50%) rotate(-7deg); }
-      70% { top:42vh; transform:translateX(-50%) rotate(3deg); }
-      100% { top:52vh; transform:translateX(-50%) rotate(0deg); opacity:1; }
+    /* Envío de aliado: la caja con su paracaídas entra por arriba, se mece de
+       izquierda a derecha y se mete por debajo de la hoja hasta desaparecer.
+       La capa (z 960) va por debajo del modal (z 1000). */
+    .bw-regalo-capa {
+      position:fixed; inset:0; z-index:960; pointer-events:none;
+      background:radial-gradient(120% 70% at 50% 28%, rgba(10,9,7,.45), rgba(10,9,7,.82));
+      animation:bw-regalo-velo .45s ease-out both;
     }
+    /* La caja baja en línea recta y el vaivén lo pone un envoltorio interior:
+       así la caída es constante y las ondulaciones suaves, sin tirones. */
+    .bw-regalo-caja {
+      position:absolute; left:50%; top:-40vh; width:min(46vw,170px);
+      transform:translateX(-50%); opacity:0;
+      filter:drop-shadow(0 16px 20px rgba(0,0,0,.62));
+      animation:bw-regalo-cae 3.2s linear .1s both;
+      will-change:top,opacity;
+    }
+    .bw-regalo-balanceo {
+      animation:bw-regalo-vaiven 3.2s ease-in-out infinite;
+      transform-origin:50% 0;
+    }
+    .bw-regalo-caja img { display:block; width:100%; height:auto; }
+    @keyframes bw-regalo-velo { from { opacity:0; } to { opacity:1; } }
+    /* Bajada lineal: solo se desvanece al principio y al meterse bajo la hoja. */
+    @keyframes bw-regalo-cae {
+      0%   { top:-40vh; opacity:0; }
+      6%   { opacity:1; }
+      88%  { opacity:1; }
+      100% { top:52vh; opacity:0; }
+    }
+    /* Una ondulación completa durante la caída: derecha, izquierda y vuelta,
+       frenando en cada extremo. */
+    @keyframes bw-regalo-vaiven {
+      0%   { transform:translateX(-14px) rotate(-2deg); }
+      50%  { transform:translateX(14px) rotate(2deg); }
+      100% { transform:translateX(-14px) rotate(-2deg); }
+    }
+    /* Misma hoja que las demás: ribete arriba, título con su línea debajo,
+       aire entre bloques y el botón separado del borde de abajo. */
+    #bw-modal-regalo .bw-modal {
+      animation:bw-regalo-sube .34s cubic-bezier(.2,.85,.3,1) both;
+      padding:0 14px 34px; gap:14px;
+    }
+    #bw-modal-regalo .bw-regalo-head {
+      position:relative; display:flex; align-items:center; justify-content:center;
+      width:100%; min-height:34px; padding:4px 38px 0; margin:0 0 8px;
+      font:700 18px/1.25 ui-serif,Georgia,serif; color:#f4ecdd; text-align:center;
+    }
+    #bw-modal-regalo .bw-regalo-head::after {
+      content:""; position:absolute; left:0; right:0; bottom:-12px; height:1px;
+      background:rgba(244,236,221,.18); pointer-events:none;
+    }
+    @keyframes bw-regalo-sube {
+      from { transform:translateY(52px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    /* El ribete de piedra va pegado al borde de abajo de la hoja, no a la
+       barra del menú: antes quedaba flotando por encima del total. */
+    #bw-modal-regalo .bw-modal::after {
+      position:absolute; left:0; right:0; bottom:0; height:11px;
+      content:""; pointer-events:none; z-index:30;
+      background:url('${BASE_IMG}/ribete.png') left center / auto 100% repeat-x;
+    }
+    .bw-regalo-intro { margin:0; text-align:center; font:400 13px/1.45 ui-serif,Georgia,serif; color:#e6dccb; }
+    /* Una caja por cosa, centradas: una si manda una, tres si manda tres.
+       Mismo borde gris que los huecos del tablero. */
+    .bw-regalo-slots {
+      display:flex; flex-wrap:wrap; justify-content:center; gap:8px;
+      width:100%; max-width:min(340px,90vw); margin:0 auto;
+    }
+    /* Con la clase del contenedor delante: .bw-box-slot se define más abajo en
+       la hoja y, con la misma especificidad, ganaba su width:100% y apilaba
+       las cajas a lo ancho de toda la pantalla. */
+    .bw-regalo-slots .bw-regalo-cuadro {
+      flex:0 0 auto; width:clamp(56px,18vw,76px);
+      border:1.5px solid rgba(244,236,221,.30) !important;
+      background:rgba(0,0,0,.22); cursor:default; border-radius:8px;
+    }
+    .bw-regalo-cuadro .bw-box-img { height:80%; }
+    /* El círculo, con el color de cada cosa: oro, rojo y turquesa. */
+    .bw-regalo-cuadro.moneda   .bw-box-nv { background:rgba(224,163,63,.95); }
+    .bw-regalo-cuadro.decreto  .bw-box-nv { background:rgba(176,58,44,.95); }
+    .bw-regalo-cuadro.monstruo .bw-box-nv { background:rgba(var(--c-propio),.95); }
+    .bw-regalo-pie { margin:0; font:400 10px/1.4 ui-serif,Georgia,serif; color:#8b7e6b; text-align:center; }
+    #bw-modal-regalo .bw-modal-acciones { width:100%; }
+    #bw-modal-regalo .bw-regalo-ok { width:100%; box-sizing:border-box; }
     /* Velo de los paneles: por debajo del menú, para que se siga viendo. */
     .bw-panel-overlay {
       position:fixed; inset:0; z-index:280;
@@ -3003,9 +4411,9 @@ function css() {
     .bw-panel.disparo-panel { max-height:80vh; overflow-y:auto; z-index:290; }
     /* Torres necesita más alto: cuatro peldaños en vertical bajo cada una. */
     .bw-panel.torres-panel { max-height:70vh; padding-bottom:34px; }
-    .bw-panel.mapa-panel { padding-bottom:34px; }
+    .bw-panel.mapa-panel { max-height:75vh; padding-bottom:34px; }
     .bw-panel.aliados-panel { max-height:70vh; }
-    .bw-disparo-botones { margin-top:14px; }
+    .bw-disparo-botones { margin-top:-1px; }
     .bw-disparo-botones .bw-modal-usar {
       width:100%; padding:16px 12px; border-radius:9px;
       font:700 14px/1.2 ui-serif, Georgia, serif;
@@ -3035,17 +4443,30 @@ function css() {
     .bw-box-slot.lleno:hover { filter:brightness(1.06); }
     .bw-box-img {
       position:absolute; left:50%; top:50%;
-      transform:translate(-50%,-50%);
+      transform:translate(-50%, calc(-50% - var(--bw-subida-monstruo, 0%)));
       height:92%; width:auto; max-width:92%;
       pointer-events:none;
       filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));
     }
+    /* Solo los monstruos se suben: el alzado de la torre y las pilas de monedas
+       o decretos del envío ya vienen centrados y se quedan donde estaban. */
+    .bw-torre-ficha,
+    .bw-regalo-cuadro.moneda .bw-box-img,
+    .bw-regalo-cuadro.decreto .bw-box-img {
+      transform:translate(-50%,-50%);
+    }
+    /* Lámina de jaula: el monstruo va dentro de la reja y el dibujo trae aire
+       alrededor, así que se pinta algo más grande que la de calle. */
+    .bw-mon-jaula { height:104%; max-width:104%; }
     .bw-box-nv {
       position:absolute; top:3px; right:3px;
-      min-width:15px; height:15px; padding:0 3px;
-      border-radius:999px; background:rgba(23,148,148,.92); color:#fff;
-      font:800 9px/15px ui-monospace, monospace; text-align:center;
-      box-shadow:0 1px 2px rgba(0,0,0,.35);
+      width:18px; height:18px; padding:0;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+      border-radius:50%; background:rgba(var(--c-propio),.92); color:#fff;
+      font:800 9px/1 ui-monospace, monospace; text-align:center;
+      overflow:hidden; box-sizing:border-box;
+      /* Filo blanco de 1 px al 50 %: dibuja el borde sin agrandar el círculo. */
+      box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
     }
     /* Hueco libre: punteado de 1 px, translúcido y con un aspa blanca en el
        centro. Se toca para criar. */
@@ -3069,7 +4490,12 @@ function css() {
       pointer-events:none;
     }
     .bw-mano {
+      /* El ancho de la fila no depende de cuántas cartas queden: así el
+         padding porcentual de cada carta se mide siempre igual. */
+      --carta-ancho: min(max(80px, 21vw), calc((100vw - 30px) / 4));
+      width: calc(var(--carta-ancho) + var(--carta-ancho) + var(--carta-ancho) + var(--carta-ancho) + 30px);
       display:flex;
+      justify-content:center;
       gap:10px;
       /* Las cartas sí se tocan, pero el hueco de la fila (por donde suben al
          pulsarlas) no debe tragarse el arrastre del fondo. */
@@ -3080,7 +4506,12 @@ function css() {
       /* Todo lo de dentro va en cqw: la carta se ve igual de grande o de
          pequeña, y lo de dentro escala con ella. */
       container-type:inline-size;
-      width:max(80px,21vw); aspect-ratio:1024/1536;
+      /* Ancho estable: el mismo que cabe con cuatro cartas en la mano. Antes
+         la carta crecía al quedar menos y el título/imagen se desplazaban
+         respecto al número, que va anclado arriba. */
+      width:var(--carta-ancho);
+      flex:0 0 auto;
+      aspect-ratio:1024/1536;
       border-radius:5px;
       background:url('${CARD_BG}') center/100% 100% no-repeat;
       box-shadow:0 8px 20px rgba(0,0,0,.65);
@@ -3093,10 +4524,10 @@ function css() {
       transition:transform .18s ease, box-shadow .18s ease;
       position:relative; user-select:none;
     }
-    /* Todas las cartas suben igual al pulsarlas, aunque no te llegue para
-       jugarla: la animación no depende de si la carta es jugable. */
-    .bw-carta:hover, .bw-carta:active {
-      /* Al pulsarla sube solo un 5 % del alto, para que no dé un salto */
+    /* La carta solo se levanta mientras su modal está abierto. No usamos
+       :hover/:active: en móvil el hover se queda pegado tras el toque. */
+    .bw-carta.activa {
+      /* Al abrirla sube solo un 5 % del alto, para que no dé un salto */
       transform:translateY(33%); box-shadow:0 14px 28px rgba(0,0,0,.8);
     }
     .bw-carta.descartable { outline:2px solid rgba(224,83,63,.7); }
@@ -3146,6 +4577,22 @@ function css() {
       position:fixed; inset:0; background:rgba(0,0,0,.65);
       display:flex; align-items:center; justify-content:center;
       z-index:1000; padding:20px;
+    }
+    /* Los modales de juego que no son cartas ni el aviso de turno salen como
+       hojas inferiores, con el mismo borde que los paneles de jaulas/torres. */
+    .bw-modal-fondo.bw-hoja-modal {
+      background:transparent; align-items:flex-end; padding:0;
+    }
+    .bw-modal-fondo.bw-hoja-modal .bw-modal,
+    body.bw-himalaya #capa .modal.bw-hoja-modal {
+      position:fixed; left:0; right:0;
+      bottom:var(--alto-nav, 34px);
+      width:100%; max-height:50vh; margin:0; overflow:auto;
+      box-sizing:border-box;
+      border-radius:16px 16px 0 0; border-bottom:0;
+      padding:0 14px 22px;
+      background-color:rgba(27,23,19,.97);
+      pointer-events:auto;
     }
     .bw-modal { position:relative; display:flex; flex-direction:column; align-items:center; gap:14px; }
     /* Cerrar: siempre en la esquina de arriba a la derecha de la pantalla, a
@@ -3236,6 +4683,19 @@ function css() {
       padding:0 24px; min-height:38px; border-radius:5px;
       font-size:14px; font-weight:800; cursor:pointer; border:none;
     }
+    /* La carta abierta y sus acciones comparten exactamente el mismo ancho. */
+    #bw-modal-carta .bw-modal-acciones {
+      width:min(58vw,230px); flex-direction:column; gap:10px;
+    }
+    #bw-modal-carta .bw-modal-acciones .bw-modal-usar {
+      width:100%; box-sizing:border-box;
+    }
+    #bw-modal-carta .bw-modal-cancelar {
+      width:min(58vw,230px); min-height:38px; border-radius:5px;
+      background:rgba(0,0,0,.42); color:#f4ecdd; cursor:pointer;
+      border:1px solid rgba(244,236,221,.35);
+      font:700 13px/1 ui-serif,Georgia,serif;
+    }
     /* Misma tipografía que el título de las cartas (ui-serif, 700) */
     .bw-modal-acciones button.bw-modal-usar {
       font-family:ui-serif, serif; font-weight:700;
@@ -3316,7 +4776,7 @@ function css() {
     }
     .man-fila:nth-of-type(even) { background:rgba(244,236,221,.05); }
     .man-b { color:#b7a992; font-weight:700; text-align:right; white-space:nowrap; }
-    .man-c { color:#8b7e6b; text-align:right; white-space:nowrap; min-width:64px; }
+    .man-c { color:#8b7e6b; text-align:right; min-width:52px; }
     .man-p { margin:6px 0 0; font-size:11.5px; line-height:1.45; color:#c2b6a0; }
 
     /* ── Modal de descarte: las cartas de papel del modal de una, en 2×2 ── */
@@ -3364,67 +4824,261 @@ function css() {
     /* ── Modal de lanzadera ── */
     .bw-lz {
       width:min(92vw,420px); max-height:80vh; overflow:auto;
-      background:linear-gradient(180deg,#20242a,#14181d);
+      background-color:#181b1f;
       border:1px solid rgba(244,236,221,.16); border-radius:12px;
-      padding:14px; color:#f4ecdd;
+      padding:0 14px 26px; color:#f4ecdd;
       display:flex; flex-direction:column; gap:10px;
     }
+    /* Las dos pantallas de la lanzadera son hojas inferiores, igual que los
+       paneles de jaulas, torres y mapa. */
+    #bw-modal-lanzar.lz-inicial,
+    #bw-modal-lanzar.lz-detalle,
+    #bw-modal-objetivo.lz-inicial,
+    #bw-modal-objetivo.lz-detalle {
+      background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
+      align-items:flex-end; padding:0; pointer-events:auto; z-index:9999;
+    }
+    /* Mientras se elige lanzadera, el menú inferior no debe abrir cartas ni
+       ningún otro panel: se bloquea explícitamente además de la capa. */
+    body.bw-lanzando #bw-nav-global,
+    body.bw-lanzando #bw-nav-global *,
+    body.bw-lanzando .bw-mano-wrap,
+    body.bw-lanzando .bw-mano-wrap * {
+      pointer-events:none !important;
+    }
+    /* Lo mismo mientras está abierto el aviso de la caja: sin menú ni cartas
+       hasta darle a "Muchas gracias". */
+    body.bw-regalo-abierto #bw-nav-global,
+    body.bw-regalo-abierto #bw-nav-global *,
+    body.bw-regalo-abierto .bw-mano-wrap,
+    body.bw-regalo-abierto .bw-mano-wrap * {
+      pointer-events:none !important;
+    }
+    #bw-modal-lanzar.lz-inicial .bw-lz-hoja,
+    #bw-modal-lanzar.lz-detalle .bw-lz-hoja,
+    #bw-modal-objetivo.lz-inicial .bw-lz-hoja,
+    #bw-modal-objetivo.lz-detalle .bw-lz-hoja {
+      position:fixed; left:0; right:0;
+      /* Las mismas reglas que el panel de Torres: pegado al menú, no a 56 px
+         fijos, que en este juego dejaba la hoja demasiado alta. */
+      bottom:var(--alto-nav, 34px);
+      width:100%; max-height:85vh; margin:0;
+      border-radius:16px 16px 0 0; border-bottom:0;
+      background-color:rgba(27,23,19,.97);
+      pointer-events:auto;
+    }
+    /* Cabecera igual que la de Torres: título, aire y una línea fina debajo. */
+    .bw-lz-head {
+      position:relative; display:flex; align-items:center; justify-content:center;
+      min-height:34px; padding:0 38px; margin-bottom:30px; text-align:center;
+    }
+    .bw-lz-head::after {
+      content:""; position:absolute; left:0; right:0; bottom:-20px; height:1px;
+      background:rgba(244,236,221,.18); pointer-events:none;
+    }
+    .bw-lz-head .bw-lz-tit { font:700 18px/1.25 ui-serif,Georgia,serif; }
     .bw-lz-tit { font:800 16px/1.2 ui-serif,serif; text-align:center; }
-    .bw-lz-sub { margin:0; font-size:12px; color:#b7a992; text-align:center; }
-    .bw-lz-lista { display:flex; flex-wrap:wrap; gap:10px; }
-    .bw-lz-lista > .bw-lz-rival { flex:1 1 148px; min-width:0; }
+    .bw-lz-sub { margin:0 0 10px; font-size:12px; color:#b7a992; text-align:center; }
+    .bw-lz-cab-detalle {
+      display:flex; justify-content:space-between; align-items:center; gap:12px;
+      padding:0 38px;
+    }
+    .bw-lz-cab-detalle .bw-lz-tit { text-align:left; }
+    .bw-lz-cab-detalle .bw-lz-vida { font-size:13px; white-space:nowrap; }
+    /* Lista de rivales: nombre y corazón arriba, y debajo sus tres calles. */
+    .bw-lz-lista { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
     .bw-lz-lista.solo { display:block; }
+    .bw-lz-torres { padding:0 4px; }
+    /* La línea de arriba y de abajo del tablero del rival. */
+    .bw-lz-tablero {
+      border-bottom:1px solid rgba(244,236,221,.18);
+      padding:12px 0;
+    }
+    /* En la vista del rival los huecos libres no llevan aspa ni borde
+       punteado: son simplemente huecos vacíos. */
+    .bw-lz-torres .bw-box-slot.vacio {
+      border-style:solid; border-color:rgba(244,236,221,.14);
+      background:rgba(0,0,0,.18);
+    }
+    /* Torre vacía: una X roja que cruza el hueco. */
+    .bw-lz-cuadro { position:relative; }
+    .bw-torre-x {
+      position:absolute; inset:0; display:block; pointer-events:none;
+    }
+    .bw-torre-x::before, .bw-torre-x::after {
+      content:""; position:absolute; left:50%; top:50%;
+      width:82%; height:2px; border-radius:2px; background:#d64a3a;
+      transform:translate(-50%,-50%) rotate(45deg);
+    }
+    .bw-torre-x::after { transform:translate(-50%,-50%) rotate(-45deg); }
+    /* Las torres del rival son defensoras: azul, no turquesa. */
+    .bw-lz-torres .bw-box-slot.bw-torre-img.lleno {
+      border-color:#4f8fd0; background-color:#dbe7f5; background-image:none;
+    }
+    .bw-lz-torres .bw-box-slot.bw-torre-img.lleno .bw-box-nv {
+      background:rgba(57,112,174,.95);
+    }
+    /* Los atacantes que mando a una fortaleza enemiga van en turquesa. */
+    .bw-lz-torres .bw-torre-slot.atacante { border-color:#179494; }
+    .bw-lz-torres .bw-torre-slot.atacante .bw-box-nv {
+      background:rgba(var(--c-propio),.95);
+    }
+    .bw-lz-torres .bw-torre-slot.defensor { border-color:#b03a2c; }
+    .bw-lz-torres .bw-torre-slot.defensor .bw-box-nv {
+      background:rgba(176,58,44,.95);
+    }
+    .bw-lz-torres .bw-box-slot.vacio { cursor:default; }
+    .bw-torre-lanzar { width:100%; display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+    /* El botón ocupa el mismo ancho que la torre y los peldaños de su calle,
+       para que las tres columnas queden alineadas. */
+    .bw-lz-torres .bw-lz-lanzar {
+      width:min(72px, 22vw, 100%); height:42px; min-height:42px;
+    }
     .bw-lz-rival {
-      display:flex; flex-direction:column; gap:6px; text-align:left;
-      padding:8px; border-radius:10px; cursor:pointer; font:inherit;
-      background:rgba(244,236,221,.06); border:1px solid rgba(244,236,221,.16);
+      display:block; width:100%; box-sizing:border-box; text-align:left;
+      padding:20px; border-radius:9px; cursor:pointer; font:inherit;
+      background:rgba(176,58,44,.12); border:1px solid rgba(176,58,44,.62);
       color:#f4ecdd;
     }
-    .bw-lz-rival:active { background:rgba(244,236,221,.18); }
-    /* Sin encogerse: si el modal se queda justo de alto, el cuadrado del
-       tablero perdía lado y las casillas no se veían. */
-    .bw-lz-rival > * { flex:0 0 auto; }
-    .bw-lz-lista.solo > .bw-lz-cab,
-    .bw-lz-lista.solo > .bw-lz-fort,
-    .bw-lz-lista.solo > .bw-lz-mapa { padding:0 8px; }
-    .bw-lz-cab { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; }
-    .bw-lz-vida { font-size:11px; color:#e0533f; }
-    /* Torres arriba, en fila, como la fortaleza del jugador */
-    .bw-lz-fort { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; width:100%; }
-    .bw-lz-torre {
-      text-align:center; padding:3px 0; border-radius:4px;
-      font:800 10px/1 ui-monospace,monospace;
-      background:rgba(0,0,0,.35); color:#7f7466;
-      border:1px solid rgba(244,236,221,.14);
+    .bw-lz-rival:active { filter:brightness(1.15); }
+    /* Rival sin ninguna calle legal: sigue visible, pero apagado. */
+    .bw-lz-rival:disabled,
+    .bw-lz-rival.bloqueado {
+      border-color:rgba(244,236,221,.18);
+      background:rgba(244,236,221,.04);
+      color:#b7a992; cursor:default;
     }
-    .bw-lz-torre.tiene { color:#f0cf5a; border-color:rgba(201,162,39,.55); background:rgba(201,162,39,.12); }
-    /* El tablero cuadrado: tres escaleras bajando, cuatro peldaños cada una */
-    .bw-lz-mapa { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; width:100%; aspect-ratio:1; }
-    .bw-lz-calle { display:flex; flex-direction:column; align-items:center; gap:3px; }
-    .bw-lz-calle.apagada { opacity:.45; }
-    .bw-lz-cid { font-size:9px; font-weight:800; color:#8b7e6b; }
-    .bw-lz-cas {
-      /* Ancho que alto (1,5:1): cuatro peldaños caben en la altura de tres
-       columnas y el tablero sale cuadrado, no estirado. */
-      width:100%; aspect-ratio:1.5/1; border-radius:4px; font-style:normal;
-      display:grid; place-items:center; font-size:10px; font-weight:800;
-      background:rgba(0,0,0,.35); border:1px dashed rgba(244,236,221,.18); color:#7f7466;
+    /* Ciencia con objetivo: las fichas que la carta puede tocar se encienden
+       en ámbar, tanto en el resumen de la fortaleza como en el tablero. */
+    .bw-torre-slot.objetivo,
+    .bw-lz-cuadro.objetivo {
+      cursor:pointer;
+      border-color:#e0a33f !important;
+      box-shadow:0 0 0 2px rgba(224,163,63,.55), 0 0 14px rgba(224,163,63,.35);
     }
-    .bw-lz-cas.suyo { border-style:solid; border-color:rgba(168,60,48,.75); background:rgba(122,16,16,.38); color:#ffd9d0; }
-    .bw-lz-cas.at { border-style:solid; border-color:#8a5cd6; background:rgba(138,92,214,.3); color:#e6dcff; }
+    .bw-torre-slot.objetivo:active { filter:brightness(1.2); }
+    .bw-ob-cuenta {
+      display:block; margin-top:8px; font-size:11px; line-height:1.35; color:#e0a33f;
+    }
+    .bw-lz-pie .bw-modal-usar + .bw-modal-usar { margin-top:6px; }
+    .bw-lz-rival.bloqueado .bw-lz-rival-nombre { color:#b7a992; }
+    .bw-lz-rival.bloqueado .bw-lz-rival-vida { color:#8b7e6b; }
+    /* Un rival al que no se le puede lanzar nada se apaga entero: borde y
+       cuadrados en gris, para que no parezca que responde al toque. */
+    .bw-lz-rival.bloqueado { border-color:rgba(244,236,221,.22); background:rgba(244,236,221,.04); }
+    .bw-lz-rival.bloqueado .bw-lz-cuadro {
+      border-color:rgba(244,236,221,.16); background:rgba(244,236,221,.05);
+    }
+    /* Entrada a la que no se puede enviar: el cuadrado va en gris, no en rojo
+       (el rojo parecía un error de la mesa). El número del monstruo que la
+       ocupa se sigue viendo dentro. */
+    .bw-lz-cuadro.lz-sin-envio {
+      border:1.5px solid rgba(244,236,221,.30);
+      background:rgba(244,236,221,.06);
+    }
+    /* Cuántos atacantes lleva encima el rival, debajo de sus calles. */
+    .bw-lz-rival-atac {
+      display:block; margin-top:8px;
+      font:700 10px/1.2 ui-sans-serif,system-ui,sans-serif; color:#b7a992;
+    }
+    .bw-lz-rival.bloqueado .bw-lz-rival-atac { color:#8b7e6b; }
+    .bw-lz-rival > * { min-width:0; }
+    .bw-lz-rival-cab { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+    .bw-lz-rival-nombre { font:800 13px/1.2 ui-serif,Georgia,serif; }
+    .bw-lz-rival-vida { font:700 10px/1.2 ui-sans-serif,system-ui,sans-serif; color:#e0533f; white-space:nowrap; }
+    /* Tres calles de cinco huecos: arriba la torre y debajo sus cuatro peldaños. */
+    .bw-lz-calles {
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:4px; align-items:start; margin-top:14px;
+    }
+    .bw-lz-calles.detalle { margin-top:2px; padding:0 4px 2px; }
+    .bw-lz-calle { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; }
+    .bw-lz-cuadro {
+      width:26px; height:26px; aspect-ratio:1; border-radius:4px;
+      display:grid; place-items:center;
+      border:1px solid rgba(244,236,221,.14); background:rgba(0,0,0,.18);
+    }
+    .bw-lz-calles.detalle .bw-lz-cuadro { width:32px; height:32px; }
+    .bw-lz-punto {
+      width:18px; height:18px; border-radius:50%;
+      display:grid; place-items:center;
+      font:800 10px/1 ui-monospace,monospace; font-style:normal;
+      color:#8b7e6b; background:transparent;
+    }
+    .bw-lz-calles.detalle .bw-lz-punto { width:22px; height:22px; font-size:11px; }
+    .bw-lz-cuadro.bz-torre.lleno .bw-lz-punto {
+      border:1.5px solid #4f8fd0; background:#dbe7f5; color:#1d3f63;
+    }
+    .bw-lz-cuadro.bz-at.lleno .bw-lz-punto {
+      border:1.5px solid #7be5e5; background:#179494; color:#fff;
+    }
+    .bw-lz-cuadro.bz-def.lleno .bw-lz-punto {
+      border:1.5px solid #f0a094; background:#b03a2c; color:#fff;
+    }
+    /* El botón de lanzar, cuadrado y debajo de cada calle. */
     .bw-lz-lanzar {
-      width:100%; margin-top:2px; padding:5px 0; border-radius:5px; border:none; cursor:pointer;
-      font:800 10px/1 ui-monospace,monospace;
+      width:42px; height:42px; min-height:42px; aspect-ratio:1;
+      margin:4px auto 0; padding:0; border-radius:6px; border:none; cursor:pointer;
+      display:grid; place-items:center; box-sizing:border-box;
+      font:800 10px/1.05 ui-monospace,monospace;
       background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
     }
+    .bw-lz-calles.detalle .bw-lz-lanzar { width:46px; height:46px; min-height:46px; }
+    .bw-lz-lanzar.bloqueado,
+    .bw-lz-lanzar:disabled {
+      cursor:default; opacity:.42;
+      background:rgba(244,236,221,.12); color:#b7a992;
+      border:1px solid rgba(244,236,221,.25);
+    }
+    .bw-lz-vida { font-size:11px; color:#e0533f; }
     .bw-lz-pie { display:flex; justify-content:center; gap:10px; }
+    .bw-lz-pie.con-linea {
+      border-top:1px solid rgba(244,236,221,.18);
+      padding-top:10px;
+    }
+    /* «No lanzar» es el botón estándar de la interfaz, a todo el ancho. */
+    .bw-lz-pie .bw-modal-usar {
+      width:100%; min-height:44px; border-radius:9px; cursor:pointer; border:none;
+      font:700 14px/1.2 ui-serif, Georgia, "Times New Roman", serif;
+    }
     .bw-lz-atras {
       padding:0 20px; min-height:36px; border-radius:5px; cursor:pointer;
       font:800 13px/1 ui-serif,serif; border:none;
       background:rgba(244,236,221,.14); color:#f4ecdd;
     }
 
-    /* Modal envío */
+    /* Avanzar monstruo: el mismo velo oscuro de los demás modales de juego, con
+       el monstruo en su cuadrado de jaula (el del tablero) y las jugadas en la
+       lista de botones grises. Entra por encima del menú, como la lanzadera. */
+    /* El panel del monstruo deja 20 px de aire bajo el último botón y no se
+       corta con scroll en pantallas cortas (si no, el último quedaba pegado
+       al borde inferior como si no hubiera margen). */
+    .bw-panel.envio-panel { padding:0 14px 20px; max-height:min(72vh, 460px); }
+    .bw-envio-cuerpo { display:flex; flex-direction:column; align-items:center; gap:14px; }
+    .bw-envio-cuadro { width:min(84px,24vw); }
+    .bw-envio-lista {
+      display:flex; flex-direction:column; gap:6px;
+      width:100%; max-width:240px;
+    }
+    /* Un 30 % más estrechos que al principio, con el alto de siempre y todo
+       centrado; la moneda, cuando la hay, va debajo del destino. */
+    .bw-envio-lista .bw-modal-usar {
+      width:100%; box-sizing:border-box; min-height:41px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:0; padding:6px 14px; border-radius:8px; text-align:center;
+      font:700 13px/1.15 ui-serif, Georgia, serif;
+    }
+    .bw-envio-lista small {
+      margin-top:2px;
+      font:400 10px/1 ui-sans-serif, system-ui, sans-serif;
+      color:#4a555f; white-space:nowrap;
+    }
+    /* Monstruo propio en mi escalera: la lámina de frente dentro del cuadrado
+       del panel, sin la reja de la jaula. */
+    .bw-envio-foto { display:block; width:100%; height:100%; object-fit:contain; }
+    /* Botones para mover un monstruo desde el panel de la torre. */
+    .bw-torre-mover { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+
     /* Pie del modal: por qué no se puede usar la carta */
     .bw-modal-nota {
       /* Colgada debajo del modal y fuera del flujo: al salir no empuja la carta
@@ -3438,21 +5092,6 @@ function css() {
       color:#b7a992;
     }
 
-    .bw-envio { width:min(340px,92vw); background:#f4ecdd; color:#12100e;
-                border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:12px;
-                box-shadow:0 18px 50px rgba(0,0,0,.45);
-                /* Con muchas jugadas (16 en un turno) la lista no cabe: el
-                   modal scrollea por dentro y los botones no se salen. */
-                max-height:calc(100vh - 32px); overflow-y:auto; }
-    .bw-envio-titulo { font-size:17px; font-weight:800; text-align:center; }
-    .bw-envio-opciones { display:flex; flex-direction:column; gap:7px; }
-    .bw-envio-op { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:700;
-                   cursor:pointer; border:1px solid rgba(18,16,14,.25);
-                   background:#fff; color:#12100e; text-align:left; }
-    .bw-envio-op:hover { background:#d6dee5; }
-    .bw-envio-op:disabled { opacity:.5; cursor:default; }
-    .bw-envio-cerrar { padding:11px 12px; border-radius:9px; font-size:14px; font-weight:800;
-                       cursor:pointer; border:none; background:#12100e; color:#f4ecdd; }
     /* Lista de opciones en columna con nuestro botón gris de UI */
     .bw-modal-lista {
       display:flex; flex-direction:column; gap:10px;
@@ -3639,7 +5278,7 @@ function cssAdicional() {
     body.bw-himalaya .bw-panel.box-panel, body.bw-himalaya .bw-panel.acciones-panel,
     body.bw-himalaya .bw-panel.manuscritos-panel, body.bw-himalaya .bw-panel.torres-panel,
     body.bw-himalaya .bw-panel.mapa-panel, body.bw-himalaya .bw-panel.aliados-panel,
-    body.bw-himalaya .bw-panel.disparo-panel {
+    body.bw-himalaya .bw-panel.disparo-panel, body.bw-himalaya .bw-panel.envio-panel {
       bottom: var(--alto-nav, 34px) !important;
       /* Mismo negro que la barra del menú */
       background: #000 !important;
@@ -3652,13 +5291,10 @@ function cssAdicional() {
     body.bw-himalaya .bw-panel.torres-panel,
     body.bw-himalaya .bw-panel.mapa-panel,
     body.bw-himalaya .bw-panel.aliados-panel,
-    body.bw-himalaya .bw-panel.disparo-panel {
+    body.bw-himalaya .bw-panel.disparo-panel,
+    body.bw-himalaya .bw-panel.envio-panel {
       bottom: var(--alto-nav, 34px) !important;
       background-color: rgba(27,23,19,.97) !important;
-      background-image: url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png') !important;
-      background-position: left top, left bottom !important;
-      background-size: auto 11px, auto 11px !important;
-      background-repeat: repeat-x, repeat-x !important;
     }
 
     /* ── Barra de información del turno ──
@@ -3698,9 +5334,45 @@ function cssAdicional() {
     }
     .bw-hud-aviso-texto {
       font: 700 2.6cqw/1 ui-serif, Georgia, "Times New Roman", serif;
-      color: #7a1010; letter-spacing: .02em; white-space: nowrap;
+      color: #1a3560; letter-spacing: .02em; white-space: nowrap;
       margin-bottom: .4cqw;
     }
+    .vista-rival-enemigo .bw-hud-aviso-texto,
+    .vista-rival-enemigo .bw-hud-pasar { color: #7a1010; }
+    .vista-rival-enemigo .bw-turno { border-color: #7a1010; }
+    .vista-rival-enemigo .bw-turno.activo { background: #7a1010; }
+    .vista-rival-enemigo .fort-plat.vida .fort-nombre { background: rgba(122,16,16,.8); }
+    .vista-rival-enemigo .fort-plat.vida .fort-cifra { background: rgba(122,16,16,.9); }
+    .vista-rival-enemigo .bw-rec b { color: #7a1010; }
+    .vista-rival-enemigo .bw-rec em { color: rgba(122,16,16,.85); }
+    .vista-rival-enemigo .bw-hud-vida b { color: #7a1010; }
+    .vista-rival-enemigo .bw-hud-fila.medio .bw-edif { background: #7a1010; }
+    .vista-rival-enemigo .bw-edif-valor { color: #7a1010; }
+    .vista-rival-enemigo .bw-edif-nombre { color: #7a1010; }
+    .vista-rival-enemigo .bw-edif-puntos i { border-color: rgba(122,16,16,.55); }
+    .vista-rival-enemigo .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
+    .vista-rival-enemigo .fort-circulo-edif .fort-nivel { background: #7a1010; }
+    .vista-rival-enemigo .torre .nivel { background: rgba(122,16,16,.9); }
+    .vista-rival-enemigo .ficha.atacante .ficha-nv { background: rgba(var(--c-propio),.85); }
+    .vista-rival-enemigo .ficha.mia .ficha-nv { background: rgba(122,16,16,.8); }
+    .vista-rival-aliado .bw-torre-slot.atacante,
+    .vista-rival-enemigo .bw-torre-slot.atacante { border-color: rgb(var(--c-propio)); }
+    .vista-rival-aliado .bw-torre-slot.atacante .bw-box-nv,
+    .vista-rival-enemigo .bw-torre-slot.atacante .bw-box-nv { background: rgba(var(--c-propio),.95); }
+    .vista-rival-aliado .fort-slot-vacio .fort-slot-x,
+    .vista-rival-enemigo .fort-slot-vacio .fort-slot-x { display: none; }
+    .vista-rival-aliado .bw-torre-x,
+    .vista-rival-enemigo .bw-torre-x { display: none; }
+    .vista-rival-aliado .hueco-mas,
+    .vista-rival-enemigo .hueco-mas { display: none; }
+    /* Texto para pasar el turno, dentro del mismo aviso que «¡Es tu turno!». */
+    .bw-hud-pasar {
+      padding: 0 0 0 1.2cqw; border: 0; background: none; cursor: pointer;
+      pointer-events: auto; white-space: nowrap;
+      font: inherit; color: #1a3560; text-decoration: underline;
+      text-underline-offset: .35cqw;
+    }
+    .bw-hud-pasar:active { opacity: .65; }
     /* Los cuadraditos del turno, dentro del aviso: más cortos que la franja del
        fondo del pergamino y con el ancho del marco como unidad. */
     .bw-hud-aviso .bw-hud-turnos { width: 100%; height: 1.3cqw; gap: .6cqw; }
@@ -3768,25 +5440,27 @@ function cssAdicional() {
       margin-inline: auto;
     }
     .bw-hud-celda .bw-rec b { display: flex; align-items: baseline; gap: .2cqw; }
-    .bw-rec { display: flex; align-items: center; gap: .8cqw; min-width: 0; }
-    .bw-rec img { width: 3.5cqw; height: 3.5cqw; flex: 0 0 auto; object-fit: contain; }
+    .bw-rec { display: flex; align-items: center; gap: 1.8cqw; min-width: 0; }
+    .bw-rec img { width: 5.4cqw; height: 5.4cqw; flex: 0 0 auto; object-fit: contain; }
+    .bw-hud-vida img { filter: brightness(0) saturate(100%) invert(17%) sepia(55%) saturate(600%) hue-rotate(190deg) brightness(85%); }
+    .vista-rival-enemigo .bw-hud-vida img { filter: none; }
     /* Todo el texto del resumen va en el rojo de los puntos y en la serif de
        las cartas. */
     .bw-rec b {
       font: 700 3cqw/1 ui-serif, Georgia, "Times New Roman", serif;
-      color: #7a1010;
+      color: #1a3560;
     }
     .bw-rec em {
-      font-style: normal; color: rgba(122, 16, 16, .85); white-space: nowrap;
+      font-style: normal; color: rgba(26,53,96,.85); white-space: nowrap;
       font: 600 2.4cqw/1 ui-serif, Georgia, "Times New Roman", serif;
     }
 
     /* vida en el centro */
-    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: .2cqw; }
+    .bw-hud-vida { display: flex; flex-direction: column; align-items: center; gap: 1.3cqw; }
     .bw-hud-vida img { width: 5.4cqw; height: 5.4cqw; object-fit: contain; }
     .bw-hud-vida b {
-      font: 700 3cqw/1 ui-serif, Georgia, "Times New Roman", serif;
-      color: #7a1010; white-space: nowrap;
+      font: 700 3.5cqw/1 ui-serif, Georgia, "Times New Roman", serif;
+      color: #1a3560; white-space: nowrap;
     }
 
     /* edificios: icono, nombre y puntos de nivel en rojo. En la fila del medio
@@ -3797,7 +5471,7 @@ function cssAdicional() {
        de esquinas redondeadas con el texto en blanco roto. */
     .bw-hud-fila.medio .bw-edif {
       flex-direction: column; justify-content: center; gap: .8cqw; min-width: 0;
-      background: #7a1010; border-radius: 1cqw;
+      background: #1a3560; border-radius: 1cqw;
       /* 10 % más alta que antes (1,6 / 1,7 → 1,76 / 1,87). */
       padding: 1.76cqw .6cqw 1.87cqw;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
@@ -3817,14 +5491,26 @@ function cssAdicional() {
     .bw-hud-fila.medio .bw-edif-puntos i.llena {
       background: #f4ecdd; border-color: #f4ecdd;
     }
+    .vista-rival-enemigo .bw-hud-fila.medio .bw-edif-puntos i.llena {
+      background: #f4ecdd; border-color: #f4ecdd;
+    }
+    .vista-rival-enemigo .bw-hud-fila.medio .bw-edif-puntos i {
+      border-color: rgba(244,236,221,.65);
+    }
+    .vista-rival-enemigo .bw-lz-cuadro.bz-torre.lleno .bw-lz-punto {
+      border-color: #c0392b; background: #7a1010; color: #fff;
+    }
+    .vista-rival-enemigo .bw-lz-cuadro.bz-at.lleno .bw-lz-punto {
+      border-color: rgba(var(--c-propio),.8); background: rgb(var(--c-propio)); color: #fff;
+    }
     .bw-edif-valor {
       font: 700 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
-      color: #7a1010; white-space: nowrap;
+      color: #1a3560; white-space: nowrap;
     }
     .bw-edif img { width: 2.5cqw; height: 2.5cqw; flex: 0 0 auto; }
     .bw-edif-nombre {
       font: 600 2.2cqw/1 ui-serif, Georgia, "Times New Roman", serif;
-      color: #7a1010; white-space: nowrap;
+      color: #1a3560; white-space: nowrap;
     }
     /* En cqw (1 % del ancho del marco): antes iba en var(--u) sin calc(), que
        es CSS inválido y dejaba los puntos sin tamaño. */
@@ -3833,9 +5519,9 @@ function cssAdicional() {
       box-sizing: border-box;
       /* 20 % menos que 2cqw (2 × 0,8 = 1,6cqw). */
       width: 1.6cqw; height: 1.6cqw; border-radius: 50%;
-      border: 1px solid rgba(122, 16, 16, .55); background: transparent;
+      border: 1px solid rgba(26,53,96,.55); background: transparent;
     }
-    .bw-edif-puntos i.llena { background: #7a1010; border-color: #7a1010; }
+    .bw-edif-puntos i.llena { background: #1a3560; border-color: #1a3560; }
 
     /* ── Antes aquí iba el bloque temporal de colores de depuración. fuera. */
 
@@ -3886,7 +5572,7 @@ function cssAdicional() {
     /* Pill del nombre: decretos en el rojo corporativo, monedas en dorado
        oscuro. Texto blanco en las dos. */
     .fort-plat.energia .fort-nombre { background:rgba(138,106,26,.8); }  /* monedas: dorado oscuro */
-    .fort-plat.vida    .fort-nombre { background:rgba(122,16,16,.8); }  /* decretos: rojo */
+    .fort-plat.vida    .fort-nombre { background:rgba(26,53,96,.8); }  /* decretos: azul oscuro */
     /* La pila de monedas sube 5 px más que la de decretos: el nombre compensa
        esos 5 px para que los dos textos queden a la misma altura. */
     .fort-pila-caja.coins .fort-nombre { margin-top:calc(5.4 * var(--u)); }
@@ -3896,9 +5582,9 @@ function cssAdicional() {
     .bw-turno {
       box-sizing: border-box; height: 6px; border-radius: 3px;
       padding: 0; background: transparent;
-      border: 1.5px solid #7a1010;
+      border: 1.5px solid #1a3560;
     }
-    .bw-turno.activo { background: #7a1010; }
+    .bw-turno.activo { background: #1a3560; }
     /* Dentro de la barra los datos no llevan pastilla propia: manda el fondo de
        la barra. */
     /* Dentro del pergamino el texto va en tinta oscura: los chips pierden su
@@ -3924,6 +5610,7 @@ function cssAdicional() {
       --suelo:#1d2c24;
       --losa:#2c3d34;
       --borde:rgba(232,222,200,.14);
+      --c-propio: 26,53,96;
       --laton:#b9c3cc;
       --texto:#eae3d3;
       --apagado:rgba(234,227,211,.55);
@@ -4081,15 +5768,15 @@ function cssAdicional() {
       display:flex; align-items:center; justify-content:center;
       transform:translateY(calc(-1 * var(--u)));
       box-sizing:border-box;
-      width:calc(4.95 * var(--u)); height:calc(4.95 * var(--u));
+      width:calc(4.0 * var(--u)); height:calc(4.0 * var(--u));
       border-radius:50%;
-      font:800 calc(2.3 * var(--u))/1 ui-sans-serif, system-ui, sans-serif;
+      font:800 calc(1.9 * var(--u))/1 ui-monospace, monospace;
       border:0;
-      box-shadow:0 1px 4px rgba(0,0,0,.55);
+      box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 4px rgba(0,0,0,.55);
     }
     .fort-plat.energia .fort-cifra { background:rgba(138,106,26,.9); color:#fff; position:relative; top:calc(-3.82 * var(--u)); left:calc(1.35 * var(--u)); }
     .fort-plat.energia .fort-pila-caja { position:relative; top:calc(-2.25 * var(--u)); left:calc(.9 * var(--u)); }
-    .fort-plat.vida    .fort-cifra { background:rgba(122,16,16,.9); color:#fff; position:relative; top:calc(-3.82 * var(--u)); left:calc(-1.35 * var(--u)); }
+    .fort-plat.vida    .fort-cifra { background:rgba(26,53,96,.9); color:#fff; position:relative; top:calc(-3.82 * var(--u)); left:calc(-1.35 * var(--u)); }
     .fort-plat.vida    .fort-pila-caja { position:relative; top:calc(-3.15 * var(--u)); left:calc(-.9 * var(--u)); }
 
     .fort-label {
@@ -4119,7 +5806,7 @@ function cssAdicional() {
       top:calc(2.5 * var(--u) + 3px);
       left:50%; transform:translateX(-50%);
       z-index:2;
-      background:rgb(122,16,16);
+      background:rgb(var(--c-propio));
       border:0;
       padding:calc(1.4 * var(--u));
       gap:3px;
@@ -4137,7 +5824,8 @@ function cssAdicional() {
       display:flex; gap:calc(.77 * var(--u)); align-items:center;
       background:rgba(0,0,0,.7); border-radius:999px;
       padding:calc(.51 * var(--u)) calc(1.28 * var(--u));
-      border:1px solid rgba(255,255,255,.2);
+      border:0;
+      box-shadow:0 0 0 1px rgba(255,255,255,.5);
     }
     .fort-nivel i {
       display:block;
@@ -4155,7 +5843,7 @@ function cssAdicional() {
     .fort-slot {
       position:absolute;
       transform:translate(-50%,-50%);
-      width:calc(7.7 * var(--u)); height:calc(7.7 * var(--u));
+      width:calc(15.4 * var(--u)); height:calc(15.4 * var(--u));
       border-radius:5px;
       /* Hueco libre: sin marco, solo el círculo borgoña con el + en el centro
          (el mismo de los decretos del HUD). Se toca para criar. */
@@ -4169,7 +5857,7 @@ function cssAdicional() {
     .hueco-mas {
       position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
       width:calc(4.4 * var(--u)); aspect-ratio:1; border-radius:50%;
-      background:rgba(122,16,16,.8); border:0;
+      background:rgba(var(--c-propio),.85); border:0;
       display:flex; align-items:center; justify-content:center;
       box-sizing:border-box; padding:calc(.5 * var(--u)) 0 0; text-align:center;
       font-weight:700; font-family:ui-monospace,monospace;
@@ -4184,18 +5872,24 @@ function cssAdicional() {
     /* El monstruo del box, como en el tablero: lámina de frente y pastilla de
        fuerza a su derecha. */
     .fort-slot-img {
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:calc(5.6 * var(--u)); height:auto; pointer-events:none;
+      position:absolute; left:50%; top:50%;
+      transform:translate(-50%, calc(-50% - var(--bw-subida-monstruo, 0%)));
+      width:calc(12.4 * var(--u)); height:auto; pointer-events:none;
       filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
     }
     .fort-slot-nv {
-      /* 10 px más a la derecha (2.6 % del ancho del mundo ≈ 10 px en móvil) */
-      position:absolute; top:50%; right:calc(-3.7 * var(--u));
-      transform:translateY(-50%);
-      width:calc(3.4 * var(--u)); aspect-ratio:1; border-radius:50%;
-      background:rgba(23,148,148,.9); color:#fff;
+      position:absolute; bottom:0; left:50%;
+      transform:translate(-50%, calc(50% - 14px));
+      width:calc(4.0 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(var(--c-propio),.9); color:#fff;
       display:flex; align-items:center; justify-content:center;
-      font:700 calc(1.8 * var(--u))/1 ui-monospace,monospace;
+      font:700 calc(1.9 * var(--u))/1 ui-monospace,monospace;
+      box-shadow:0 0 0 1px rgba(255,255,255,.5);
+      z-index:3;
+    }
+    .fort-slot.fort-slot-arriba .fort-slot-nv {
+      bottom:auto; top:0;
+      transform:translate(-50%, calc(-50% - 5px));
     }
 
     /* nubes */
@@ -4352,8 +6046,11 @@ function cssAdicional() {
       display:grid; place-items:center; cursor:pointer; z-index:5;
     }
     .ficha-img {
-      /* Centrada en la caja de la ficha (el div verde). */
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      /* Centrada en la caja de la ficha (el div verde) y subida lo mismo que las
+         demás láminas de monstruo: esta ficha va por su cuenta, no usa la clase
+         bw-box-img, así que necesita la subida de la variable aparte. */
+      position:absolute; left:50%; top:50%;
+      transform:translate(-50%, calc(-50% - var(--bw-subida-monstruo, 0%)));
       /* Un tercio del tamaño natural de la lámina (121 × 224 px). */
       width:calc(8.5 * var(--u)); height:auto; pointer-events:none;
       filter:drop-shadow(0 calc(.5 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,.5));
@@ -4367,22 +6064,95 @@ function cssAdicional() {
     }
     .ficha:active { filter:brightness(1.15) }
     /* Atacante en rojo; aliado que defiende tu búnker en turquesa. */
-    .ficha.mia .ficha-nv { background:rgba(23,148,148,.85); }
+    .ficha.mia .ficha-nv { background:rgba(var(--c-propio),.85); }
+    .ficha[data-nivel="1"] .ficha-nv { transform:translate(-50%, calc(-50% - 20px + 5px)); }
     /* Mismo estilo que el número de calle: mono, blanco y sin borde.
        Centrado vertical en la ficha y desplazado a la derecha unos 30 px
        (8,5 * var(--u) a 390 px de ancho de mundo). */
     .ficha-nv {
-      position:absolute; left:calc(50% + 8.5 * var(--u)); top:50%;
-      transform:translate(-50%,-50%);
-      width:calc(4.4 * var(--u)); aspect-ratio:1; border-radius:50%;
+      position:absolute; left:50%; top:0;
+      transform:translate(-50%, calc(-50% - 20px));
+      width:calc(4.0 * var(--u)); aspect-ratio:1; border-radius:50%;
       background:rgba(122,16,16,.8); border:0;
       display:flex; align-items:center; justify-content:center;
       box-sizing:border-box; padding:calc(.5 * var(--u)) 0 0; text-align:center;
       font-weight:700; font-family:ui-monospace,monospace;
-      font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
+      font-size:calc(1.9 * var(--u)); line-height:1; color:#fff;
+      /* Filo blanco al 50 %, como los números del tablero. */
+      box-shadow:0 0 0 1px rgba(255,255,255,.5);
       /* La pastilla del nivel también abre el modal del monstruo: es el sitio
          natural al que se apunta y, sin esto, el toque se colaba al tablero. */
       pointer-events:auto;
+    }
+    /* Fantasma del combate: la ficha que cae se queda un momento en el tablero
+       (y se desliza hasta el que le planta cara si murió atacando), para que se
+       vea el choque en vez de desaparecer de golpe. */
+    .ficha.fantasma {
+      display:none; z-index:6; pointer-events:none;
+    }
+    /* Copia del atacante que entra en el búnker: no se toca, solo se ve. */
+    .ficha.bw-entrando { pointer-events:none; cursor:default; z-index:6 }
+    /* «-N» de la vida que se lleva el que entra: círculo rojo que sube desde la
+       puerta y se desvanece. Nace apagado; lo enciende su animación. */
+    .bw-vida {
+      position:absolute; z-index:8; pointer-events:none; opacity:0;
+      transform:translate(-50%,-50%);
+      display:flex; align-items:center; justify-content:center;
+      box-sizing:border-box; min-width:calc(6.4 * var(--u)); height:calc(6.4 * var(--u));
+      padding:0 calc(.7 * var(--u)); border-radius:999px;
+      background:radial-gradient(circle at 36% 30%, #d8443c, #8d1009 76%);
+      box-shadow:0 0 0 1px rgba(255,255,255,.45),
+                 0 calc(.7 * var(--u)) calc(1.6 * var(--u)) rgba(0,0,0,.55);
+      color:#fff; font-weight:700; font-family:ui-monospace,monospace;
+      font-size:calc(3.2 * var(--u)); line-height:1;
+      text-shadow:0 calc(.14 * var(--u)) calc(.3 * var(--u)) rgba(0,0,0,.55);
+    }
+    .ficha.fantasma .ficha-img {
+      filter:drop-shadow(0 calc(.8 * var(--u)) calc(1.4 * var(--u)) rgba(0,0,0,.6));
+    }
+    /* Nube del combate (el arte de pelea.png): se abre y tiembla encima de los
+       dos y se apaga dejando al que ha ganado. */
+    .bw-nube {
+      position:absolute; z-index:7; pointer-events:none; opacity:0;
+      width:calc(13 * var(--u)); height:calc(13 * var(--u));
+      /* Centrada en la casilla y subida un poco: la nube apoya en el suelo. */
+      margin:calc(-8.6 * var(--u)) 0 0 calc(-6.5 * var(--u));
+      transition:opacity .2s ease;
+      filter:drop-shadow(0 calc(.6 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,.45));
+    }
+    .bw-nube img { display:block; width:100%; height:100%; }
+    .bw-nube.on { opacity:1; animation:bwNube .46s steps(2, end) infinite; }
+    .bw-nube.sale { opacity:0; animation:none; transition:opacity .38s ease; }
+
+    /* Disparo de las torres: la capa fija donde vuelan las dos bolas (cada una
+       un 3×3 de círculos negros) y sale la nube del impacto. Fuera del tablero
+       a propósito: el repintado del turno lo vacía y aquí no se corta nada. */
+    .bw-disparo-capa { position:fixed; inset:0; z-index:9400; pointer-events:none; }
+    .bw-disparo-fantasma { position:fixed; pointer-events:none; }
+    .bw-bola {
+      position:fixed; transform:translate(-50%,-50%); pointer-events:none;
+      display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:repeat(3, 1fr);
+      gap:1px;
+      filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));
+    }
+    .bw-bola i {
+      display:block; border-radius:50%;
+      background:radial-gradient(circle at 36% 32%, #55534f, #100f0e 72%);
+      box-shadow:0 0 2px rgba(0,0,0,.6);
+    }
+    .bw-nube-disparo {
+      position:fixed; transform:translate(-50%,-52%); opacity:0; pointer-events:none;
+      transition:opacity .18s ease;
+      filter:drop-shadow(0 4px 9px rgba(0,0,0,.5));
+    }
+    .bw-nube-disparo img { display:block; width:100%; height:auto; }
+    .bw-nube-disparo.on { opacity:1; }
+    .bw-nube-disparo.on img { animation:bwNube .46s steps(2, end) infinite; }
+    .bw-nube-disparo.sale { opacity:0; transition:opacity .42s ease; }
+    @keyframes bwNube {
+      0%   { transform:rotate(-3deg) scale(.94); }
+      50%  { transform:rotate(3deg)  scale(1.05); }
+      100% { transform:rotate(-2deg) scale(.97); }
     }
 
     /* torres */
@@ -4417,23 +6187,28 @@ function cssAdicional() {
     }
     .torre.nv2 .alzado { background-image:url('${BASE_IMG}/torres/torre-alzado-nv2.png') }
     .torre.nv3 .alzado { background-image:url('${BASE_IMG}/torres/torre-alzado-nv3.png') }
+    /* Los puntitos del nivel, debajo de la torre y con el mismo look que los de
+       armería, laboratorio y criadero (mismo padding, mismo hueco y mismos
+       puntos), pero en turquesa para distinguir la torre. */
     .torre .nivel {
       position:absolute; bottom:calc(-2.2 * var(--u)); left:50%;
       transform:translateX(-50%);
-      display:flex; gap:calc(.55 * var(--u)); align-items:center; z-index:4;
-      background:rgba(0,0,0,.7); border-radius:999px;
-      padding:calc(.4 * var(--u)) calc(.8 * var(--u));
+      display:flex; gap:3px; align-items:center; z-index:4;
+      background:rgba(var(--c-propio),.9); border-radius:999px; border:0;
+      padding:calc(1.4 * var(--u));
+      white-space:nowrap;
     }
     .torre .nivel i {
       display:block; width:calc(1.4 * var(--u)); height:calc(1.4 * var(--u));
       border-radius:50%; border:.5px solid rgba(255,255,255,.7); background:transparent;
+      box-sizing:border-box;
     }
     .torre.nv1 .nivel i:nth-child(1),
     .torre.nv2 .nivel i:nth-child(-n+2),
     .torre.nv3 .nivel i { background:rgba(255,255,255,.9); }
     .torre .bloqueo {
       display:none;
-      position:absolute; bottom:calc(1 * var(--u)); left:50%;
+      position:absolute; bottom:calc(1 * var(--u) + 10px); left:50%;
       transform:translateX(-50%);
       z-index:5;
       width:calc(5.4 * var(--u)); height:calc(5.4 * var(--u));
@@ -4445,27 +6220,6 @@ function cssAdicional() {
       color:var(--rojo); font-weight:900;
     }
     .torre.bloqueada .bloqueo { display:flex; }
-    .torre .anillo {
-      position:absolute; left:100%; top:50%;
-      transform:translateY(-50%); z-index:4;
-      margin-left:calc(1.03 * var(--u));
-      display:flex; flex-direction:column; gap:calc(.62 * var(--u));
-      width:calc(1.65 * var(--u));
-    }
-    .torre .anillo::before,
-    .torre .anillo::after,
-    .torre .anillo span {
-      content:""; display:block; width:calc(1.65 * var(--u)); height:calc(1.65 * var(--u));
-      border-radius:calc(.41 * var(--u));
-      background:rgba(185,195,204,.2);
-      border:1px solid rgba(185,195,204,.35);
-    }
-    .torre.nv1 .anillo::after { background:#b9c3cc; border-color:#b9c3cc }
-    .torre.nv2 .anillo span  { background:#b9c3cc; border-color:#b9c3cc }
-    .torre.nv2 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
-    .torre.nv3 .anillo::before{ background:#b9c3cc; border-color:#b9c3cc }
-    .torre.nv3 .anillo span  { background:#b9c3cc; border-color:#b9c3cc }
-    .torre.nv3 .anillo::after{ background:#b9c3cc; border-color:#b9c3cc }
 
     /* hueco de torre: solo el círculo borgoña con el + */
     .hueco {
@@ -4478,8 +6232,8 @@ function cssAdicional() {
 
     /* lanzaderas */
     .lanzadera {
-      position:absolute; width:calc(11.2 * var(--u)); aspect-ratio:2/1;
-      margin:calc(-2.8 * var(--u)) 0 0 calc(-5.6 * var(--u));
+      position:absolute; width:calc(14.6 * var(--u)); aspect-ratio:2/1;
+      margin:calc(-2.8 * var(--u)) 0 0 calc(-7.3 * var(--u));
       border-radius:50%;
       border:2px dashed rgba(255,255,255,.75);
       background:rgba(255,255,255,.12);
@@ -4492,27 +6246,32 @@ function cssAdicional() {
       background:rgba(0,0,0,.28);
     }
     .lanzadera-img {
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:calc(5.6 * var(--u)); height:auto; pointer-events:none;
+      position:absolute; left:50%; top:50%;
+      /* Subida propia de la lanzadera, además de la general de los monstruos:
+       las jaulas de aquí quedaban bajas dentro del hueco. */
+      transform:translate(-50%, calc(-50% - var(--bw-subida-monstruo, 0%) - var(--bw-subida-lanzadera, 0%)));
+      /* La misma escala que una ficha en la calle: antes era más pequeña en la
+         lanzadera y parecía otro objeto. */
+      width:calc(11.6 * var(--u)); height:auto; pointer-events:none;
       filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
-      animation: bwLlegadaLzImg .55s ease-out both;
     }
+    /* El nivel de la lanzadera va centrado arriba, sobre la lámina. */
     .lanzadera-nv {
-      position:absolute; top:50%; right:calc(-1.1 * var(--u));
-      transform:translateY(-50%);
-      width:calc(3.4 * var(--u)); aspect-ratio:1; border-radius:50%;
-      background:rgba(23,148,148,.9); color:#fff;
+      position:absolute; top:-30px; left:50%;
+      transform:translate(-50%,-50%);
+      width:calc(4.0 * var(--u)); aspect-ratio:1; border-radius:50%;
+      background:rgba(var(--c-propio),.9); color:#fff;
       display:flex; align-items:center; justify-content:center;
-      font:700 calc(1.8 * var(--u))/1 ui-monospace,monospace;
-      animation: bwLlegadaLzNv .55s ease-out both;
+      font:700 calc(1.9 * var(--u))/1 ui-monospace,monospace;
+      box-shadow:0 0 0 1px rgba(255,255,255,.5);
     }
-    @keyframes bwLlegadaLzImg {
-      from { opacity:0; transform:translate(-50%, 40%) scale(.8); }
-      to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
-    }
-    @keyframes bwLlegadaLzNv {
-      from { opacity:0; transform:translateY(-50%) scale(.8); }
-      to   { opacity:1; transform:translateY(-50%) scale(1); }
+    /* Mientras la ficha vuela desde la jaula, la de destino espera oculta. */
+    .lanzadera.lz-recibiendo .lanzadera-img,
+    .lanzadera.lz-recibiendo .lanzadera-nv { opacity:0; }
+    .bw-lz-vuelo {
+      position:fixed; z-index:1200; pointer-events:none;
+      transform:translate(-50%,-50%);
+      filter:drop-shadow(0 calc(.4 * var(--u)) calc(.8 * var(--u)) rgba(0,0,0,.55));
     }
 
     /* número de calle */
@@ -4523,7 +6282,7 @@ function cssAdicional() {
     body.bw-avanzando .bw-mano-wrap,
     body.bw-avanzando .bw-panel,
     body.bw-avanzando #bw-nav-global,
-    body.bw-avanzando #barra,
+    body.bw-avanzando #barra { pointer-events: none; }
     /* Los modales no se bloquean nunca: el bloqueo del avance es para que no se
        toque el tablero mientras se mueven las fichas, pero un modal es una
        decisión ya tomada y, si se queda sin responder, encierra al jugador
@@ -4629,37 +6388,6 @@ function cssAdicional() {
     }
     .bw-volver:active { filter:brightness(.94); }
 
-    /* Cabecera del monstruo: su imagen y el nivel arriba a la derecha. */
-    .modal.modal-monstruo .bw-mon-cab {
-      position:relative; display:flex; justify-content:center;
-      margin:2px 0 10px;
-    }
-    .modal.modal-monstruo .bw-mon-img {
-      display:block; height:120px; width:auto; max-width:100%;
-      filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));
-    }
-    .modal.modal-monstruo .bw-mon-nv {
-      position:absolute; top:4px; right:4px;
-      min-width:24px; padding:4px 9px; border-radius:999px;
-      background:rgba(23,148,148,.9); color:#fff;
-      font:800 14px/1 ui-monospace,monospace; text-align:center;
-    }
-
-    .modal.modal-monstruo .bw-envio-opciones {
-      display:flex; flex-direction:column; gap:8px; margin:2px 0 8px;
-    }
-    .modal.modal-monstruo .bw-envio-op {
-      padding:13px 14px; border-radius:7px; text-align:left;
-      font:600 14.5px/1.35 ui-sans-serif, system-ui, sans-serif;
-      /* Botones de acción del modal: un tono más oscuro que el pergamino. */
-      background:rgba(84,56,32,.2); color:#12100e;
-      border:1px solid rgba(74,48,26,.4); cursor:pointer;
-    }
-    .modal.modal-monstruo .bw-envio-op:hover { background:rgba(84,56,32,.28); }
-    .modal.modal-monstruo .bw-envio-op:disabled { opacity:.5; cursor:wait; }
-    .modal.modal-monstruo .bw-envio-vacio {
-      margin:0 0 10px; color:#5a4436; font-size:14px; line-height:1.4;
-    }
     /* El desglose de disparo sobre el pergamino: tinta oscura y filas claras. */
     .modal.modal-monstruo .bw-disparo-cab { color:#4a3629; }
     .modal.modal-monstruo .bw-disparo-cab b { color:#12100e; }
@@ -4686,13 +6414,9 @@ function cssAdicional() {
       position:fixed; left:0; right:0; bottom:0; top:auto;
       width:100%; max-width:100%; margin:0;
       max-height:80vh; overflow-y:auto;
-      padding:26px 14px calc(22px + env(safe-area-inset-bottom, 0px));
+      padding:0 14px calc(22px + env(safe-area-inset-bottom, 0px));
       border-radius:16px 16px 0 0;
       background-color:#1b1713;
-      background-image:url('${BASE_IMG}/ribete.png'), url('${BASE_IMG}/ribete.png');
-      background-position:left top, left bottom;
-      background-size:auto 11px, auto 11px;
-      background-repeat:repeat-x, repeat-x;
       color:#f4ecdd;
       box-shadow:0 -18px 50px rgba(0,0,0,.5);
       animation:bw-subir .22s ease-out;
@@ -4734,6 +6458,48 @@ function cssAdicional() {
       from { transform:translateY(100%); }
       to { transform:translateY(0); }
     }
+
+    /* Una sola capa de ribete por borde, por encima del contenido que hace
+       scroll. La capa de arriba es sticky dentro del panel; la de abajo queda
+       fija al borde inferior del panel (encima del menú), no al contenido. */
+    .bw-panel::before,
+    .bw-modal-fondo.bw-hoja-modal .bw-modal::before,
+    body.bw-himalaya #capa .modal.bw-hoja-modal::before,
+    .bw-lz::before,
+    .modal.modal-monstruo.modal-disparo::before {
+      content:"";
+      position:sticky;
+      top:0;
+      display:block;
+      align-self:stretch;
+      flex:0 0 11px;
+      width:calc(100% + 28px);
+      height:11px; min-height:11px;
+      margin:0 -14px 15px;
+      background:url('${BASE_IMG}/ribete.png') left center / auto 100% repeat-x;
+      pointer-events:none;
+      z-index:30;
+    }
+    /* En los contenedores flex hay un gap extra: se descuenta para que el
+       título no baje respecto a como estaba antes. */
+    .bw-modal-fondo.bw-hoja-modal .bw-modal::before { margin-bottom:1px; }
+    .bw-lz::before { margin-bottom:5px; }
+    .bw-panel::after,
+    .bw-modal-fondo.bw-hoja-modal .bw-modal::after,
+    body.bw-himalaya #capa .modal.bw-hoja-modal::after,
+    .bw-lz::after,
+    .modal.modal-monstruo.modal-disparo::after {
+      content:"";
+      position:fixed;
+      display:block;
+      left:0; right:0;
+      bottom:var(--alto-nav, 34px);
+      height:11px;
+      background:url('${BASE_IMG}/ribete.png') left center / auto 100% repeat-x;
+      pointer-events:none;
+      z-index:30;
+    }
+    .modal.modal-monstruo.modal-disparo::after { bottom:0; }
 
     .num-calle {
       /* El margen de arriba centraba el círculo; ahora baja 10 px (2.55u) desde

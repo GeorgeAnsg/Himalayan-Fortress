@@ -29,6 +29,28 @@ const ESPERA_ANFITRION = 20 * 1000;
 const LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ"; /* sin I ni O: no se confunden al dictar */
 const MAX_LOG = 160;
 
+/* El registro antiguo no guardaba a qué jornada pertenecía cada línea. Se
+   rellena en orden al cargar: las que ya la traen mandan, las demás se quedan
+   en la última conocida, y delante de cada cambio de jornada se pone su
+   cabecera. Así la crónica sale cortada por días aunque la mesa venga de antes
+   del arreglo. */
+function diaDelRegistro(log) {
+  const fuera = [];
+  let dia = 1;
+  let puesto = 0;
+  for (const linea of log) {
+    if (linea.dia) dia = linea.dia;
+    if (linea.tipo === "dia") continue;
+    const deJuego = linea.tipo && linea.tipo !== "nota" && linea.tipo !== "sala";
+    if (deJuego && puesto !== dia) {
+      fuera.push({ t: linea.t, tipo: "dia", texto: `Jornada ${dia}.`, dia });
+      puesto = dia;
+    }
+    fuera.push({ ...linea, dia: linea.dia ?? dia });
+  }
+  return fuera;
+}
+
 function codigoNuevo(ocupados) {
   for (let intento = 0; intento < 50; intento++) {
     let c = "";
@@ -115,6 +137,50 @@ function reiniciarEquipos(sala) {
   }
 }
 
+/* ── Tamaño de la mesa: los huecos que no llenan personas los ocupan bots ── */
+
+/* Lo que elige el anfitrión cuenta humanos y bots. Si aún no ha elegido, la
+   mesa es la que hay: los que están sentados. Se puede pedir «solo humanos»
+   aunque no lleguen al mínimo: entonces no hay bots y la mesa espera gente.
+   Que falten jugadores para empezar lo sigue mirando `empezar`. */
+function objetivoJugadores(sala, juego, pedido) {
+  const humanos = sala.datos.jugadores.filter((j) => !j.esBot).length;
+  const max = juego?.max ?? 8;
+  const n = Math.round(Number(pedido));
+  const quiere = Number.isFinite(n) ? n : humanos;
+  return Math.min(max, Math.max(1, humanos, quiere));
+}
+
+/* Deja la mesa con `objetivo` asientos: las personas que hay y bots en el
+   resto. Solo tiene sentido en juegos con `bot`; en los demás no hace nada. */
+function ajustarBots(sala, juego, objetivo) {
+  if (!juego?.bot) return 0;
+  const humanos = sala.datos.jugadores.filter((j) => !j.esBot).length;
+  const max = juego.max ?? 8;
+  const cuantos = Math.max(0, Math.min(max, objetivo) - humanos);
+  const bots = sala.datos.jugadores.filter((j) => j.esBot);
+
+  /* Los que sobran salen por el final: son los que entraron últimos. */
+  while (bots.length > cuantos) {
+    const fuera = bots.pop();
+    sala.datos.jugadores = sala.datos.jugadores.filter((j) => j.id !== fuera.id);
+    sala.vivo.delete(fuera.id);
+    delete opcionesDe(sala).equipos[fuera.id];
+  }
+
+  /* Los que faltan entran al final y ya listos: un bot no hace esperar. */
+  while (bots.length < cuantos) {
+    let n = bots.length + 1;
+    let id = `bot-${sala.codigo}-${n}`;
+    while (sala.datos.jugadores.some((j) => j.id === id)) id = `bot-${sala.codigo}-${++n}`;
+    const bot = { id, nombre: `Bot ${n}`, avatar: "robot", listo: true, esBot: true };
+    sala.datos.jugadores.push(bot);
+    bots.push(bot);
+    asignarEquipo(sala, bot.id);
+  }
+  return bots.length;
+}
+
 function asignarEquipo(sala, jugadorId) {
   const o = opcionesDe(sala);
   if (o.modo !== "equipos") {
@@ -166,16 +232,24 @@ export class Mesas {
           opciones: guardado.opciones ?? opcionesNuevas(),
           final: guardado.final,
         },
-        log: Array.isArray(guardado.log) ? guardado.log : [],
+        log: diaDelRegistro(Array.isArray(guardado.log) ? guardado.log : []),
         actualizado: fila.actualizado ?? ahora,
         vivo: new Map(), /* usuarioId → { sockets:Set, conectado } */
       });
+    }
+    /* El estado guardado vuelve de JSON: cada juego revive lo que JSON no
+       puede guardar (los `Set` del motor, por ejemplo). Sin esto una mesa a
+       medias se quedaba sin vista tras reiniciar el servidor. */
+    for (const sala of this.salas.values()) {
+      this.juegoDe(sala)?.revivir?.(sala.datos.estado);
     }
     if (this.salas.size) console.log(`[mesas] ${this.salas.size} mesa(s) recuperadas`);
   }
 
   guardar(sala) {
     sala.actualizado = Date.now();
+    /* Antes de guardar, cada juego deja su estado en algo que JSON entienda. */
+    this.juegoDe(sala)?.serializar?.(sala.datos.estado);
     almacen.guardarSala({
       codigo: sala.codigo,
       juego: sala.juego,
@@ -302,6 +376,13 @@ export class Mesas {
 
     sala.datos.jugadores.push({ id: usuario.id, nombre: usuario.nombre, avatar: usuario.avatar, listo: false });
     asignarEquipo(sala, usuario.id);
+    /* Si la mesa tenía un tamaño elegido, la persona ocupa el sitio de un bot:
+       los humanos siempre van antes que los bots. */
+    const tamanio = opcionesDe(sala).nJugadores;
+    if (Number.isFinite(tamanio)) {
+      opcionesDe(sala).nJugadores = objetivoJugadores(sala, juego, tamanio);
+      ajustarBots(sala, juego, opcionesDe(sala).nJugadores);
+    }
     this.vivoDe(sala, usuario.id);
     this.anotar(sala, `${usuario.nombre} entra en la madriguera.`);
     this.guardar(sala);
@@ -328,6 +409,13 @@ export class Mesas {
       return sala;
     }
     if (sala.anfitrion === usuarioId) this.heredar(sala);
+    /* Con una persona menos la mesa vuelve a su tamaño: entra un bot. */
+    const tamanio = opcionesDe(sala).nJugadores;
+    const juego = this.juegoDe(sala);
+    if (Number.isFinite(tamanio) && juego?.bot) {
+      opcionesDe(sala).nJugadores = objetivoJugadores(sala, juego, tamanio);
+      ajustarBots(sala, juego, opcionesDe(sala).nJugadores);
+    }
     this.guardar(sala);
     this.difundir(sala);
     return sala;
@@ -356,9 +444,43 @@ export class Mesas {
     const sala = this.deUsuario(usuarioId);
     if (!sala) return { error: "No estás en ninguna madriguera." };
     if (sala.fase !== "vestibulo") return { error: "La partida ya empezó." };
+
+    /* Cualquier jugador puede elegir su personaje (si el juego lo soporta). */
+    if ("personaje" in datos) {
+      const o = opcionesDe(sala);
+      if (!o.personajes) o.personajes = {};
+      if (datos.personaje === null) {
+        delete o.personajes[usuarioId];
+      } else {
+        const apodo = String(datos.personaje);
+        const tomado = Object.entries(o.personajes).find(([pid, a]) => pid !== usuarioId && a === apodo);
+        if (tomado) return { error: "Ese personaje ya lo lleva otra persona." };
+        o.personajes[usuarioId] = apodo;
+      }
+      this.guardar(sala);
+      this.difundir(sala);
+      return { sala };
+    }
+
     if (sala.anfitrion !== usuarioId) return { error: "Solo el anfitrión puede personalizar la partida." };
 
     const o = opcionesDe(sala);
+    const juego = this.juegoDe(sala);
+
+    /* Cuántos juegan: el anfitrión elige el tamaño y los huecos que no llenan
+       personas los ocupan bots. Va con el resto de ajustes de la hoja, así
+       que no se corta aquí: sigue con el modo, los equipos y las habilidades. */
+    if ("nJugadores" in datos && juego?.bot) {
+      o.nJugadores = objetivoJugadores(sala, juego, datos.nJugadores);
+      ajustarBots(sala, juego, o.nJugadores);
+      this.anotar(sala, `La mesa queda en ${o.nJugadores} jugadores.`);
+    }
+
+    /* Opciones de juego específicas (registroTotal, habsConfig, habsInicio). */
+    if ("registroTotal" in datos) o.registroTotal = Boolean(datos.registroTotal);
+    if ("habsConfig" in datos && Array.isArray(datos.habsConfig)) o.habsConfig = datos.habsConfig;
+    if ("habsInicio" in datos && Array.isArray(datos.habsInicio)) o.habsInicio = datos.habsInicio;
+
     const modo = datos.modo === undefined ? o.modo : String(datos.modo);
     if (!MODOS.has(modo)) return { error: "Ese modo de juego no existe." };
 
@@ -405,13 +527,19 @@ export class Mesas {
     }
 
     sala.semilla = Math.floor(Math.random() * 1_000_000_000);
+    /* Cada partida empieza con el cuaderno en blanco: el ranking no arrastra
+       los definitivos de la anterior. */
+    delete sala.datos.cuadernos;
     sala.datos.estado = juego.crear({
       jugadores: jugadores.map(({ id, nombre, avatar }) => ({ id, nombre, avatar })),
       semilla: sala.semilla,
-      opciones: { modo: opciones.modo, equipos: { ...opciones.equipos } },
+      opciones: { modo: opciones.modo, equipos: { ...opciones.equipos }, personajes: { ...(opciones.personajes ?? {}) }, registroTotal: opciones.registroTotal, habsConfig: opciones.habsConfig, habsInicio: opciones.habsInicio },
     });
     sala.fase = "jugando";
     this.anotar(sala, "Empieza la partida.");
+    /* Si abre un bot, juega ya: nadie puede pulsar por él y la mesa se
+       quedaría esperando un turno que no va a llegar. */
+    this.jugarBots(sala, juego);
     this.guardar(sala);
     this.difundir(sala);
     this.avisarDesconectados(sala, {
@@ -470,28 +598,16 @@ export class Mesas {
     this.difundir(sala);
 
     /* Si el siguiente es un bot, juega automáticamente hasta que toque a un humano. */
-    if (!fin && juego.bot) {
-      let sigBot = juego.turno(sala.datos.estado);
-      let guard = 0;
-      while (sigBot && sala.datos.jugadores.find(j => j.id === sigBot)?.esBot && guard++ < 50) {
-        const accionBot = juego.bot(sala.datos.estado, sigBot);
-        if (!accionBot) break;
-        const salidaBot = juego.aplicar(sala.datos.estado, sigBot, accionBot);
-        sala.datos.estado = salidaBot.estado ?? sala.datos.estado;
-        for (const ev of salidaBot.eventos ?? []) this.anotar(sala, ev.texto, ev.tipo);
-        const finBot = juego.terminada(sala.datos.estado);
-        if (finBot) {
-          sala.fase = "final";
-          sala.datos.final = { puestos: finBot.puestos, cuando: Date.now() };
-          this.anotar(sala, "Se acabó la partida.", "fin");
-          this.guardar(sala);
-          this.difundir(sala);
-          return { sala };
-        }
-        sigBot = juego.turno(sala.datos.estado);
+    if (!fin) {
+      const bots = this.jugarBots(sala, juego);
+      if (bots.fin) { this.guardar(sala); this.difundir(sala); return { sala }; }
+      /* Ya se ha difundido el estado humano antes de los bots. Si ningún bot
+         ha jugado, no se repite la misma vista: el segundo pintado cortaba la
+         animación de las fichas y las colocaba de golpe en su destino. */
+      if (bots.jugó) {
+        this.guardar(sala);
+        this.difundir(sala);
       }
-      this.guardar(sala);
-      this.difundir(sala);
     }
 
     /* El aviso que de verdad desatasca la mesa: si el turno pasa a alguien que
@@ -516,6 +632,33 @@ export class Mesas {
     return { sala };
   }
 
+  /* Juega los turnos seguidos de bots hasta que le toque a una persona o
+     acabe la partida. Devuelve si alguno jugó y si se acabó. */
+  jugarBots(sala, juego) {
+    const res = { jugó: false, fin: false };
+    if (!juego?.bot || sala.fase !== "jugando") return res;
+    let sigBot = juego.turno(sala.datos.estado);
+    let guard = 0;
+    while (sigBot && sala.datos.jugadores.find((j) => j.id === sigBot)?.esBot && guard++ < 50) {
+      const accionBot = juego.bot(sala.datos.estado, sigBot);
+      if (!accionBot) break;
+      res.jugó = true;
+      const salidaBot = juego.aplicar(sala.datos.estado, sigBot, accionBot);
+      sala.datos.estado = salidaBot.estado ?? sala.datos.estado;
+      for (const ev of salidaBot.eventos ?? []) this.anotar(sala, ev.texto, ev.tipo);
+      const finBot = juego.terminada(sala.datos.estado);
+      if (finBot) {
+        sala.fase = "final";
+        sala.datos.final = { puestos: finBot.puestos, cuando: Date.now() };
+        this.anotar(sala, "Se acabó la partida.", "fin");
+        res.fin = true;
+        break;
+      }
+      sigBot = juego.turno(sala.datos.estado);
+    }
+    return res;
+  }
+
   revancha(usuarioId) {
     const sala = this.deUsuario(usuarioId);
     if (!sala) return { error: "No estás en ninguna madriguera." };
@@ -525,6 +668,7 @@ export class Mesas {
     sala.fase = "vestibulo";
     sala.datos.estado = null;
     delete sala.datos.final;
+    delete sala.datos.cuadernos;
     for (const j of sala.datos.jugadores) j.listo = false;
     sala.log = [];
     this.anotar(sala, "Vuelta a la madriguera: otra partida.");
@@ -623,7 +767,19 @@ export class Mesas {
 
   anotar(sala, texto, tipo = "nota") {
     if (!texto) return;
-    sala.log.push({ t: Date.now(), tipo, texto });
+    /* Con la jornada a la que pertenece: la crónica del juego se agrupa por
+       día y antes el registro del servidor no la llevaba. */
+    const dia = sala.datos?.estado?.dia ?? 1;
+    /* Y una línea que abre cada jornada. El registro antiguo no la llevaba,
+       así que la crónica no tenía dónde cortar; con esto cada día empieza por
+       su «Jornada N» y las líneas que vienen detrás ya saben a cuál van. */
+    if (tipo !== "nota" && tipo !== "sala" && tipo !== "dia") {
+      const ultima = [...sala.log].reverse().find((l) => l.dia);
+      if (!ultima || ultima.dia !== dia) {
+        sala.log.push({ t: Date.now(), tipo: "dia", texto: `Jornada ${dia}.`, dia });
+      }
+    }
+    sala.log.push({ t: Date.now(), tipo, texto, dia });
     if (sala.log.length > MAX_LOG) sala.log.splice(0, sala.log.length - MAX_LOG);
   }
 

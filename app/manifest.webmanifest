@@ -1,12 +1,12 @@
 {
-  "name": "Himalayan Fortress",
-  "short_name": "Himalayan",
-  "description": "Defiende tu fortaleza 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
+  "name": "PYML",
+  "short_name": "PYML",
+  "description": "Juegos de mesa para jugar con amigos: crea una madriguera o entra con su código de cinco letras.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "background_color": "#12100e",
   "theme_color": "#12100e",
   "icons": [
@@ -21,12 +21,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "arte/icono.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ]
 }

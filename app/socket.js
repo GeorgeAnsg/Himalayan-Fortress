@@ -22,6 +22,9 @@ export class Conexion {
     this.alFuera = alFuera ?? (() => {});
     this.alSesionCaida = alSesionCaida ?? (() => {});
     this.socket = null;
+    /* Un cierre pedido por la app (salir de la cuenta, reconectar) no es una
+       caída de red y no debe anunciarse como tal. */
+    this.cerrando = false;
   }
 
   conectar() {
@@ -43,10 +46,11 @@ export class Conexion {
     this.socket = socket;
 
     socket.on("connect", () => this.alRed(true));
-    socket.on("disconnect", () => this.alRed(false));
+    socket.on("disconnect", () => { if (!this.cerrando) this.alRed(false); });
     socket.on("connect_error", (err) => {
       const motivo = String(err?.message ?? "");
       if (motivo === "sin_sesion" || motivo === "sesion_caducada") {
+        this.cerrando = true;
         socket.close();
         this.socket = null;
         this.alSesionCaida(motivo);
@@ -119,11 +123,15 @@ export class Conexion {
   personalizar(datos) { return this.emitir("personalizar", datos); }
   empezar() { return this.emitir("empezar", {}); }
   accion(accion) { return this.emitir("accion", accion); }
+  /* Cuántos definitivos lleva tu cuaderno: es lo único del cuaderno que ve la
+     mesa, para el ranking. */
+  cuaderno(datos) { return this.emitir("cuaderno", datos); }
   añadirBot() { return this.emitir("añadir-bot", {}); }
   revancha() { return this.emitir("revancha", {}); }
   salir() { return this.emitir("salir", {}); }
 
   cerrar() {
+    this.cerrando = true;
     try { this.socket?.close(); } catch { /* nada */ }
     this.socket = null;
   }

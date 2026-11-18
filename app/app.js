@@ -13,7 +13,7 @@ import * as sesion from "./sesion.js";
 import * as avisos from "./avisos.js";
 import * as versionMod from "./version.js";
 import { Conexion } from "./socket.js";
-import { aviso, modal, cerrarModal, hayModal, avatarSVG, esc } from "./ui.js";
+import { aviso, modal, cerrarModal, avatarSVG, esc } from "./ui.js";
 import * as vistaEntrada from "./vistas/entrada.js";
 import * as vistaInicio from "./vistas/inicio.js";
 import * as vistaVestibulo from "./vistas/vestibulo.js";
@@ -27,6 +27,7 @@ const estado = {
   mesa: null,
   conexion: null,
   redAntes: true,
+  relojRed: null,
   pantalla: null,
 };
 
@@ -38,6 +39,7 @@ const $red = () => document.getElementById("red");
 
 async function arrancar() {
   registrarServiceWorker();
+  bloquearOrientacion();
 
   const v = await api.version();
   if (!v.datos?.version) {
@@ -92,6 +94,15 @@ function registrarServiceWorker() {
   });
 }
 
+/* La PWA se instala en vertical. El manifest ya lo pide; esto lo reintenta en
+   los navegadores que permiten bloquear la orientación desde la app. Si el
+   navegador no lo soporta, se ignora y se queda el comportamiento del sistema. */
+function bloquearOrientacion() {
+  try {
+    screen.orientation?.lock?.("portrait").catch(() => {});
+  } catch { /* navegador sin Screen Orientation API */ }
+}
+
 /* ── Conexión ──────────────────────────────────────────────────────────── */
 
 function conectar() {
@@ -117,27 +128,36 @@ function conectar() {
   estado.conexion.conectar();
 }
 
+/* Aviso de red. Un corte de un momento —entrar o salir de una mesa, el móvil
+   en segundo plano, el servidor que se reengancha— se arregla solo y no dice
+   nada. Solo si la caída dura se pone el aviso, y entonces se queda fijo en
+   pantalla hasta que vuelve la conexión. */
+const MS_AVISO_SIN_RED = 2500;
+let avisoRed = null;
+
 function alRed(conectado) {
   const red = $red();
   if (red) {
     red.classList.toggle("on", conectado);
     red.classList.toggle("off", !conectado);
   }
-  if (!conectado && estado.redAntes && !hayModal()) {
-    /* Al perder la conexión, un único aviso modal. Al volver no se dice nada:
-       el punto de la barra ya marca que hay red y el juego sigue solo. Si ya
-       hay un modal abierto (una carta, el turno…), no se le echa encima. */
-    modal({
-      titulo: "Sin conexión",
-      texto: "Se ha perdido la conexión. Se reintenta solo.",
-      botones: [{ texto: "Entendido", estilo: "secundario", valor: "ok" }],
-      clase: "modal-conexion",
-    });
+  clearTimeout(estado.relojRed);
+  if (conectado) {
+    estado.redAntes = true;
+    quitarAvisoRed();
+    return;
   }
-  if (conectado && !estado.redAntes) {
-    if (document.querySelector(".modal.modal-conexion")) cerrarModal();
-  }
-  estado.redAntes = conectado;
+  if (!estado.redAntes) return;
+  estado.redAntes = false;
+  estado.relojRed = setTimeout(() => {
+    if (estado.redAntes) return;
+    avisoRed ??= aviso("Sin conexión. Se reintenta solo.", { error: true, ms: 0 });
+  }, MS_AVISO_SIN_RED);
+}
+
+function quitarAvisoRed() {
+  avisoRed?.remove();
+  avisoRed = null;
 }
 
 function alMesa(vista) {
@@ -163,14 +183,15 @@ function alMesa(vista) {
   else pintarMesa();
 }
 
-function alSinMesa() {
+function alSinMesa(juegoId = null) {
+  const id = juegoId ?? estado.mesa?.juego?.id ?? null;
   estado.mesa = null;
   sesion.recordarSala(null);
   /* La barra puede seguir (es la cuenta), pero el ciclo y los recursos de la
      partida se apagan aquí: si no, al salir de la mesa se quedaban colgados
      arriba a la derecha. */
   actualizarBarra();
-  if (estado.usuario) pintarInicio(null);
+  if (estado.usuario) pintarInicio(null, id);
 }
 
 /* ── Pantallas ─────────────────────────────────────────────────────────── */
@@ -198,14 +219,14 @@ function pintarSinServidor() {
   $barra().hidden = true;
   $pantalla().innerHTML = `
     <section class="entrada centrado">
-      <h1 class="entrada-titulo">Himalayan Fortress</h1>
+      <h1 class="entrada-titulo">PYMALS</h1>
       <p class="entrada-lema" style="margin:14px auto 22px">No se pudo hablar con el servidor. Puede que esté arrancando o que no haya red.</p>
       <button class="boton" id="reintentar" type="button">Reintentar</button>
     </section>`;
   document.getElementById("reintentar").addEventListener("click", () => location.reload());
 }
 
-function pintarInicio(sala) {
+function pintarInicio(sala, juegoInicial = null) {
   /* Al volver de una mesa, el menú inferior, la mano, los paneles y el cielo
      del juego son nodos de <body>, no de #pantalla: hay que retirarlos a mano
      o se quedan encima del inicio. */
@@ -218,6 +239,7 @@ function pintarInicio(sala) {
     usuario: estado.usuario,
     sala: mia,
     juegos: estado.juegos,
+    juegoInicial,
     alCrear,
     alUnirse,
     alVolver: () => {
@@ -235,9 +257,9 @@ function pintarVestibulo() {
   vistaJuego.limpiar();
   limpiar();
   $barra().hidden = false;
-  /* El tablero se baja ya, mientras se espera en el vestíbulo. */
   vistaJuego.precargar(estado.mesa.juego?.id);
-  pintarCon(vistaVestibulo, {
+
+  const props = {
     mesa: estado.mesa,
     alListo: (valor) => estado.conexion.listo(valor),
     alPersonalizar: (datos) => estado.conexion.personalizar(datos),
@@ -250,7 +272,22 @@ function pintarVestibulo() {
       if (r?.error) aviso(r.error, { error: true });
     },
     alSalir: salirDeMesa,
-  });
+  };
+
+  const id = estado.mesa.juego?.id;
+  const vestibulo = vistaJuego.getVestibulo(id);
+  if (vestibulo) {
+    const raiz = $pantalla();
+    vestibulo(raiz, props);
+  } else if (id) {
+    /* El módulo puede no estar cargado aún en el primer render: lo esperamos y repintamos. */
+    pintarCon(vistaVestibulo, props);
+    vistaJuego.esperarVestibulo(id).then((fn) => {
+      if (fn && estado.mesa?.fase === "vestibulo") pintarVestibulo();
+    });
+  } else {
+    pintarCon(vistaVestibulo, props);
+  }
 }
 
 function pintarMesa() {
@@ -269,6 +306,7 @@ function pintarMesa() {
   pintarCon(vistaJuego, {
     mesa: estado.mesa,
     alAccion: (accion) => estado.conexion.accion(accion),
+    alCuaderno: (datos) => estado.conexion.cuaderno(datos),
     alSalir: salirDeMesa,
   });
 }
@@ -318,9 +356,10 @@ async function intentarUnirse(codigo) {
 }
 
 async function salirDeMesa() {
+  const juegoId = estado.mesa?.juego?.id ?? null;
   const r = await estado.conexion.salir();
   if (r?.error) aviso(r.error, { error: true });
-  else alSinMesa();
+  else alSinMesa(juegoId);
 }
 
 async function cerrarSesion() {
@@ -406,6 +445,7 @@ function abrirAjustes() {
   const avisosOn = avisos.estadoCampana();
 
   const cerrado = modal({
+    sinX: true,
     titulo: "Ajustes",
     html: `
       <div class="ajustes">

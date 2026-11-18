@@ -55,8 +55,8 @@ export function avisarNueva(versionServidor) {
 
   modal({
     titulo: "",
-    texto: "Hay una nueva versión de la app",
-    clase: "modal-version",
+    html: `<p class="version-aviso">Hay una nueva versión de la app</p>`,
+    clase: "modal-nueva-version",
     obligatorio: true,
     botones: [{ texto: "Actualizar ahora", estilo: "boton", valor: "actualizar" }],
   }).then((r) => {

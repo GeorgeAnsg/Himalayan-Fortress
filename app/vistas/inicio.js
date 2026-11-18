@@ -1,31 +1,43 @@
-/* El inicio: lo que hay después de entrar y no estar en ninguna mesa.
-
-   Sirve para una cosa: abrir madriguera o meterse en una con un código. Si el
-   servidor tiene un solo juego, no se pregunta cuál. */
-
 import { h, esc, avatarSVG, aviso } from "../ui.js";
 
-export function pintar(raiz, { usuario, sala = null, juegos = [], alCrear, alUnirse, alVolver, alSalir }) {
-  /* Crear y entrar viven en la misma zona: el código no cambia de juego, así
-     que se escribe una vez y la mesa decide con qué se juega. */
-  const entrarHTML = `
-    <div class="unirse">
-      <input id="codigo" type="text" inputmode="text" maxlength="5" placeholder="CÓDIGO"
-             aria-label="Código de la madriguera" autocomplete="off" spellcheck="false" />
-      <button class="boton secundario" id="unirse" type="button" style="width:auto;padding:0 18px">Entrar</button>
-    </div>`;
+export function pintar(raiz, { usuario, sala = null, juegos = [], juegoInicial = null, alCrear, alUnirse, alVolver, alSalir }) {
+  let juegoActivo = null;
+  let nodo;
 
-  const nodo = h(`
-    <section>
-      <div class="saludo" style="display:flex;align-items:center;gap:14px">
-        <span class="avatar" style="width:52px;height:52px">${avatarSVG(usuario.avatar)}</span>
+  function mostrarSeleccion() {
+    juegoActivo = null;
+    renderizar();
+  }
+
+  function mostrarJuego(j) {
+    juegoActivo = j;
+    renderizar();
+  }
+
+  function renderizar() {
+    const nuevo = juegoActivo ? vistaJuego(juegoActivo) : vistaSeleccion();
+    if (nodo) nodo.replaceWith(nuevo);
+    else raiz.append(nuevo);
+    nodo = nuevo;
+  }
+
+  function vistaSeleccion() {
+    const el = document.createElement("section");
+    el.className = "inicio-seleccion";
+
+    /* Cabecera */
+    const cab = h(`
+      <div class="saludo" style="display:flex;align-items:center;gap:14px;padding:14px 0 10px">
+        <span class="avatar" style="width:46px;height:46px">${avatarSVG(usuario.avatar)}</span>
         <div>
-          <p class="subtitulo" style="margin-bottom:2px">Dentro</p>
+          <p class="subtitulo" style="margin-bottom:2px">Hall de juegos</p>
           <h1 class="titulo" style="margin:0">Hola, ${esc(usuario.nombre)}</h1>
         </div>
-      </div>
+      </div>`);
+    el.append(cab);
 
-      ${sala ? `
+    if (sala) {
+      const btn = h(`
         <button class="tarjeta-volver" id="volver" type="button">
           <span class="avatar" style="width:38px;height:38px">${avatarSVG(usuario.avatar)}</span>
           <span class="crece">
@@ -33,67 +45,107 @@ export function pintar(raiz, { usuario, sala = null, juegos = [], alCrear, alUni
             <span>${sala.fase === "jugando" ? "Partida en curso" : sala.fase === "final" ? "Resultados" : "Vestíbulo"} · código ${esc(sala.codigo)}</span>
           </span>
           <span aria-hidden="true">→</span>
-        </button>
-      ` : ""}
+        </button>`);
+      btn.addEventListener("click", () => alVolver());
+      el.append(btn);
+    }
 
-      <section class="seccion" style="margin-top:22px">
-        <p class="subtitulo">Juegos</p>
-        <div class="acciones-inicio">
-          ${juegos.length
-            ? juegos.map((j) => `
-                <article class="juego-slot">
-                  <div class="juego-slot-cab">
-                    <div class="juego-slot-info">
-                      <strong class="juego-slot-nombre">${esc(j.nombre)}</strong>
-                      <small>${esc(j.resumen ?? "")}</small>
-                    </div>
-                    <button class="boton chico" data-juego="${esc(j.id)}" type="button">Crear partida</button>
-                  </div>
-                  ${juegos.length === 1 ? entrarHTML : ""}
-                </article>`).join("")
-            : `<div class="vacio">No hay juegos instalados.</div>`}
-          ${juegos.length > 1 ? entrarHTML : ""}
-        </div>
-      </section>
+    const lbl = document.createElement("p");
+    lbl.className = "subtitulo";
+    lbl.style.marginTop = "20px";
+    lbl.textContent = "Juegos";
+    el.append(lbl);
 
-      <section class="seccion" style="margin-top:26px">
-        <p class="subtitulo">Tu cuenta</p>
-        <div class="panel" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
-          <span class="avatar" style="width:34px;height:34px">${avatarSVG(usuario.avatar)}</span>
-          <div class="crece">
-            <strong style="font-size:14.5px">${esc(usuario.nombre)}</strong>
-            <div class="apagado" style="font-size:12.5px">Sesión guardada en este dispositivo</div>
-          </div>
-          <button class="boton fantasma chico" id="salir" type="button">Salir</button>
-        </div>
-      </section>
-    </section>
-  `);
+    if (!juegos.length) {
+      el.append(h(`<div class="vacio">No hay juegos instalados.</div>`));
+      return el;
+    }
 
-  nodo.querySelector("#volver")?.addEventListener("click", () => alVolver());
+    const grid = document.createElement("div");
+    grid.className = "juegos-grid";
 
-  for (const b of nodo.querySelectorAll("[data-juego]")) {
-    b.addEventListener("click", () => alCrear(b.dataset.juego));
+    for (const j of juegos) {
+      const card = document.createElement("article");
+      card.className = "juego-card";
+      if (j.id) card.style.backgroundImage = `url('/app/juegos/${encodeURIComponent(j.id)}/img/portada.webp')`;
+
+      const btn = document.createElement("button");
+      btn.className = "boton juego-card-btn";
+      btn.type = "button";
+      btn.textContent = "Jugar";
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); mostrarJuego(j); });
+
+      card.append(btn);
+      card.addEventListener("click", () => mostrarJuego(j));
+      grid.append(card);
+    }
+
+    el.append(grid);
+    return el;
   }
 
-  const caja = nodo.querySelector("#codigo");
-  const entrar = async () => {
-    const codigo = caja.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5);
-    if (codigo.length !== 5) return aviso("El código tiene cinco letras.", { error: true });
-    caja.disabled = true;
-    const r = await alUnirse(codigo);
-    caja.disabled = false;
-    if (r?.error) {
-      aviso(r.error, { error: true });
-      caja.select();
-    }
-  };
-  nodo.querySelector("#unirse").addEventListener("click", entrar);
-  caja.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); entrar(); }
-  });
-  nodo.querySelector("#salir").addEventListener("click", () => alSalir());
+  function vistaJuego(j) {
+    const el = document.createElement("div");
+    el.className = "inicio-juego";
+    if (j.id) el.style.backgroundImage = `url('/app/juegos/${encodeURIComponent(j.id)}/img/portada.webp')`;
 
-  raiz.append(nodo);
+    const back = document.createElement("button");
+    back.className = "inicio-juego-volver";
+    back.type = "button";
+    back.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    back.addEventListener("click", mostrarSeleccion);
+
+    const pie = document.createElement("div");
+    pie.className = "inicio-juego-pie";
+
+    const btnCrear = document.createElement("button");
+    btnCrear.className = "boton";
+    btnCrear.type = "button";
+    btnCrear.textContent = "Crear partida";
+    btnCrear.addEventListener("click", () => alCrear(j.id));
+
+    const unirse = document.createElement("div");
+    unirse.className = "unirse";
+    const caja = document.createElement("input");
+    caja.id = "codigo";
+    caja.type = "text";
+    caja.inputMode = "text";
+    caja.maxLength = 5;
+    caja.placeholder = "CÓDIGO";
+    caja.setAttribute("aria-label", "Código de la madriguera");
+    caja.autocomplete = "off";
+    caja.spellcheck = false;
+
+    const btnEntrar = document.createElement("button");
+    btnEntrar.className = "boton secundario";
+    btnEntrar.type = "button";
+    btnEntrar.style.cssText = "width:auto;padding:0 18px";
+    btnEntrar.textContent = "Entrar";
+
+    const entrar = async () => {
+      const codigo = caja.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5);
+      if (codigo.length !== 5) return aviso("El código tiene cinco letras.", { error: true });
+      caja.disabled = true;
+      btnEntrar.disabled = true;
+      const r = await alUnirse(codigo);
+      caja.disabled = false;
+      btnEntrar.disabled = false;
+      if (r?.error) { aviso(r.error, { error: true }); caja.select(); }
+    };
+    btnEntrar.addEventListener("click", entrar);
+    caja.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); entrar(); } });
+
+    unirse.append(caja, btnEntrar);
+    pie.append(btnCrear, unirse);
+
+    el.append(back, pie);
+    return el;
+  }
+
+  if (juegoInicial) {
+    const j = juegos.find(x => x.id === juegoInicial);
+    if (j) juegoActivo = j;
+  }
+  renderizar();
   return nodo;
 }

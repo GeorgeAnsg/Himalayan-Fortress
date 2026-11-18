@@ -235,7 +235,6 @@ Desde lanzadera (hay dos, una por jaula):
 | (I) Convierte un monstruo atacante nivel ≤5 en monstruo tuyo (gíralo)          | 2     |
 | (I) Baja un rango a un monstruo atacante en tus senderos                         | 2     |
 | (I) Evoluciona una torre al siguiente nivel                                      | 2     |
-| (I) Vuelo seguro: envía un monstruo nivel ≤3 a la entrada de un sendero rival   | 2     |
 | (I) Construye una torre nivel 2 sin necesitar Armería 3                          | 3     |
 | (I) Crea un monstruo nivel 3 en una jaula sin necesitar Laboratorio 3          | 3     |
 | (I) Sube un nivel la armería al instante (tope 3)                               | 3     |
@@ -256,7 +255,6 @@ Notas de ciencia:
 - Subir rango pide elegir monstruo: valen los tuyos que defienden tus caminos y los que lanzaste a un rival (el atacante guarda quién lo mandó), nunca por encima de nivel 5. Sin objetivo no se gasta la carta.
 - Todas las ciencias que eligen objetivo (avanzar al rival, convertir, bajar rango, evolucionar torre, vuelo seguro, torre de nivel 2, monstruo nivel 3) muestran una opción por objetivo legal y no se cobran si no la reciben.
 - Avanzar al rival: solo monstruos nivel ≤3 que lanzaste tú. Si están en la casilla 4 del rival entran al búnker y suman sus puntos como un atacante normal.
-- Vuelo seguro: saca el monstruo de la jaula (nivel ≤3) y lo deja en la entrada de un camino rival; no se ofrecen caminos con la entrada ocupada.
 - Bajar rango / convertir: solo atacantes que estén en tus senderos (el que te ataca), nivel ≤5. Bajar salta la escalera 3→2→1, nunca pasa por un nivel inexistente.
 - Torre de nivel 2: sirve para una posición vacía o para subir una torre de nivel 1; nunca baja ni repite una torre que ya es 2 o más.
 - Las inmediatas de subida de nivel no buscan nada en el mazo ni barajan: el nivel sube en el acto y la carta va al descarte. No se pueden jugar si el edificio ya está al tope.

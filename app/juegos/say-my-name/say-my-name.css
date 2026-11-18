@@ -1,0 +1,1818 @@
+/* Móvil primero. Los colores y la tipografía viven aquí y en ningún otro sitio. */
+:root {
+  --fondo: #12100d;
+  /* Los paneles del vestíbulo (filas, avisos, fichas) se escribieron con estas
+     dos variables y nunca existieron: se quedaban transparentes y los textos
+     competían con el castillo de fondo. Negro con un poco de opacidad. */
+  --fondo2: rgba(10, 9, 7, 0.82);
+  --fondo3: #1a1612;
+  --panel: #1b1814;
+  --panel2: #221e19;
+  --linea: #342d24;
+  --linea2: #4a4033;
+  --tinta: #efe6d5;
+  --tenue: #a4977f;
+  --oro: #c9a227;
+  --verde: #7fa07c;
+  --rojo: #c26a52;
+  --radio: 14px;
+  --barra: 62px;
+  --safe: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+/* En el acta no hay barra de pestañas: su hueco solo servía para que la
+   pantalla no cupiera entera. */
+body.terminada { padding-bottom: 0; }
+/* Fuera de la partida no hay barra de pestañas que dejar libre, y su hueco
+   hacía que la pantalla del nombre midiera más que el móvil. */
+body.sin-partida { padding-bottom: 0; }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+
+html {
+  height: 100%;
+}
+
+html, body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--fondo);
+  color: var(--tinta);
+  font: 16px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior-y: none;
+}
+
+body {
+  max-width: 520px;
+  margin: 0 auto;
+  padding-bottom: calc(var(--barra) + var(--safe));
+  background:
+    radial-gradient(120% 60% at 50% 0%, #1d1914 0%, var(--fondo) 60%);
+  touch-action: manipulation;
+}
+
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+
+/* ---------------- barra de arriba ---------------- */
+/* Aquí vivía `.barra`, la cabecera de la app original. Al portar el juego a
+   madrigueras, la plataforma ya tiene su propia barra con esa misma clase
+   (el header con el avatar y los ajustes): esta regla la convertía en sticky
+   y le cambiaba padding y altura, así que el header de toda la app se caía de
+   su sitio dentro de Say My Name. Ningún markup del juego usa `.barra`:
+   fuera. El día de la partida y las acciones se pintan con `.jornada-barra`
+   y `.barra-acciones`. */
+.jornada-barra {
+  width: 100%; height: 4px;
+  display: flex; gap: 2px;
+}
+.jornada-seg {
+  flex: 1; height: 100%; border-radius: 2px;
+  background: var(--linea2);
+}
+.jornada-seg.hecho { background: var(--oro); }
+.jornada-seg.mio { background: var(--tinta); }
+.mapa-acciones-btn.espera {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 10px; padding: 10px 16px 0; overflow: hidden;
+}
+.espera-barra {
+  width: calc(100% + 32px); margin: 0 -16px;
+  border-radius: 0; gap: 1px;
+}
+/* La campana de los avisos, en el mismo idioma que la etiqueta «Acciones»:
+   apagada es una palabra tenue; encendida, dorada. */
+.barra-avisos {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tenue); border: 1px solid var(--linea);
+  border-radius: 999px; padding: 3px 8px; cursor: pointer;
+}
+.barra-avisos.on { color: var(--oro); border-color: color-mix(in srgb, var(--oro) 55%, transparent); }
+.fichas { display: flex; gap: 4px; margin-left: auto; }
+.fichas i {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1px solid var(--linea2); background: transparent;
+}
+.fichas i.on { background: var(--oro); border-color: var(--oro); }
+.mano {
+  display: flex; align-items: center; gap: 6px;
+  max-width: 44%;
+  padding: 6px 9px;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 12.5px;
+  color: var(--tenue);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mano b { color: var(--tinta); font-weight: 500; }
+.mano.vacia { opacity: 0.55; }
+.ritmo {
+  width: 34px; height: 34px; flex: 0 0 auto;
+  border: 1px solid var(--linea);
+  border-radius: 50%;
+  color: var(--tenue);
+  font-size: 15px;
+  display: grid; place-items: center;
+}
+.ritmo:active { background: var(--panel2); }
+.avatar-yo {
+  width: 34px; height: 34px; flex: 0 0 auto;
+  border-radius: 50%; overflow: hidden;
+  border: 2px solid var(--oro);
+  padding: 0; background: var(--panel2);
+}
+.avatar-yo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+
+/* ---------------- pantalla ---------------- */
+.pantalla { padding: 14px 14px 24px; min-height: 70vh; }
+.titulo { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tenue); margin: 22px 2px 8px; }
+.titulo:first-child { margin-top: 4px; }
+.tarjeta {
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 14px;
+  position: relative;
+}
+.tarjeta + .tarjeta { margin-top: 10px; }
+.vacio { color: var(--tenue); font-size: 14px; }
+.inv-cuerpo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+.sala-modal-acciones { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 16px; width: 100%; }
+.inv-bloque { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* Las flechas van debajo de las dos casillas: entre ellas robaban ancho y el
+   modal entero se encogía. */
+.inv-cambio {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.inv-cambiar {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 14px; cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid var(--oro);
+  background: rgba(201, 162, 39, 0.12); color: var(--oro);
+}
+.inv-cambiar:active { background: rgba(201, 162, 39, 0.24); }
+.inv-cambiar-icono { font-size: 16px; line-height: 1; }
+.inv-cambiar-coste { font-size: 10px; font-weight: 700; opacity: 0.9; }
+.inv-cambio-lbl { font-size: 11px; color: var(--tenue); }
+.inv-nota-cambio { color: var(--oro); opacity: 0.85; }
+.inv-etiq {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--tinta); padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--linea); background: var(--panel2);
+}
+.inv-objeto-img {
+  width: 85%; aspect-ratio: 1; border-radius: 14px;
+  border: 1px solid var(--linea); background: var(--panel2);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+/* La misma marca que el «usado» del pergamino, en cualquier sitio donde se
+   enseñe el objeto: el que ya te habló no vuelve a hablar. */
+.inv-objeto-img, .registro-hueco-img, .centro-obj-img { position: relative; }
+.marca-usado {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 11px; font-weight: 700; color: var(--oro);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  pointer-events: none;
+}
+/* Cuántas jornadas aguanta lo que llevas encima antes de caerse solo. */
+.marca-acarreo {
+  position: absolute; top: 6px; left: 6px;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--tenue); background: rgba(0, 0, 0, 0.62);
+  border: 1px solid var(--linea); border-radius: 4px; padding: 1px 5px;
+  text-transform: uppercase; pointer-events: none;
+}
+.inv-objeto-img img { width: 100%; height: 100%; object-fit: cover; }
+/* Lo que es tuyo, con el mismo oro que el «yo» de tu ficha. */
+.inv-bloque.tuyo .inv-objeto-img {
+  border-color: var(--oro);
+  box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.45), 0 0 14px rgba(201, 162, 39, 0.16);
+}
+/* La ficha que sale al coger un objeto propio: el mismo oro que su marca. */
+.aviso-propio-img {
+  width: 96px; height: 96px; margin: 2px auto 6px;
+  border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--oro);
+  box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.45), 0 0 14px rgba(201, 162, 39, 0.16);
+  background: var(--panel2);
+  display: flex; align-items: center; justify-content: center;
+}
+.aviso-propio-img img { width: 100%; height: 100%; object-fit: cover; }
+.inv-etiq-fila { display: flex; align-items: center; gap: 6px; }
+.inv-etiq-tuyo { border-color: var(--oro); color: var(--oro); background: rgba(201, 162, 39, 0.12); }
+.inv-propio {
+  margin: 0; font-size: 11px; line-height: 1.35; text-align: center;
+  color: var(--oro); opacity: 0.85;
+}
+.inv-nombre { font-size: 13px; font-weight: 600; text-align: center; line-height: 1.3; }
+.inv-vacio { font-size: 12px; color: var(--tenue); text-align: center; }
+.inv-salas-bloque { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.inv-salas-lbl { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tenue); }
+.inv-salas { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.inv-acciones { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-top: 2px; }
+.inv-usar, .inv-esconder, .inv-soltar { width: 100%; }
+/* Tirar una habilidad sale gratis: el hueco se ve vacío al amanecer. */
+.inv-tirar { font-style: italic; }
+/* Soltar deja el hueco libre sin dar pista de dónde queda: va con la misma
+   tinta apagada que el resto de gestos que no dejan rastro en la sala. */
+.inv-soltar { border-color: var(--linea2); color: var(--tenue); }
+.mapa-acciones-btn.espera {
+  opacity: 0.55;
+  font-style: italic;
+  cursor: default;
+}
+.inv-nota {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--tenue);
+  text-align: center;
+}
+
+/* ---------------- resultado de usar un objeto ---------------- */
+.uso-cuerpo { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 4px; }
+.uso-titular { margin: 0; font-size: 15px; font-weight: 600; }
+.uso-titular.bien { color: var(--oro); }
+.uso-titular.mal { color: var(--tenue); }
+.uso-linea { margin: 0; font-size: 13px; }
+.uso-pie { margin: 2px 0 10px; font-size: 12px; color: var(--tenue); }
+.inv-sala-tag {
+  font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--linea); background: var(--panel2); color: var(--tenue);
+}
+.inv-sala-tag.intentado { text-decoration: line-through; opacity: 0.45; }
+
+.registro-btn-mio { border-color: #c9a227 !important; color: #c9a227 !important; }
+
+/* ---------------- plano ---------------- */
+.mapa {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 12px;
+  border-radius: var(--radio);
+  border: 1px solid var(--linea);
+  background: #0e0d0a;
+  overflow: hidden;
+}
+.mapa > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mapa svg.mapa-iso { pointer-events: all; }
+.pie-mapa { margin: -4px 2px 12px; font-size: 12px; line-height: 1.35; }
+@keyframes nav-pulso {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+.nav-dot-pulse { animation: nav-pulso 2s ease-in-out infinite; }
+.mapa-objeto-flotante {
+  position: absolute; bottom: 10px; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer;
+}
+/* La pastilla de «tuyo», calcada del «yo» del retrato: oro lleno, texto
+   oscuro, dentro de la imagen y abajo a la derecha. */
+.mapa-objeto-tuyo {
+  position: absolute; bottom: 4px; right: 4px;
+  background: var(--oro); color: #1a1409;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 6px; border-radius: 4px;
+}
+.mapa-objeto-flotante-icono.tuyo {
+  border-color: var(--oro);
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.28);
+}
+.mapa-objeto-label {
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--tinta);
+  padding: 2px 6px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--linea);
+  width: 72px; box-sizing: border-box; text-align: center;
+}
+.mapa-objeto-flotante-icono {
+  position: relative;
+  width: 72px; height: 72px; border-radius: 14px;
+  border: 1px solid var(--linea); background: rgba(0,0,0,0.6);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.mapa-objeto-flotante-icono img { width: 100%; height: 100%; object-fit: cover; }
+.mapa-objeto-der { right: 10px; }
+.mapa-objeto-izq { left: 10px; }
+.mapa-inventario-group {
+  position: absolute; bottom: 10px; left: 10px; z-index: 2;
+  display: flex; flex-direction: row; align-items: flex-end; gap: 5px;
+}
+.mapa-ayuda-btn {
+  position: absolute; top: 10px; left: 10px; z-index: 2;
+  font-size: 12px; font-weight: 600; padding: 5px 9px; border-radius: 999px;
+  border: 1px solid var(--linea); background: var(--panel2); color: var(--tenue);
+  cursor: pointer; line-height: 1;
+}
+.mapa-inventario-group .mapa-objeto-flotante { position: static; }
+.mapa-acciones-icono { cursor: pointer; }
+.mapa-acciones-n { font-size: 28px; font-weight: 700; color: var(--oro); }
+.mapa-acciones-barra { padding: 0 0 12px; }
+.mapa-acciones-btn { font-size: 13px; padding: 10px 16px; width: 100%; border-radius: 8px; border: 1px solid var(--oro); background: rgba(201,162,39,0.12); color: var(--tinta); font-weight: 500; cursor: pointer; letter-spacing: 0.01em; }
+.mapa-acciones-btn:active { filter: brightness(1.15); }
+.mapa-accion-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--oro); opacity: 0.85; }
+.mapa-accion-dot.gastado { background: #222; opacity: 1; }
+.barra-acciones { display: flex; gap: 5px; align-items: center; margin-left: auto; }
+.barra-acciones-lbl { font-size: 10px; color: var(--tenue); margin-right: 2px; text-transform: uppercase; letter-spacing: 0.08em; }
+.barra-capa-chip { font-size: 11px; color: #a0c8ff; margin-left: 4px; }
+.mapa-acciones-pa { font-size: 11px; opacity: 0.6; font-weight: 400; }
+.mapa-acciones-vacio { font-size: 13px; color: var(--tenue); text-align: center; width: 100%; padding: 10px 0; }
+
+.sala {
+  position: absolute;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: #191510;
+  text-align: left;
+  overflow: hidden;
+}
+.sala .nom { font-size: 12px; line-height: 1.15; font-weight: 500; }
+.sala .meta { font-size: 10px; color: var(--tenue); line-height: 1.2; }
+.sala.actual { border-color: var(--oro); background: #241f16; box-shadow: 0 0 0 1px rgba(201, 162, 39, 0.25) inset; }
+.sala.vecina { border-color: var(--linea2); background: #1e1a14; }
+.sala.vecina:active { background: #2a2419; }
+.sala.lejos { opacity: 0.5; }
+.sala.fuera { opacity: 0.28; border-style: dashed; }
+
+/* ---------------- sala ---------------- */
+.sala-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sala-cab h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: var(--panel2);
+}
+.sala-cab .huecos-n { margin-left: auto; font-size: 12px; color: var(--tenue); }
+.gente { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.gente-cuenta {
+  margin: 2px 0 12px;
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--tenue);
+}
+.gente-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.persona-card {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.persona-retrato {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--linea);
+}
+/* Solo el retrato de la ficha: el objeto que va encima también es un `img`
+   dentro de `.persona-retrato`, y heredaba el desplazamiento de 10 px, así
+   que salía bajo y cortado. */
+.persona-retrato > img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: 50% 10px;
+}
+.persona-nombre-tag {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: var(--panel2);
+  color: var(--texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.persona-objeto-circulo {
+  position: absolute;
+  bottom: 5px; right: 5px;
+  width: 36px; height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--linea);
+  background: rgba(0,0,0,0.75);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.persona-objeto-circulo.mio { border-color: #c9a227; }
+/* La marca de «tuyo» sobre el objeto, como el «yo» del retrato: sin ella,
+   que el menú no deje usarlo parece un fallo y no una regla. */
+.persona-objeto-tuyo {
+  position: absolute; bottom: 45px; right: 4px; z-index: 1;
+  background: var(--oro); color: #1a1409;
+  font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 5px; border-radius: 4px;
+}
+.persona-objeto-circulo img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+.persona-card { cursor: pointer; }
+.persona-card-vacia { cursor: default; pointer-events: none; }
+.persona-retrato-yo-tag {
+  position: absolute; bottom: 5px; left: 5px;
+  background: var(--oro); color: #1a1409;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 6px; border-radius: 4px;
+}
+.persona-cepo-badge {
+  position: absolute; top: 5px; right: 5px;
+  width: 22px; height: 22px;
+  background: #1a1409;
+  border: 1px solid #f5c518; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.persona-cepo-badge img { width: 100%; height: 100%; object-fit: cover; }
+.persona-nombre-tag-vacia { visibility: hidden; min-height: 22px; }
+.persona-retrato-vacia { background: #0d0b08; border: 1px solid var(--linea); }
+.persona-modal { display: flex; flex-direction: column; gap: 12px; }
+.persona-modal-cab { display: flex; align-items: center; gap: 8px; }
+.persona-modal-titulo { flex: 1; font-size: 13px; padding: 5px 12px; }
+.persona-modal-cerrar {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--linea); background: var(--panel2);
+  color: var(--tenue); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.persona-modal-cols {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.persona-modal-fila-media {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.persona-modal-retrato {
+  width: 33%; flex-shrink: 0; aspect-ratio: 3/4;
+  border-radius: 10px; overflow: hidden; background: #000;
+  border: 1px solid var(--linea);
+}
+.persona-modal-lateral {
+  flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.persona-modal-mios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.persona-modal-mio {
+  aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--linea); background: var(--panel2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--tenue);
+}
+.persona-modal-mio img { width: 100%; height: 100%; object-fit: cover; }
+.persona-modal-mio.vacio { border-style: dashed; opacity: 0.45; }
+.persona-modal-definitivos { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.persona-modal-definitivos .persona-modal-seccion-lbl { grid-column: 1 / -1; }
+.persona-modal-definitivo-fila { display: flex; }
+.persona-modal-retrato img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10px; }
+.persona-modal-derecha {
+  flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+}
+.persona-modal-seccion-lbl {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--tenue);
+}
+.persona-modal-desc { font-size: 12px; color: var(--tenue); margin: 1px 0 6px; }
+.persona-modal-objeto {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--linea); background: var(--panel2);
+}
+.persona-modal-objeto.mio { border-color: #c9a227; background: rgba(201,162,39,0.12); }
+.persona-modal-objeto-vacio { opacity: 0.4; }
+.persona-modal-objeto-img {
+  width: 36px; height: 36px; border-radius: 6px;
+  border: 1px solid var(--linea); background: rgba(0,0,0,0.5);
+  overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.persona-modal-objeto.mio .persona-modal-objeto-img { border-color: #c9a227; }
+.persona-modal-objeto-img img { width: 100%; height: 100%; object-fit: cover; }
+.persona-modal-objeto-nombre { font-size: 12px; font-weight: 500; }
+.persona-modal-objeto.mio .persona-modal-objeto-nombre { color: #c9a227; }
+.persona-modal-objeto-tuyo {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--oro); border: 1px solid var(--oro); background: rgba(201, 162, 39, 0.14);
+  padding: 1px 6px; border-radius: 999px;
+}
+.persona-modal-sep { height: 1px; background: var(--linea); }
+.persona-modal-pistas-bloque { display: flex; flex-direction: column; gap: 6px; }
+.persona-modal-pistas-cab { display: flex; align-items: baseline; gap: 3px; }
+.persona-modal-pistas-n { font-size: 16px; font-weight: 700; color: var(--oro); }
+.persona-modal-pistas-lbl { font-size: 11px; color: var(--tenue); }
+.persona-modal-pista-fila {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 5px 8px; border-radius: 6px; background: var(--panel2);
+  border: 1px solid var(--linea); font-size: 11px;
+}
+.persona-modal-pista-nombre { font-weight: 600; color: var(--texto); }
+.persona-modal-pista-sep { color: var(--tenue); }
+.persona-modal-pista-rasgo { color: var(--texto); }
+.persona-modal-pista-dia { margin-left: auto; color: var(--tenue); font-size: 10px; }
+.persona-modal-acciones { display: flex; flex-direction: column; gap: 6px; }
+.persona-modal-sin-acciones { font-size: 12px; color: var(--tenue); text-align: center; margin: 4px 0; }
+.persona-modal-accion {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  text-align: left; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--linea); background: var(--panel2);
+  font-size: 12px; cursor: pointer; color: var(--texto);
+}
+.persona-modal-accion:active { background: var(--panel3, #2a2419); }
+.persona-modal-accion-txt { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.persona-modal-accion-txt .detalle { font-size: 10px; color: var(--tenue); font-weight: 400; }
+.persona-accion-icono {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 6px;
+  border: 1px solid var(--linea); background: rgba(0,0,0,0.4);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.persona-accion-icono img { width: 100%; height: 100%; object-fit: cover; }
+.persona {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: var(--panel2);
+  font-size: 13px;
+}
+.persona .lleva { color: var(--tenue); font-size: 12px; }
+.huecos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.hueco {
+  width: 46px; height: 46px;
+  border-radius: 10px;
+  border: 1px solid var(--linea2);
+  background: #211c16;
+  color: var(--tenue);
+  font-size: 13px;
+  display: grid; place-items: center;
+}
+.hueco.sel { border-color: var(--oro); color: var(--tinta); background: #2b2416; }
+.centro-lista { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+.centro-lista li { margin: 2px 0; }
+.visitas { margin-top: 10px; font-size: 13px; color: var(--tenue); }
+
+/* ---------------- lo que ha pasado mientras esperabas ---------------- */
+.espera {
+  margin: 10px 0 12px;
+  padding: 10px 12px 11px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.espera-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.espera-titulo {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--tenue);
+}
+.espera-cerrar { background: none; border: none; color: var(--tenue); font-size: 14px; cursor: pointer; padding: 0 0 0 8px; line-height: 1; }
+.espera-mas { font-size: 11.5px; color: var(--tenue); margin: 0 0 4px; }
+/* La barra del historial no es la del sistema: fina, con carril negro
+   redondeado y la pastilla en oro apagado, para que parezca parte del panel.
+   `scrollbar-width`/`scrollbar-color` es lo que ven Firefox y Safari nuevos;
+   los `::-webkit-*` son los que pintan el redondeo en Chrome, Safari y el
+   navegador del móvil. */
+.espera-lista {
+  max-height: 148px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+}
+/* Firefox: no admite el redondeo, pero sí el color. Va en su propia consulta
+   porque en Chrome estas dos propiedades tienen prioridad y anularían los
+   `::-webkit-*` de abajo, que son los que dan la pastilla redondeada. */
+@supports (-moz-appearance: none) {
+  .espera-lista { scrollbar-width: thin; scrollbar-color: #6b5a2c #0b0907; }
+}
+.espera-lista::-webkit-scrollbar { width: 6px; }
+.espera-lista::-webkit-scrollbar-track {
+  background: #0b0907;
+  border-radius: 999px;
+  margin: 1px 0;
+}
+.espera-lista::-webkit-scrollbar-thumb {
+  background: #6b5a2c;
+  border-radius: 999px;
+  border: 1px solid #0b0907;
+}
+.espera-lista::-webkit-scrollbar-thumb:hover { background: var(--oro); }
+.espera-lista::-webkit-scrollbar-thumb:active { background: var(--oro); }
+.espera-lista::-webkit-scrollbar-corner { background: transparent; }
+
+.boton {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 12px;
+  border-radius: 12px;
+  background: var(--oro);
+  color: #17130b;
+  font-weight: 600;
+  font-size: 16px;
+}
+.boton:active { filter: brightness(0.94); }
+.boton.secundario { background: transparent; border: 1px solid var(--linea2); color: var(--tinta); font-weight: 500; }
+.boton:disabled { opacity: 0.4; }
+
+/* ---------------- pestañas ---------------- */
+.pestanas {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 4px 8px calc(4px + var(--safe));
+  background: color-mix(in srgb, var(--fondo) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--linea);
+}
+.pestanas button {
+  height: 36px;
+  border: none;
+  border-top: 2px solid transparent;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tenue);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  margin-top: -4px;
+}
+.pestanas button.on { color: var(--tinta); border-top-color: var(--oro); }
+.pestanas .punto {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--oro); margin-left: 5px; vertical-align: 2px;
+}
+
+/* ---------------- hoja ---------------- */
+.hoja { position: fixed; inset: 0; z-index: 40; }
+.hoja[hidden] { display: none; }
+.hoja .velo { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.hoja .panel {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  max-width: 520px;
+  margin: 0 auto;
+  max-height: 86dvh;
+  display: flex; flex-direction: column;
+  padding: 10px 14px calc(16px + var(--safe));
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 18px 18px 0 0;
+  transform: translateY(8%);
+  opacity: 0.6;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.hoja.abierta .panel { transform: none; opacity: 1; }
+.hoja .asa { width: 38px; height: 4px; border-radius: 2px; background: var(--linea2); margin: 2px auto 10px; }
+.hoja h2 { margin: 0 0 4px; font-size: 19px; }
+.hoja .sub { margin: 0 0 10px; color: var(--tenue); font-size: 13px; }
+.hoja .cuerpo { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.hoja .grupo { margin-top: 14px; }
+.hoja .grupo > .k { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tenue); margin: 0 2px 6px; }
+.huecos-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.hueco-btn { min-width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--linea2); background: var(--panel2); color: var(--tinta); font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+.hueco-btn.on { background: var(--oro); border-color: var(--oro); color: #000; }
+
+/* ---------------- lo que hay en los dos huecos ---------------- */
+.registro { margin-top: 16px; }
+.registro-huecos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.registro-hueco {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 10px 9px 11px;
+  border: 1px solid var(--linea); border-radius: 12px;
+  background: var(--panel2);
+}
+.registro-hueco.vacio { opacity: 0.5; }
+.registro-hueco-tit {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--tenue);
+}
+.registro-hueco-img {
+  width: 100%; aspect-ratio: 1; border-radius: 10px;
+  border: 1px solid var(--linea); background: rgba(0, 0, 0, 0.45);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.registro-hueco-img.vacio { border-style: dashed; }
+.registro-hueco-img img { width: 100%; height: 100%; object-fit: cover; }
+.registro-hueco-nombre { font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.25; }
+.registro-hueco.vacio .registro-hueco-nombre { font-weight: 400; color: var(--tenue); }
+.registro-usos { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.registro-lbl { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tenue); }
+.registro-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.registro-botones { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-top: auto; }
+.registro-botones .mini { width: 100%; }
+.registro-sin { font-size: 11px; color: var(--tenue); text-align: center; }
+.registro-nota {
+  margin: 10px 0 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--tenue);
+  text-align: center;
+}
+.registro-aviso {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--linea);
+  border-left: 3px solid var(--oro);
+  border-radius: 8px;
+  background: var(--panel2);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tinta);
+}
+.opcion {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  text-align: left;
+  border: 1px solid var(--linea);
+  border-radius: 11px;
+  background: var(--panel2);
+  font-size: 14.5px;
+}
+.opcion:active { border-color: var(--oro); }
+.opcion .coste { margin-left: auto; font-size: 12px; color: var(--tenue); flex: 0 0 auto; }
+.opcion .detalle { display: block; font-size: 12px; color: var(--tenue); margin-top: 2px; }
+.op-fila { display: flex; gap: 6px; margin-left: auto; }
+.mini {
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--linea2);
+  background: #2a2419;
+  font-size: 12.5px;
+}
+.mini:active { border-color: var(--oro); }
+/* «Cambiar» se apaga mientras la mesa te tiene por listo. */
+.mini:disabled { opacity: 0.45; }
+select, textarea, input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--linea2);
+  background: #171310;
+  color: var(--tinta);
+  font: inherit;
+}
+/* La flecha del desplegable es nuestra, no la del sistema: la nativa se pega
+   al borde derecho y no hay padding que la separe. Con `appearance: none`
+   queda a 10 px del filo y el texto deja su hueco a la derecha. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23a4977f' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+textarea { min-height: 110px; resize: vertical; }
+label.campo { display: block; margin: 10px 0 0; font-size: 12px; color: var(--tenue); }
+label.campo select, label.campo textarea { margin-top: 4px; }
+
+/* ---------------- cuaderno ---------------- */
+.cuaderno-tabs {
+  display: flex; gap: 0;
+  position: fixed;
+  /* Justo encima de la barra de pestañas: la de la plataforma mide 41 px, no
+     los 54 de corvus, y antes se metía un pico debajo de ella. */
+  bottom: calc(41px + var(--safe));
+  left: 0; right: 0; z-index: 19;
+  max-width: 520px; margin: 0 auto;
+  background: color-mix(in srgb, var(--fondo) 95%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--linea);
+}
+.cuaderno-contenido { padding-bottom: calc(var(--barra) + 68px); }
+.cuaderno-tab { flex: 1; height: 48px; border: none; border-top: 2px solid transparent; background: transparent; color: var(--tenue); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; margin-top: -1px; }
+.cuaderno-tab.on { color: var(--tinta); border-top-color: var(--oro); }
+.cuaderno-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+.cuaderno-card { display: flex; flex-direction: column; gap: 0; background: #000; border: 1px solid var(--linea); border-radius: var(--radio); overflow: hidden; }
+.cuaderno-retrato { width: 100%; aspect-ratio: 3/4; background: #000; overflow: hidden; }
+.cuaderno-retrato img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10px; }
+/* Fondo negro también en el pie: el retrato y el nombre son la misma ficha. */
+.cuaderno-card-info { background: #000; padding: 4px 4px 10px; display: flex; flex-direction: column; gap: 3px; }
+.cuaderno-nombres { display: flex; flex-wrap: wrap; gap: 8px; }
+.cuaderno-nombre-tag { font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--linea2); color: var(--tinta); }
+/* El tuyo, el único que no hay que deducir: mismo lenguaje que «tuyo» en los objetos. */
+.cuaderno-nombre-tag.tuyo { border-color: var(--oro); color: var(--oro); }
+.cuaderno-nombres-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tenue); font-style: italic; }
+.apodo { margin-bottom: 10px; }
+.apodo-cab { display: flex; align-items: baseline; gap: 8px; justify-content: center; }
+/* El nombre, como la jornada: versalitas, mismo gris y mismo aire entre letras. */
+.apodo-cab h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--tenue);
+}
+.apodo-cab .n { margin-left: auto; font-size: 12px; color: var(--tenue); }
+.rasgos { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 0; justify-content: center; }
+.rasgo {
+  font-size: 10.5px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  color: var(--tenue);
+  white-space: nowrap;
+}
+.rasgo.si { border-color: rgba(127, 160, 124, 0.5); color: var(--verde); }
+.rasgo.no { border-color: rgba(194, 106, 82, 0.45); color: var(--rojo); }
+.rasgo-icono { font-style: normal; }
+.sospecha-fila { display: flex; gap: 10px; align-items: flex-start; }
+.sospecha-retrato { flex: 0 0 68px; width: 68px; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid var(--linea); }
+.sospecha-retrato img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10px; }
+.sospecha-datos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sospecha-definitivo { display: block; margin-bottom: 2px; }
+.sospecha-definitivo select { width: 100%; }
+.rasgo.sospecha { border-style: dashed; }
+.sospecha-ficha { display: flex; flex-direction: column; gap: 8px; }
+.sospecha-cab { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.sospecha-cab-nombre { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sospecha-cab-nombre .n { font-size: 11px; color: var(--oro); }
+.sospecha-cab-nombre h3 { margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tinta); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sospecha-rasgos { display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; align-items: center; }
+.sospecha-rasgo { display: flex; align-items: center; gap: 4px; }
+.sospecha-rasgo-circ { width: 15px; height: 15px; flex-shrink: 0; padding: 0; border-radius: 50%; background: #000; border: 1px solid var(--linea); display: flex; align-items: center; justify-content: center; font-size: 8px; line-height: 1; color: var(--tenue); }
+.sospecha-rasgo-circ.si { color: var(--verde); border-color: var(--verde); }
+.sospecha-rasgo-circ.no { color: var(--rojo); border-color: var(--rojo); font-size: 11px; }
+.sospecha-rasgo-circ.vacio { border-style: dashed; }
+.sospecha-rasgo-lbl { font-size: 9.5px; color: var(--tenue); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.salir-lista { display: flex; flex-direction: column; gap: 6px; }
+.salir-fila { display: flex; align-items: center; gap: 8px; }
+.salir-nombre { font-size: 13px; color: var(--tenue); flex: 1; }
+.salir-tag { font-size: 12px; }
+.salir-vacio { font-size: 11px; color: var(--rojo); font-style: italic; }
+.sospecha-slots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: space-between; }
+.sospecha-slot.definitivo { border-color: var(--oro); }
+.sospecha-slot.descarte { position: relative; border-color: rgba(194, 106, 82, 0.45); }
+.sospecha-slot.descarte::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom left, transparent calc(50% - 0.5px), #e53 calc(50% - 0.5px), #e53 calc(50% + 0.5px), transparent calc(50% + 0.5px)), rgba(80,80,80,0.4); pointer-events: none; }
+.sospecha-slot-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sospecha-slot { width: 60px; height: 74px; border-radius: 8px; border: 1px solid var(--linea); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.15s; }
+.sospecha-slot:active { border-color: var(--linea2); }
+.sospecha-slot img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10px; }
+.sospecha-slot-plus { font-size: 22px; color: var(--tenue); line-height: 1; }
+.sospecha-slot-lbl { font-size: 9.5px; color: var(--tenue); text-align: center; width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sospecha-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 16px 0 8px; }
+.sospecha-picker-borrar { width: 100%; background: transparent; border: 1px solid var(--linea); color: var(--tenue); border-radius: 8px; padding: 6px; font-size: 13px; cursor: pointer; margin-top: 10px; }
+.sospecha-picker-item { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #000; border: 1px solid var(--linea); border-radius: 8px; padding: 0 0 4px; cursor: pointer; overflow: hidden; }
+.sospecha-picker-item img { width: 100%; aspect-ratio: 4/5; object-fit: cover; object-position: 50% 10px; }
+.sospecha-picker-item span { font-size: 10px; color: var(--tinta); text-align: center; line-height: 1.2; }
+.sospecha-picker-item.seleccionado { border-color: #c9a227; border-width: 2px; }
+.dichos { margin: 8px 0 0; padding: 0; list-style: none; }
+.dichos li { font-size: 13px; color: var(--tenue); padding: 6px 0; border-top: 1px dashed var(--linea); }
+.dichos li b { color: var(--tinta); font-weight: 500; }
+.dichos .sin { font-size: 11px; color: var(--rojo); margin-left: 4px; }
+.vistos-lista { display: flex; flex-direction: column; gap: 2px; }
+.visto-fila { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; border-top: 1px dashed var(--linea); }
+.visto-fila:first-child { border-top: none; }
+.visto-fila b { color: var(--tinta); font-weight: 500; }
+.visto-sala { color: var(--tinta); }
+.visto-dia { margin-left: auto; font-size: 11px; color: var(--tenue); }
+.visto-fila.caducado { opacity: 0.5; }
+.visto-fila.caducado .visto-sala { text-decoration: line-through; }
+.visto-fila.caducado .visto-dia { font-style: italic; }
+.visto-pie { font-size: 11px; color: var(--tenue); margin: 8px 0 0; }
+.dichos-grupo { margin-bottom: 8px; }
+.dichos-nombre-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dichos-fuentes { font-size: 11px; color: var(--tenue); }
+.dichos-indagar { background: #c9a22722 !important; border-color: #c9a227 !important; color: #c9a227 !important; margin-left: auto; }
+.dichos-cerrada { font-size: 11px; color: var(--tenue); margin-left: auto; font-style: italic; }
+.dichos-pie { font-size: 12px; color: var(--tenue); margin: 0 0 10px; line-height: 1.45; }
+.dichos-lista { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.dicho-fila {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+}
+.dicho-de { color: var(--oro); font-weight: 600; }
+.dicho-texto { color: var(--tinta); }
+.dicho-dia { color: var(--tenue); font-size: 11px; }
+.dicho-nuevo {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0e0c0a;
+  background: var(--oro);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.dicho-usado { opacity: 0.55; }
+.dicho-gastado { font-size: 10px; color: var(--tenue); font-style: italic; }
+.objetos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 4px; }
+.objeto-card { border-radius: 10px; border: 1px solid var(--linea); position: relative; cursor: pointer; overflow: hidden; display: flex; flex-direction: column; }
+.objeto-card img { width: 100%; aspect-ratio: 1; object-fit: contain; padding: 8px; background: #000; display: block; }
+.objeto-card-tag-tuyo { position: absolute; bottom: 9px; right: 9px; font-size: 8px; font-weight: 700; color: #1a1409; background: var(--oro); border-radius: 4px; padding: 2px 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.objeto-card-overlay-usado { position: absolute; inset: 0; border-radius: 10px; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; }
+.objeto-card-overlay-usado span { font-size: 10px; font-weight: 700; color: var(--oro); }
+.objeto-card-habilidad { font-size: 8px; color: var(--tinta); text-align: center; line-height: 1.2; background: #000; width: 100%; padding: 4px 4px 6px; }
+.centro-objetos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; margin-top: 12px; }
+.gente-cuenta + .centro-objetos-grid, .gente-grid + .gente-cuenta { margin-top: 14px; }
+.centro-obj-card { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: default; }
+.centro-obj-card.centro-obj-coger { cursor: pointer; }
+.centro-obj-img { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--linea); background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.centro-obj-img--cepo { border-color: #f5c518; box-shadow: 0 0 6px #f5c51866; }
+.centro-obj-img img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+.centro-obj-tag { font-size: 11px; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* La copa en la pared: un aviso corto, en el mismo gris que el resto. */
+.escucha-chip {
+  margin: 4px 0 0; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--oro); opacity: 0.9; text-align: center;
+}
+.humo-chip { color: var(--oro) !important; opacity: 1 !important; }
+.cepo-chip { color: #f5c518 !important; border-color: #f5c518 !important; opacity: 1 !important; }
+
+/* Overlay de humo: cubre toda la pantalla, solo los grises/blancos del humo
+   son visibles gracias a screen blend mode (negro = 100% transparente). */
+.humo-overlay {
+  position: absolute;
+  top: 25%; height: 50%;
+  left: 25%; width: 50%;
+  z-index: 15;
+  pointer-events: none;
+  background: url("img/humo-overlay.webp") center/cover no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+/* Lo oído se cuenta igual que lo visto; solo la marca dice que no estabas
+   delante. La línea ya nombra la sala. */
+.suceso.oido .marca { background: var(--oro); opacity: 0.7; }
+.objeto-modal-img { width: 160px; height: 160px; border-radius: 12px; background: #000; border: 1px solid var(--linea2); overflow: hidden; margin: 12px auto 0; flex-shrink: 0; }
+.objeto-modal-cuerpo { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: 4px; }
+.objeto-modal-tuyo { font-size: 13px; color: var(--oro); margin: 0; font-weight: 600; }
+.objeto-modal-usado-txt { font-size: 13px; color: var(--tenue); margin: 0; }
+.objeto-modal-desc { font-size: 13px; color: var(--tenue); margin: 0; text-align: center; }
+.objeto-card-usado { border-color: var(--linea); }
+.objeto-fila { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--linea); }
+.objeto-fila:first-child { border-top: none; }
+.objeto-nombre { flex: 1; font-size: 13px; color: var(--tinta); }
+.objeto-tag { font-size: 10px; color: #c9a227; font-weight: 600; }
+.objeto-estado { font-size: 11px; }
+.objeto-estado.usado { color: #4caf50; }
+.objeto-estado.sin-usar { color: var(--tenue); }
+.objeto-usado .objeto-nombre { color: var(--tenue); }
+.dicho-usado { opacity: 0.4; }
+.dicho-usado b { text-decoration: line-through; }
+.dos-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dos-selects select { min-height: 40px; font-size: 13px; padding: 8px 10px; }
+.dos-selects label.campo { margin: 0; font-size: 11px; }
+.fila-nombre { padding: 8px 0; border-top: 1px dashed var(--linea); }
+.fila-nombre:first-child { border-top: 0; padding-top: 0; }
+.fila-nombre b { font-size: 14.5px; display: block; margin-bottom: 4px; }
+
+/* ---------------- crónica ---------------- */
+.dia-bloque { margin-bottom: 16px; }
+.dia-bloque h3 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tenue); margin: 0 0 6px; }
+.suceso { display: flex; gap: 8px; padding: 6px 0; border-top: 1px solid var(--linea); font-size: 14px; }
+.suceso:first-of-type { border-top: 0; }
+.suceso .marca { width: 3px; border-radius: 2px; background: var(--linea2); flex: 0 0 auto; }
+.suceso.gesto .marca { background: var(--tenue); }
+.suceso.yo .marca { background: var(--oro); }
+.suceso.malo .marca { background: var(--rojo); }
+
+/* ---------------- inicio ---------------- */
+.inicio {
+  --codigo-top: calc(37px + var(--safe-top) + 10px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 16px;
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  z-index: 1;
+  padding: 0 22px calc(52px + var(--safe));
+  background:
+    linear-gradient(to bottom, transparent 20%, rgba(14,12,10,0.45) 50%, rgba(14,12,10,0.94) 70%, #0e0c0a 85%),
+    url('/app/juegos/say-my-name/img/inicio.webp') top center / cover no-repeat, #0e0c0a;
+}
+.inicio-titulo {
+  position: absolute;
+  top: 28%;
+  left: 0; right: 0;
+  text-align: center;
+  text-shadow: 0 4px 40px rgba(0,0,0,0.7);
+}
+.inicio-titulo-main {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.inicio-titulo-sub {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oro);
+  margin-top: 6px;
+}
+.inicio h1 {
+  font-size: 42px;
+  margin: 0;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  text-shadow: 0 4px 40px rgba(0,0,0,0.7);
+}
+.inicio h1 em {
+  display: block;
+  font-style: normal;
+  font-size: 0.55em;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oro);
+  margin-bottom: 6px;
+}
+/* Grid de selección de personaje en la pantalla de inicio */
+.inicio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.inicio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radio);
+  border: 1px solid var(--linea);
+  /* Mismo fondito que las fichas del vestíbulo: el apodo se lee sobre negro. */
+  background: var(--fondo2);
+  padding: 6px 4px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.inicio-card.on {
+  border-color: var(--oro);
+  background: rgba(201,162,39,0.14);
+}
+/* Personaje que ya es de otra persona: misma marca que el «ya usado» de los
+   objetos, encima de la carta y sin dejar pulsarla. */
+.inicio-card.tomado { position: relative; cursor: default; border-color: var(--linea); }
+.inicio-card.tomado .persona-retrato { opacity: 0.45; }
+.inicio-card.tomado .inicio-card-apodo { color: var(--tenue); }
+.inicio-card-tomado {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radio);
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  pointer-events: none;
+}
+.inicio-card-tomado span {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--oro);
+  text-align: center;
+  line-height: 1.25;
+}
+.inicio-card .persona-retrato {
+  width: 100%;
+  aspect-ratio: 3/4;
+}
+.inicio-card-apodo {
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--tinta);
+  line-height: 1.2;
+}
+.inicio-card-hab {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  color: var(--oro);
+  text-align: center;
+  line-height: 1.2;
+}
+.inicio-card-hab img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.inicio-entrar {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  min-height: 56px !important;
+  border-radius: 14px !important;
+}
+
+.inicio-limpiar {
+  all: unset;
+  display: block;
+  margin-top: 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--tenue);
+  cursor: pointer;
+  opacity: 0.6;
+  text-decoration: underline;
+}
+.inicio-limpiar:active { opacity: 1; }
+
+/* Pantallas online */
+.inicio-centrado { justify-content: center; }
+.inicio-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+.inicio-label-center { text-align: center; }
+.inicio-reglas { width: 100%; color: var(--tinta2); font-size: 13px; }
+/* Sin flecha y en el centro: el triángulo nativo (y el que se añadía a mano)
+   se comía la mitad del ancho y el rótulo quedaba pegado a la izquierda. */
+.inicio-reglas summary { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tenue); cursor: pointer; padding: 4px 0; list-style: none; text-align: center; }
+.inicio-reglas summary::-webkit-details-marker { display: none; }
+.inicio-reglas summary::marker { content: ""; }
+.inicio-reglas p { margin: 8px 0 0; line-height: 1.5; }
+.reglas-modal { color: var(--tinta2); font-size: 13px; }
+.reglas-modal p { margin: 10px 0 0; line-height: 1.6; }
+.reglas-modal p:first-child { margin-top: 0; }
+.inicio-nombre-sala { font-size: 22px; font-weight: 700; color: var(--tinta); margin: 0; text-align: center; }
+.inicio-divisor-hr { border: none; border-top: 1px solid var(--linea); width: 100%; margin: 0; }
+.inicio-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tenue);
+  margin: 0;
+}
+.inicio-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--linea2);
+  background: var(--fondo2);
+  color: var(--tinta);
+  font-size: 16px;
+  text-align: center;
+}
+.inicio-input:focus { outline: none; border-color: var(--oro); }
+.inicio-divisor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--tinta2);
+  font-size: 13px;
+  width: 100%;
+}
+.inicio-divisor::before,
+.inicio-divisor::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--linea);
+}
+.inicio-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.inicio-opcion-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inicio-opcion-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tenue);
+  flex: 0 0 90px;
+}
+.inicio-select {
+  flex: 1;
+  /* 32 px a la derecha: la flecha ocupa 12 y quedan 10 de aire hasta el filo. */
+  padding: 10px 32px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--linea2);
+  /* `background-color`, no el atajo: el atajo borraba la flecha del select. */
+  background-color: var(--fondo2);
+  color: var(--tinta);
+  font-size: 14px;
+}
+.inicio-select:focus { outline: none; border-color: var(--oro); }
+/* Etiqueta y código, un solo bloque con el hueco justo: antes los separaban
+   16 px de la pantalla más el margen del número. */
+.inicio-codigo-bloque { display: flex; flex-direction: column; gap: 5px; }
+/* La distancia que se ve no era el `gap` sino el aire que el interlineado deja
+   dentro de cada caja: 2,4 px bajo la etiqueta + 5,8 px sobre el número. Con
+   `line-height: 1` las cajas abrazan el texto y el hueco es el que se pone. */
+.inicio-codigo-bloque > .inicio-label,
+.inicio-codigo-bloque > .inicio-codigo { line-height: 1; }
+/* El bloque del código vive arriba, con el hueco de la cámara por delante; el
+   `margin-bottom: auto` empuja todo lo demás al fondo de la pantalla. */
+.inicio-codigo-arriba {
+  margin-bottom: auto;
+  padding-top: var(--codigo-top);
+}
+.inicio-codigo {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--oro);
+  margin: 0;
+}
+/* El aviso de los avisos: lo primero que se ve del vestíbulo si falta permiso. */
+.inicio-avisos {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--linea2);
+  background: var(--fondo2);
+}
+.inicio-avisos.pendiente { border-color: var(--oro); background: rgba(201,162,39,0.1); }
+.inicio-avisos-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.inicio-avisos-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tinta); }
+.inicio-avisos-obliga { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--oro); }
+.inicio-avisos-ok { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--oro); }
+.inicio-avisos-txt { margin: 5px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--tinta2); }
+/* La columna de la derecha del vestíbulo: tu asiento y los avisos, juntos. */
+.inicio-lado { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.inicio-listo { border-color: var(--oro); background: rgba(201, 162, 39, 0.08); }
+.inicio-listo.hecho { background: rgba(201, 162, 39, 0.14); }
+/* Los botones de acción, en su columna: 9 px entre ellos (un tercio de los 28
+   que había: 16 del aire de la pantalla + 12 del margen de cada botón). */
+.inicio-botones { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+.inicio-botones .boton { margin-top: 0; }
+
+/* El botón de listo va suelto, sin tarjeta ni reborde. Marcado, se queda en
+   oro apagado con su tick en vez de desaparecer: así se ve que está hecho. */
+.inicio-listo-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.inicio-listo-btn.hecho {
+  opacity: 1;
+  background: rgba(201, 162, 39, 0.16);
+  border: 1px solid var(--oro);
+  color: var(--oro);
+}
+/* Nota corta del vestíbulo (avisos), sin caja alrededor. */
+.inicio-nota {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tenue);
+}
+/* El visto bueno del asiento: lo ven el anfitrión y el resto de la mesa. */
+.inicio-jugador-tick {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--oro);
+  flex-shrink: 0;
+}
+/* Lo que ve quien no manda en la mesa: cuántos y a qué ritmo, y la espera. */
+.inicio-meta {
+  margin: 0;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--tenue);
+}
+/* Lo que contestó la mesa al pulsar «Comenzar partida»: mismo hueco que el
+   «faltan», pero en rojo apagado para que no se confunda con la espera. */
+.inicio-motivo { color: var(--rojo, #b4544a); }
+/* A quién espera la mesa para arrancar, justo bajo el botón apagado. */
+.inicio-faltan {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tenue);
+}
+.inicio-espera {
+  margin: 0;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  color: var(--tinta);
+  text-wrap: balance;
+}
+/* El velo de los avisos: tapa la sala y no se cierra hasta concederlos. */
+.inicio-velo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 3, 2, 0.86);
+  backdrop-filter: blur(3px);
+}
+.inicio-velo-caja {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px 20px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--linea2);
+  background: rgba(12, 10, 8, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.inicio-velo-tit {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--tinta);
+}
+.inicio-velo-txt { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tenue); }
+
+/* Primero los avisos, en oro: sin ellos «Estoy listo» no se enciende. */
+.inicio-avisos-btn { min-height: 48px; font-size: 15px; letter-spacing: 0.04em; }
+/* El engranaje del anfitrión: arriba a la derecha, libre del notch. */
+.inicio-ajustes {
+  position: absolute;
+  /* El borde del círculo, a la altura del borde de «CÓDIGO DE SALA»: los dos
+     leen la misma medida, así que no se separan si cambia el aire del código. */
+  top: var(--codigo-top);
+  right: 22px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--linea2);
+  background: rgba(10, 9, 7, 0.72);
+  color: var(--tenue);
+}
+.inicio-ajustes:active { color: var(--oro); border-color: var(--oro); }
+.inicio-lista { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 4px; }
+.inicio-jugador {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  width: 100%;
+  box-sizing: border-box;
+}
+.inicio-jugador-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.inicio-jugador-nombre { font-size: 14px; color: var(--tinta); }
+.inicio-jugador-personaje { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tenue); }
+.inicio-jugador.anfitrion { border-color: var(--oro); }
+/* La silla de quien cerró la app: sigue en la lista, pero apagada. */
+.inicio-jugador.fuera { opacity: 0.55; }
+.inicio-jugador.fuera .inicio-jugador-nombre { color: var(--tenue); }
+/* Deshacer la mesa: el último botón del anfitrión y el más discreto. */
+.inicio-eliminar {
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tenue);
+}
+.inicio-eliminar:active { color: var(--rojo, #b4544a); border-color: var(--rojo, #b4544a); }
+/* Irse de la sala: sin peso visual, como el de eliminar, pero sin rojo: no
+   rompe nada, solo suelta el sitio propio. */
+.inicio-salir {
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tenue);
+}
+.inicio-jugador-avatar {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--fondo3, #1a1612);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  border: 1px solid var(--linea2);
+}
+.inicio-jugador-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.inicio-retrato-elegido { width: 72px; height: 72px; flex-shrink: 0; }
+.inicio-elegido {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--fondo2);
+  border: 1px solid var(--oro);
+  width: 100%; box-sizing: border-box;
+}
+.inicio-elegido-info { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.inicio-elegido-nombre { font-size: 18px; font-weight: 700; margin: 0; }
+.inicio-elegido-hab { font-size: 13px; margin: 0; line-height: 1.5; }
+/* Card retrato con badge del objeto */
+.inicio-card-retrato-wrap { position: relative; display: block; line-height: 0; }
+.inicio-card-obj-badge {
+  position: absolute;
+  bottom: 4px; right: 4px;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  background: rgba(14,12,10,0.85);
+  border: 1px solid var(--linea2);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.inicio-card-obj-badge img { width: 20px; height: 20px; object-fit: contain; }
+
+/* Descripción al seleccionar */
+.inicio-confirmacion {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--fondo2);
+  border: 1px solid var(--linea2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+.inicio-desc-nombre {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--tinta);
+}
+.inicio-desc-obj { display: flex; gap: 12px; align-items: center; }
+.inicio-desc-obj-img {
+  width: 88px; height: 88px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--panel2);
+  padding: 7px;
+  border: 1px solid var(--linea);
+}
+.inicio-desc-obj-texto { display: flex; flex-direction: column; gap: 3px; }
+.inicio-desc-obj-texto .inicio-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--tenue);
+  margin: 0;
+}
+.inicio-desc-obj-nombre { font-size: 14px; font-weight: 500; margin: 0; color: var(--tinta); }
+.inicio-desc-obj-texto .detalle { font-size: 12px; color: var(--tenue); margin: 0; line-height: 1.4; }
+.inicio-seccion-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinta2);
+  width: 100%;
+  padding-top: 8px;
+}
+
+/* ---------------- cabecera de la partida ---------------- */
+/* Es la `.barra` del original (la jornada y las acciones), con otro nombre
+   porque la plataforma ya tiene la suya. Va fija justo debajo: arriba la
+   cabecera de la app (37 px + el notch) y enganchada a ella la del juego. El
+   tablero reserva su alto para que no se coma el castillo. */
+.smn-cabecera {
+  position: fixed;
+  top: calc(37px + env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 6px 14px;
+  background: color-mix(in srgb, var(--fondo) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--linea);
+}
+.smn-dia { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tenue); }
+.smn-dia b { color: var(--tinta); font-weight: 600; }
+/* El hueco de esa cabecera, dentro del contenedor del juego. */
+.smn-juego { padding-top: 24px; }
+
+/* ---------------- pestañas ---------------- */
+/* Aquí estaban `.avisos` y `.toast` de la app original. La plataforma ya tiene
+   los suyos (centrados a 20 px del borde): al cargarse después, estas reglas
+   dejaban el contenedor con `left: 0; right: 0` pero con el `translateX(-50%)`
+   de la plataforma, y cada aviso salía pegado a la izquierda. Los del juego ya
+   no se pintan aquí: fuera.
+
+   La barra de pestañas sí es del juego, y con los nombres `smn-` que usa el
+   adaptador, que no tenían ninguna regla: los botones acababan sueltos al
+   final del documento. Es la de corvus: fija al pie, siempre a la vista, con
+   las cuatro pestañas del juego (castillo, pergamino, crónica y ranking). */
+.smn-barra {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 4px 8px calc(4px + var(--safe));
+  background: color-mix(in srgb, var(--fondo) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--linea);
+}
+.smn-pestana {
+  height: 36px;
+  border: none;
+  border-top: 2px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tenue);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  margin-top: -4px;
+}
+.smn-pestana.on { color: var(--tinta); border-top-color: var(--oro); }
+
+/* ---------------- acta final ---------------- */
+/* Mismo castillo que el vestíbulo, pero con la mesa entera a la vista: el
+   título va en el flujo (antes estaba absoluto y se comía las primeras
+   filas), la lista scrollea si hay mucha gente y el botón se queda al
+   alcance en cualquier alto de pantalla. */
+.inicio.acta {
+  justify-content: center;
+  gap: 12px;
+  padding: calc(28px + var(--safe-top)) 22px calc(28px + var(--safe));
+}
+.acta-cab { text-align: center; text-shadow: 0 4px 40px rgba(0, 0, 0, 0.7); }
+.acta-etiqueta {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oro);
+}
+.acta-titulo {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin-top: 6px;
+}
+.acta-sub { font-size: 12px; color: var(--tenue); margin-top: 8px; }
+.acta-lista {
+  flex: 0 1 auto;
+  /* La mesa entera sin salirse de la pantalla: con ocho fichas y un móvil
+     bajito, la lista scrollea y el botón sigue a la vista. */
+  max-height: 54dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.acta-boton { flex: 0 0 auto; }
+.acta-fila {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  /* El mismo fondito que las fichas del vestíbulo: sobre el castillo, el
+     nombre se lee sin pelearse con las almenas. */
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  flex: 0 0 auto;
+}
+.acta-fila.acta-yo {
+  background: rgba(201,162,39,0.1);
+  border-color: rgba(201,162,39,0.25);
+}
+.acta-fila.acta-ganador {
+  background: rgba(201,162,39,0.18);
+  border-color: var(--oro);
+}
+.acta-apodo {
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.acta-nombre {
+  color: var(--tenue);
+  font-size: 13px;
+}
+.acta-fila.acta-eliminado {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* ---------------- ranking ---------------- */
+.ranking-wrap { padding: 16px; }
+.ranking-cabecera { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding: 0 4px; }
+.ranking-ordinal { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tenue); flex-shrink: 0; }
+.ranking-linea { flex: 1; height: 1px; background: var(--linea); }
+.ranking-cabecera.lleno .ranking-ordinal { color: var(--rojo); }
+.ranking-cabecera.lleno .ranking-linea { background: rgba(180,40,40,0.3); }
+.ranking-fila {
+  display: flex; align-items: center;
+  padding: 10px 12px; border-radius: 8px; margin-bottom: 4px;
+  background: var(--carta); border: 1px solid var(--linea);
+}
+.ranking-nombre { flex: 1; font-size: 15px; }
+.ranking-nombre.tuyo { color: var(--oro); font-weight: 700; }
+.ranking-fila.lleno { border-color: rgba(180,40,40,0.4); background: rgba(180,40,40,0.08); }
+.ranking-nombre.lleno { color: var(--rojo); }
+.ranking-wrap .vacio { color: var(--tenue); font-size: 14px; line-height: 1.5; }
+
+/* ---------------- ajustes habilidades ---------------- */
+.ajuste-habs { margin-top: 6px; }
+.ajuste-hab-fila {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-bottom: 1px solid var(--linea);
+}
+.ajuste-hab-fila:last-child { border-bottom: none; }
+.ajuste-hab-info { flex: 1; min-width: 0; }
+.ajuste-hab-nombre { display: block; font-size: 13px; color: var(--texto); }
+.ajuste-hab-desc { display: block; font-size: 11px; color: var(--tenue); margin-top: 1px; }
+.ajuste-hab-ctrls { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.ajuste-hab-lbl { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue2, var(--tenue)); }
+.ajuste-toggle { position: relative; display: inline-block; width: 32px; height: 18px; cursor: pointer; flex-shrink: 0; }
+.ajuste-toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--linea2); border-radius: 9px;
+  transition: background .18s;
+}
+.ajuste-toggle-slider::before {
+  content: ""; position: absolute;
+  width: 12px; height: 12px; left: 3px; top: 3px;
+  background: var(--tenue); border-radius: 50%;
+  transition: transform .18s, background .18s;
+}
+.ajuste-toggle input:checked + .ajuste-toggle-slider { background: #2a5c38; }
+.ajuste-toggle input:checked + .ajuste-toggle-slider::before { transform: translateX(14px); background: #6ab080; }
+.ajuste-hab-fila--off { opacity: .4; }
+.ajuste-hab-fila--off .ajuste-hab-nombre { color: var(--tenue); }
+.ajuste-habs-nota { font-size: 11px; color: var(--tenue); margin: 2px 0 6px; }
+.ajuste-inicio-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ajuste-inicio-chip {
+  padding: 4px 10px; border-radius: 20px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--linea2); background: var(--fondo3); color: var(--tenue);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ajuste-inicio-chip--on { background: #2a5c38; border-color: #6ab080; color: #c8f0d4; }
+.ajuste-inicio-chip:disabled { opacity: .3; cursor: default; }
+
+/* Grid de selección de personaje en el vestíbulo (madrigueras) */
+.inicio-personajes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.inicio-personaje-carta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radio);
+  border: 1px solid var(--linea);
+  background: var(--fondo2);
+  padding: 6px 4px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.inicio-personaje-carta.elegido { border-color: var(--oro); background: rgba(201,162,39,0.14); }
+.inicio-personaje-carta.ocupado { opacity: 0.45; cursor: default; }
+.inicio-personaje-carta img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 6px; }
+.inicio-personaje-apodo { font-size: 10px; font-weight: 600; text-align: center; color: var(--tinta); line-height: 1.2; }
+.inicio-personaje-ocupado { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--oro); }
+
+/* ---------------- nombres que comparte con la plataforma ---------------- */
+/* El armazón de madrigueras usa algunos de los mismos nombres que el juego
+   (`.vacio`, `.titulo`, `.campo`, `.marca`). Su hoja se carga antes y estas
+   reglas devuelven cada uno a lo que era en el juego original: el texto vacío
+   sin la caja de puntos, los títulos con la tipografía del juego y sin el
+   margen de más en los campos. El círculo de rasgo se queda fuera del primero:
+   se llama `vacio` cuando aún no sabes el rasgo, pero no es un texto. */
+.smn-juego .vacio:not(.sospecha-rasgo-circ) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  text-align: inherit;
+}
+.smn-juego .titulo {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tenue);
+  margin: 22px 2px 8px;
+}
+.smn-juego .titulo:first-child { margin-top: 4px; }
+.smn-juego label.campo { margin-bottom: 0; }
+
+/* ---------------- la partida no scrollea la página ---------------- */
+/* En el móvil, al desplazar, el navegador recoge su barra y lo que va con
+   `position: fixed` se sube con ella: el pie de la partida se movía. La
+   solución no es pelearse con la barra del navegador, sino que la página no
+   tenga nada que desplazar: el alto es el de la pantalla y lo que se mueve,
+   dentro, es el tablero. La clase la pone y la quita el propio juego. */
+body.smn-en-partida {
+  /* `clip` y no `hidden`: en iOS, `overflow: hidden` en el body lo convierte
+     en contenedor de scroll y lo que va con `position: fixed` deja de colgar
+     de la pantalla para colgarse de la caja del body. Con el relleno que el
+     body reservaba abajo (62 px + notch) el menú del pie subía ~96 px y
+     quedaba una franja negra debajo. Es la misma regla que ya usa
+     app/estilos.css en html/body; se deja `hidden` delante por si el
+     navegador no entiende `clip`. */
+  overflow: hidden;
+  overflow: clip;
+  height: 100dvh;
+  padding-bottom: 0;
+}
+body.smn-en-partida #pantalla {
+  height: 100%;
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+}
+body.smn-en-partida #pantalla > section {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+body.smn-en-partida #tablero.smn-juego {
+  height: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  /* Arriba el hueco de la cabecera del juego; abajo, el de la barra de
+     pestañas y el submenú del pergamino. */
+  padding: 62px 14px calc(112px + var(--safe)) 14px;
+}
+
+/* Las tres barras siguen `fixed`. Probé a anclarlas al contenedor del juego
+   con `absolute` para que el scroll interno del tablero no las moviera, pero
+   en el móvil `absolute` se mide contra el «viewport» de maquetación, que es
+   más bajo que la pantalla cuando el navegador recoge su barra: el menú del
+   pie se quedaba unos 100 px por encima del borde y flotaba. Como la página
+   ya no scrollea, `fixed` no se mueve y sí sigue al borde visible. */

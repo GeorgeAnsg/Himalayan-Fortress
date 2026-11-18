@@ -23,6 +23,21 @@ export function precargar(id) {
     .catch(() => {});
 }
 
+export function getVestibulo(id) {
+  return tableros.get(id)?.pintarVestibulo ?? null;
+}
+
+export function esperarVestibulo(id) {
+  if (!id) return Promise.resolve(null);
+  if (tableros.has(id)) return Promise.resolve(tableros.get(id)?.pintarVestibulo ?? null);
+  return import(new URL(`../juego/cliente/${encodeURIComponent(id)}.js`, document.baseURI).href)
+    .then((mod) => {
+      if (typeof mod.pintar === "function") tableros.set(id, mod);
+      return mod.pintarVestibulo ?? null;
+    })
+    .catch(() => null);
+}
+
 /* El juego cuelga de <body> el menú, la mano, los paneles, el cielo y sus
    modales. Al salir de la mesa o al volver al vestíbulo hay que retirarlos:
    vaciar #pantalla no se los lleva, y se quedaban encima del inicio. */
@@ -32,20 +47,25 @@ export function limpiar() {
     "body > .bw-mano-wrap",
     "body > .bw-panel",
     "body > .bw-panel-overlay",
+    "body > .bw-turno-fin",
     "body > #bw-cielo-global",
     "body > #bw-zonas",
     "body > .bw-modal-fondo",
+    "body > #smn-nav-global",
+    "body > #smn-cabecera",
+    "body > #smn-cuaderno-nav",
   ].join(",")).forEach((nodo) => nodo.remove());
-  document.body.classList.remove("bw-himalaya", "mapa-himalaya", "bw-avanzando");
+  document.body.classList.remove("bw-himalaya", "mapa-himalaya", "bw-avanzando", "smn-en-partida");
   /* La hoja del juego trae sus propias variables en :root; si se queda en
      <head>, al volver al inicio pisa los colores de la app. Se reinstala sola
      la próxima vez que se pinte el tablero. */
   document.getElementById("bw-css")?.remove();
+  document.getElementById("smn-css")?.remove();
   document.documentElement.style.removeProperty("--alto-nav");
   document.documentElement.style.removeProperty("--alto-barra");
 }
 
-export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
+export function pintar(raiz, { mesa, alAccion, alCuaderno, alSalir, scroll }) {
   const turno = mesa.jugadores.find((j) => j.id === mesa.turno);
   const ronda = mesa.publica?.ronda;
   const maxRondas = mesa.publica?.maxRondas;
@@ -66,7 +86,9 @@ export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
   `);
 
   const contenedor = nodo.querySelector("#tablero");
-  const opciones = { alAccion, alSalir, scroll };
+  /* El registro de la mesa (con su jornada) viaja al tablero: el juego lo usa
+     para la crónica. */
+  const opciones = { alAccion, alCuaderno, alSalir, scroll, log: mesa.log ?? [], ranking: mesa.ranking ?? [] };
   const cache = tableros.get(mesa.juego?.id);
   raiz.append(nodo);
   /* El nodo ya cuelga del documento antes de pintar el tablero: el juego mide
@@ -76,7 +98,7 @@ export function pintar(raiz, { mesa, alAccion, alSalir, scroll }) {
   return nodo;
 }
 
-function pintarTablero(mod, contenedor, mesa, { alAccion, alSalir, scroll }) {
+function pintarTablero(mod, contenedor, mesa, { alAccion, alCuaderno, alSalir, scroll, log, ranking }) {
   contenedor.innerHTML = "";
   mod.pintar(contenedor, {
     publica: mesa.publica,
@@ -84,9 +106,12 @@ function pintarTablero(mod, contenedor, mesa, { alAccion, alSalir, scroll }) {
     jugadores: mesa.jugadores,
     tu: mesa.tu,
     acciones: mesa.acciones,
+    ranking: ranking ?? mesa.ranking ?? [],
     alAccion,
+    alCuaderno,
     alSalir,
     scroll,
+    log: log ?? mesa.log ?? [],
   });
 }
 

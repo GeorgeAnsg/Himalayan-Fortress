@@ -10,9 +10,8 @@ export function pintar(raiz, { alEnviar, codigo = null, error = null }) {
 
   const nodo = h(`
     <section class="entrada">
-      <p class="subtitulo">Juego por turnos</p>
-      <h1 class="entrada-titulo">Himalayan Fortress</h1>
-      <p class="entrada-lema">Abre una madriguera, pasa el código y jugad desde el móvil. Cada uno en el suyo.</p>
+      <p class="subtitulo">Juegos por turnos</p>
+      <h1 class="entrada-titulo">PYMALS</h1>
 
       ${codigo ? `<div class="panel" style="border-color:rgba(227,164,85,.3);background:rgba(227,164,85,.07);margin-bottom:16px">
         <p class="nota" style="margin:0">Te han invitado a la madriguera <strong class="mono">${esc(codigo)}</strong>. Entra o crea tu cuenta y te sentamos.</p>

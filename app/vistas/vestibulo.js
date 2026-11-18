@@ -20,6 +20,8 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
   const puedeEmpezar = mesa.soyAnfitrion && mesa.todosListos && !faltan && equiposOk;
   const editable = !!mesa.soyAnfitrion;
 
+  const portada = mesa.juego?.id ? `/app/juegos/${encodeURIComponent(mesa.juego.id)}/img/vestibulo.webp` : null;
+
   const nodo = h(`
     <section>
       <div class="cabecera-mesa">
@@ -36,6 +38,7 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
         </div>
       </div>
 
+      ${mesa.juego?.sinPersonalizacion ? "" : `
       <section class="personalizacion">
         <div class="modo-opciones" role="group" aria-label="Modo de juego">
           <button type="button" class="modo-opcion ${modo === "todos" ? "on" : ""}"
@@ -43,23 +46,7 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
           <button type="button" class="modo-opcion ${modo === "equipos" ? "on" : ""}"
                   data-modo="equipos" ${editable ? "" : "disabled"}>Por equipos</button>
         </div>
-        ${modo === "equipos" ? `
-          <ul class="equipos">
-            ${mesa.jugadores.map((j, i) => {
-              const n = Number(equipos[j.id]);
-              const equipo = n === 0 || n === 1 ? n : i % 2;
-              return `<li class="equipo-fila">
-                <span class="equipo-nombre">${esc(j.nombre)}${j.tu ? " · tú" : ""}</span>
-                <span class="equipo-botones">
-                  <button type="button" data-equipo-id="${esc(j.id)}" data-equipo="0"
-                          class="equipo-0${equipo === 0 ? " on" : ""}" ${editable ? "" : "disabled"}>Azul</button>
-                  <button type="button" data-equipo-id="${esc(j.id)}" data-equipo="1"
-                          class="equipo-1${equipo === 1 ? " on" : ""}" ${editable ? "" : "disabled"}>Rojo</button>
-                </span>
-              </li>`;
-            }).join("")}
-          </ul>` : ""}
-      </section>
+      </section>`}
 
       <section class="seccion" style="margin-top:24px">
         <div class="mesa-cabecera">
@@ -69,19 +56,28 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
             : ""}
         </div>
         <ul class="jugadores">
-          ${mesa.jugadores.map((j) => `
-            <li class="jugador${j.tu ? " tu" : ""}">
+          ${mesa.jugadores.map((j, i) => {
+            const n = Number(equipos[j.id]);
+            const equipo = n === 0 || n === 1 ? n : i % 2;
+            return `<li class="jugador${j.tu ? " tu" : ""}">
               <span class="avatar">${avatarSVG(j.avatar)}</span>
               <span class="nombre">
                 ${esc(j.nombre)}
-                <small>${j.tu ? "tú" : j.id === mesa.anfitrion ? "anfitrión" : "invitado"}</small>
+                <small>${j.tu ? "tú" : j.id === mesa.anfitrion ? "anfitrión" : "invitado"}${modo === "equipos" ? ` · ${!j.conectado ? "sin conexión" : j.listo ? `listo <span style="color:#4caf50">✓</span>` : "esperando"}` : ""}</small>
               </span>
-              ${!j.conectado
+              ${modo === "equipos" ? `
+                <span class="equipo-botones">
+                  <button type="button" data-equipo-id="${esc(j.id)}" data-equipo="0"
+                          class="equipo-0${equipo === 0 ? " on" : ""}" ${editable ? "" : "disabled"}>Azul</button>
+                  <button type="button" data-equipo-id="${esc(j.id)}" data-equipo="1"
+                          class="equipo-1${equipo === 1 ? " on" : ""}" ${editable ? "" : "disabled"}>Rojo</button>
+                </span>` : `${!j.conectado
                 ? `<span class="estado-punto fuera"><i></i>sin conexión</span>`
                 : j.listo
                   ? `<span class="estado-punto listo"><i></i>listo</span>`
-                  : `<span class="estado-punto"><i></i>esperando</span>`}
-            </li>`).join("")}
+                  : `<span class="estado-punto"><i></i>esperando</span>`}`}
+            </li>`;
+          }).join("")}
         </ul>
       </section>
 
@@ -109,6 +105,11 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
       </div>
     </section>
   `);
+
+  if (portada) {
+    nodo.classList.add("vestibulo-portada");
+    nodo.style.setProperty("--vbg", `url('${portada}')`);
+  }
 
   nodo.querySelector("#copiar").addEventListener("click", async (ev) => {
     const boton = ev.currentTarget;

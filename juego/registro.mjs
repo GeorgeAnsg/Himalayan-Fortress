@@ -5,9 +5,11 @@
    solo juego, la app no pregunta: crea la mesa de ese. */
 
 import bunkerWars from "./bunker-wars.js";
+import sayMyName from "./say-my-name.js";
 
 export const JUEGOS = new Map([
   [bunkerWars.id, bunkerWars],
+  [sayMyName.id, sayMyName],
 ]);
 
 export function juego(id) {

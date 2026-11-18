@@ -34,71 +34,86 @@ const NIVELES = [1, 2, 3, 5, 7];
 const COSTE_MONSTRUO = { 1: 0, 2: 1, 3: 2, 5: 3, 7: 3 };
 /* Cartas de Destino que meten monstruos en los caminos. */
 const AMENAZAS = new Set(["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival"]);
+/* Estas cartas actúan sobre la mesa entera: con un Destino compartido se
+   resuelven una vez por ciclo, no una vez por cada jugador. */
+const DESTINO_GLOBAL = new Set(["miedo", "amenaza_rival"]);
 /* La luna blanca se vuelve roja al empezar esta ronda: cuatro rondas de robo
    con los búnkeres aún flojos. No es una carta, así que a nadie le quita la
    carta de Destino de su turno. */
 const LUNA_ROJA = 5;
 
 // ── Cartas de Destino ─────────────────────────────────────────────────────
+/* Mazo nuevo: solo Avistamientos. Cada carta lleva su tramo (1 = lunas 1-4,
+   2 = lunas 5-8, 3 = desde la luna 9) y su cantidad de monstruos. Las cartas
+   de eventos del mazo anterior quedan fuera hasta que las recuperemos. */
 const PLANTILLAS_DESTINO = [
-  // Amenaza simple (1 monstruo)
-  { id:"d01", tipo:"amenaza",        nivel:1, prio:[1,2,3] },
-  { id:"d02", tipo:"amenaza",        nivel:1, prio:[2,1,3] },
-  { id:"d03", tipo:"amenaza",        nivel:1, prio:[3,2,1] },
-  { id:"d05", tipo:"amenaza",        nivel:2, prio:[1,2,3] },
-  { id:"d06", tipo:"amenaza",        nivel:2, prio:[2,1,3] },
-  { id:"d07", tipo:"amenaza",        nivel:2, prio:[3,2,1] },
-  { id:"d09", tipo:"amenaza",        nivel:3, prio:[1,2,3] },
-  { id:"d10", tipo:"amenaza",        nivel:3, prio:[2,1,3] },
-  { id:"d11", tipo:"amenaza",        nivel:3, prio:[3,2,1] },
-  { id:"d13", tipo:"amenaza",        nivel:5, prio:[1,2,3] },
-  { id:"d14", tipo:"amenaza",        nivel:5, prio:[2,1,3] },
-  { id:"d15", tipo:"amenaza",        nivel:5, prio:[3,2,1] },
-  { id:"d17", tipo:"amenaza",        nivel:7, prio:[1,2,3] },
-  { id:"d18", tipo:"amenaza",        nivel:7, prio:[2,1,3] },
-  { id:"d19", tipo:"amenaza",        nivel:7, prio:[3,2,1] },
-  // Amenaza múltiple
-  { id:"d04", tipo:"amenaza_triple", nivel:1 },
-  { id:"d08", tipo:"amenaza_triple", nivel:2 },
-  { id:"d12", tipo:"amenaza_triple", nivel:3 },
-  { id:"d16", tipo:"amenaza_doble",  nivel:2, prio:[2,1,3] },
-  { id:"d25", tipo:"amenaza_rival",  nivel:2, prio:[2,3,1] },
-  // Eventos beneficiosos
-  { id:"d21", tipo:"calma" },
-  { id:"d31", tipo:"colocar_monstruos",    nivel:3, cantidad:3 },
-  { id:"d32", tipo:"colocar_monstruos",    nivel:2, cantidad:3 },
-  // Eventos de limpieza
-  { id:"d20", tipo:"aniquilar_entrada" },
-  { id:"d23", tipo:"aniquilar_nivel",  nivelMax:3 },
-  { id:"d24", tipo:"matar_mayor" },
-  // Eventos de movimiento
-  { id:"d27", tipo:"avanzar_extra" },
-  { id:"d28", tipo:"miedo" },
-  // Eventos de transformación
-  { id:"d26", tipo:"convertir_aliado" },
-  { id:"d29", tipo:"subir_monstruos",      nivelMax:5 },
-  { id:"d30", tipo:"bajar_monstruos",      nivelMin:2 },
+  // Tramo I — lunas 1-4
+  { id:"a01", tipo:"amenaza", nivel:1, cantidad:1, prio:[1,2,3], tramo:1,
+    titulo:"Se ha avistado un rastreador",
+    descripcion:"Un rastreador se arrastra desde la nieve." },
+  { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1,
+    titulo:"Un rastreador",
+    descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
+  { id:"a03", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1,
+    titulo:"Dos rastreadores",
+    descripcion:"Dos rastreadores salen de la ventisca." },
+  { id:"a04", tipo:"amenaza", nivel:1, cantidad:3, prio:[1,2,3], tramo:1,
+    titulo:"Tres rastreadores",
+    descripcion:"Tres rastreadores emergen de la nieve." },
+  // Tramo II — lunas 5-8
+  { id:"a05", tipo:"amenaza", nivel:2, cantidad:1, prio:[1,2,3], tramo:2,
+    titulo:"Un carroñero",
+    descripcion:"Un carroñero husmea entre las rocas." },
+  { id:"a06", tipo:"amenaza", nivel:2, cantidad:2, prio:[2,1,3], tramo:2,
+    titulo:"Dos carroñeros",
+    descripcion:"Dos carroñeros avanzan hacia la fortaleza." },
+  { id:"a07", tipo:"amenaza", nivel:3, cantidad:3, prio:[2,3,1], tramo:2,
+    titulo:"Tres yetis",
+    descripcion:"Tres yetis descienden rugiendo de la montaña." },
+  { id:"a08", tipo:"amenaza", nivel:5, cantidad:1, prio:[2,1,3], tramo:2,
+    titulo:"Un coloso de hielo",
+    descripcion:"Un coloso de hielo se alza sobre la nieve." },
+  { id:"a09", tipo:"amenaza", nivel:5, cantidad:2, prio:[1,2,3], tramo:2,
+    titulo:"Dos colosos de hielo",
+    descripcion:"Dos colosos de hielo emergen del hielo." },
+  // Tramo final — desde la luna 9
+  { id:"a10", tipo:"amenaza", nivel:5, cantidad:2, prio:[1,2,3], tramo:3,
+    titulo:"Dos colosos de hielo",
+    descripcion:"Dos colosos de hielo aparecen entre la nieve." },
+  { id:"a11", tipo:"amenaza", nivel:7, cantidad:1, prio:[2,3,1], tramo:3,
+    titulo:"Un devorador de cumbres",
+    descripcion:"Un devorador de cumbres se recorta contra el cielo." },
+  { id:"a12", tipo:"amenaza", nivel:5, cantidad:2, prio:[3,2,1], tramo:3,
+    titulo:"Dos colosos de hielo",
+    descripcion:"Dos colosos de hielo surgen de la ventisca." },
+  { id:"a13", tipo:"amenaza", nivel:7, cantidad:3, prio:[2,1,3], tramo:3,
+    titulo:"Tres devoradores de cumbres",
+    descripcion:"Tres devoradores de cumbres descienden de las cumbres." },
+  /* Eventos — una sola copia de cada carta. El `tramo` es la luna desde la
+     que la carta tiene sentido: en las primeras no salen las que piden una
+     mesa montada (los monstruos más fuertes, los que suben o bajan rangos,
+     los que dependen de tener jaulas llenas). Con el tramo puesto, en las
+     lunas 1-4 solo caen avistamientos de rastreadores y eventos suaves. */
+  { id:"d21", tipo:"calma", tramo:1 },
+  { id:"d20", tipo:"aniquilar_entrada", tramo:1 },
+  { id:"d28", tipo:"miedo", tramo:1 },
+  { id:"d27", tipo:"avanzar_extra", tramo:2 },
+  { id:"d26", tipo:"convertir_aliado", tramo:2 },
+  { id:"d30", tipo:"bajar_monstruos", nivelMin:2, tramo:2 },
+  { id:"d23", tipo:"aniquilar_nivel", nivelMax:3, tramo:2 },
+  { id:"d32", tipo:"colocar_monstruos", nivel:2, cantidad:2, tramo:2 },
+  { id:"d24", tipo:"matar_mayor", tramo:3 },
+  { id:"d33", tipo:"desercion", tramo:3 },
+  { id:"d29", tipo:"subir_monstruos", nivelMax:5, tramo:3 },
+  { id:"d31", tipo:"colocar_monstruos", nivel:3, cantidad:2, tramo:3 },
 ];
 
-// Distribución en ~60 cartas
-const DIST_DESTINO = {
-  d01:3, d02:3, d03:3, d04:2,
-  d05:2, d06:2, d07:2, d08:2,
-  d09:2, d10:2, d11:2, d12:1,
-  d13:1, d14:1, d15:1, d16:2,
-  d17:1, d18:1, d19:1,
-  d20:2, d21:3, d23:1,
-  d24:1, d25:2, d26:1, d27:2,
-  d28:1, d29:1, d30:1, d31:1, d32:1,
-};
+/* Tramo de cada carta por su id: sirve para ponerle el tramo a las cartas que
+   se repartieron antes de que los eventos lo tuvieran. */
+const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null]));
 
 function crearMazoDestino(nJugadores, e) {
-  const cartas = [];
-  for (const p of PLANTILLAS_DESTINO) {
-    const n = DIST_DESTINO[p.id] ?? 1;
-    for (let i = 0; i < n; i++) cartas.push({ ...p, uid: uid("dc") });
-  }
-  return barajar(cartas, e);
+  return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
 }
 
 // ── Cartas de búnker ──────────────────────────────────────────────────────
@@ -117,12 +132,10 @@ const PLANTILLAS_BUNKER = [
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
   { tipo:"ciencia",     efecto:"torreta_universal", coste:8, titulo: "Torres universales", descripcion: "Tus torres hacen el daño correspondiente a su nivel en cualquier escalera." },
   { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los peldaños 3 y 4 de tus escaleras, tanto los tuyos como los atacantes." },
-  { tipo:"ciencia_i",   efecto:"avanzar_rival_1",   coste:2, titulo: "Avanza al rival", descripcion: "Avanza 1 peldaño a un monstruo de nivel 3 o inferior que esté atacando a un rival. Permite entrada en búnker. Vale un **yeti** (3), un **carroñero** (2) o un **rastreador** (1)." },
-  { tipo:"ciencia_i",   efecto:"subir_rango",       coste:2, titulo: "Subir rango", descripcion: "Sube un rango el nivel de un monstruo hasta nivel 5 como máximo que esté defendiendo tu búnker o atacando a un rival: **coloso de hielo** (5), **yeti** (3), **carroñero** (2) o **rastreador** (1)." },
+  { tipo:"ciencia_i",   efecto:"subir_rango",       coste:2, titulo: "Subir rango", descripcion: "Sube un rango el nivel de un monstruo hasta nivel 5 como máximo." },
   { tipo:"ciencia_i",   efecto:"convertir_aliado",  coste:2, titulo: "Convertir aliado", descripcion: "Convierte en aliado un monstruo que ataque tu búnker, de nivel 5 como máximo." },
   { tipo:"ciencia_i",   efecto:"bajar_nivel_enemigo",coste:2, titulo: "Bajar rango", descripcion: "Baja un rango el nivel de un monstruo enemigo que esté atacando tu búnker." },
   { tipo:"ciencia_i",   efecto:"evolucionar_torreta",coste:2, titulo: "Evolucionar torre", descripcion: "Evoluciona una torre al siguiente nivel." },
-  { tipo:"ciencia_i",   efecto:"vuelo_seguro",       coste:2, titulo: "Vuelo seguro", descripcion: "Manda un monstruo de nivel 3 o inferior (**yeti**, **carroñero** o **rastreador**) a la entrada de una escalera rival." },
   { tipo:"ciencia_i",   efecto:"torreta2_gratis",    coste:3, titulo: "Torre de nivel 2", descripcion: "Construye una torre de nivel 2 en tu búnker sin necesidad de tener ARMERÍA 3." },
   { tipo:"ciencia_i",   efecto:"monstruo3_gratis",   coste:3, titulo: "Monstruo de nivel 3", descripcion: "Crea un monstruo de nivel 3 (**yeti**) en un box sin necesidad de tener CRIADERO 3." },
   /* Estas cuatro suben el nivel al momento: no se busca ninguna carta en el
@@ -330,7 +343,12 @@ function migrarNombres(e) {
     for (const m of [...(j.lanzaderas ?? []), j.lanzadera]) if (m) m.tipo = tipo(m.tipo);
   }
   for (const lista of [e.mazoDestino, e.descarteDestino]) {
-    for (const c of lista ?? []) c.tipo = tipo(c.tipo);
+    for (const c of lista ?? []) {
+      c.tipo = tipo(c.tipo);
+      /* Los eventos se repartieron antes de tener tramo: se les pone el de su
+         plantilla para que una mesa empezada también respete los ciclos. */
+      if (c.id && !c.tramo && TRAMO_DESTINO.get(c.id)) c.tramo = TRAMO_DESTINO.get(c.id);
+    }
   }
   if (e.ultimoDestino) e.ultimoDestino.tipo = tipo(e.ultimoDestino.tipo);
 }
@@ -384,8 +402,26 @@ function normalizarIds(e) {
   }
 }
 
+/* Cartas que se han retirado del juego (la de Vuelo seguro, que era muy
+   difícil de manejar). Se limpian de las mesas empezadas: si se quedan en la
+   mano no se pueden jugar y atascan el descarte. */
+const CARTAS_RETIRADAS = new Set(["vuelo_seguro", "avanzar_rival_1"]);
+
+function retirarCartasViejas(e) {
+  for (const j of Object.values(e.jugadores ?? {})) {
+    const listas = [j.mano, j.mazoBunker, j.descarteBunker, j.bunker?.recursos, j.bunker?.ciencia];
+    for (const lista of listas) {
+      if (!Array.isArray(lista)) continue;
+      for (let i = lista.length - 1; i >= 0; i--) {
+        if (CARTAS_RETIRADAS.has(lista[i]?.efecto)) lista.splice(i, 1);
+      }
+    }
+  }
+}
+
 function sincronizarTorres(e) {
   migrarNombres(e);
+  retirarCartasViejas(e);
   sincronizarTextosCartas(e);
   normalizarIds(e);
   normalizarDuenos(e);
@@ -454,7 +490,7 @@ function jugadorInicial(info, e) {
 // ── Contrato ──────────────────────────────────────────────────────────────
 const bunkerWars = {
   id: "bunker-wars",
-  nombre: "Himalayan Fortress",
+  nombre: "PYMALS",
   min: 2,
   max: 8,
   resumen: "Defiende tu búnker 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
@@ -465,15 +501,22 @@ const bunkerWars = {
     const e = {
       luna: 1,
       modo,
-      fase: "avance",
+      fase: "lanzar",
       orden: jugadores.map(j => j.id),
       turnoIdx: 0,
       rng: (Number(semilla) || 1) >>> 0,
       mazoDestino: [],
       descarteDestino: [],
+      /* Carta fijada para el ciclo actual: la primera que se roba en la
+         jornada es la que verán todos los jugadores. */
+      destinoCiclo: null,
+      /* Última carta de Destino repartida: sirve para no encadenar dos eventos
+         y para que la primera carta de la partida sea un avistamiento. */
+      destinoPrevio: null,
       nivelEnemigo: 1,
       jugadores: {},
       regalos: [],
+      peticiones: [],
       final: null,
     };
     for (const [i, j] of jugadores.entries()) {
@@ -483,13 +526,9 @@ const bunkerWars = {
       e.jugadores[j.id] = jugadorInicial({ ...j, equipo }, e);
     }
     e.mazoDestino = crearMazoDestino(jugadores.length, e);
-    /* El primer turno arranca ya en la fase de decretos (avance, lanzar y
-       carta de Destino se resuelven solos), con las monedas y los decretos
-       base a la vista. */
+    /* La jornada empieza por la lanzadera. Si no hay nada que lanzar, el
+       motor la pasa sola y deja el turno en el avance de atacantes. */
     resolverAutomaticas(e, []);
-    const primero = e.jugadores[e.orden[0]];
-    primero.energia = energiaTotal(primero);
-    primero.accionesRestantes = accionesTotal(primero);
     return e;
   },
 
@@ -506,16 +545,23 @@ const bunkerWars = {
     sincronizarTorres(e);
 
     switch (e.fase) {
+      /* En todas las fases se ofrece además el pase directo: el jugador puede
+         abandonar el turno aunque le queden cartas, monedas o decretos. */
       case "avance":
+      case "defensores":
       case "carta":
+      case "carta_ver":
+      case "carta_efecto":
       case "energia":
-        return [{ tipo: "confirmar", texto: "Continuar" }];
+        return [{ tipo: "confirmar", texto: "Continuar" }, { tipo: "saltar_turno", texto: "Pasar turno" }];
       case "lanzar":
-        return legalesLanzar(e, jugadorId);
+        return [...legalesLanzar(e, jugadorId), { tipo: "saltar_turno", texto: "Pasar turno" }];
       case "acciones":
-        return legalesAcciones(e, jugadorId);
+        return [...legalesAcciones(e, jugadorId), { tipo: "saltar_turno", texto: "Pasar turno" }];
       case "descartar":
-        return legalesDescartar(e, jugadorId);
+        return [...legalesDescartar(e, jugadorId), { tipo: "saltar_turno", texto: "Pasar turno" }];
+      case "fin_turno":
+        return [{ tipo: "pasar_turno", texto: "Pasar turno" }, { tipo: "saltar_turno", texto: "Pasar turno" }];
       default:
         return [];
     }
@@ -526,13 +572,21 @@ const bunkerWars = {
     sincronizarTorres(e);
     const evs = [];
     let r;
-    switch (e.fase) {
-      case "avance":   r = faseAvance(e, jugadorId, evs); break;
-      case "lanzar":   r = faseLanzar(e, jugadorId, accion, evs); break;
-      case "carta":    r = faseCarta(e, jugadorId, evs); break;
-      case "energia":  r = faseEnergia(e, jugadorId, evs); break;
-      case "acciones": r = faseAcciones(e, jugadorId, accion, evs); break;
-      case "descartar":r = faseDescartar(e, jugadorId, accion, evs); break;
+    /* El pase directo no depende de la fase: cierra el turno en el momento en
+       que el jugador lo pide, aunque le queden acciones o cartas. */
+    if (accion?.tipo === "saltar_turno") {
+      r = cerrarTurnoYAvanzar(e, jugadorId, evs);
+    } else switch (e.fase) {
+      case "lanzar":    r = faseLanzar(e, jugadorId, accion, evs); break;
+      case "avance":    r = faseAvance(e, jugadorId, evs); break;
+      case "defensores":r = faseDefensores(e, jugadorId, evs); break;
+      case "carta":     r = faseCarta(e, jugadorId, evs); break;
+      case "carta_ver": r = faseVerCarta(e, jugadorId, evs); break;
+      case "carta_efecto": r = faseCartaEfecto(e, jugadorId, evs); break;
+      case "energia":   r = faseEnergia(e, jugadorId, evs); break;
+      case "acciones":  r = faseAcciones(e, jugadorId, accion, evs); break;
+      case "descartar": r = faseDescartar(e, jugadorId, accion, evs); break;
+      case "fin_turno": r = faseFinTurno(e, jugadorId, accion, evs); break;
       default:         r = { estado: e, eventos: evs };
     }
     /* Tras cualquier acción, las fases automáticas siguen solas hasta que haya
@@ -578,6 +632,10 @@ const bunkerWars = {
       box: j.box,
       lanzaderas: j.lanzaderas,
       regalos: j.regalos ?? [],
+      peticiones: (e.peticiones ?? []).filter((p) =>
+        e.jugadores[p.de]?.vivo
+        && (p.de === jugadorId || esAliado(e, jugadorId, p.de))),
+      enviosPendientes: (e.regalos ?? []).filter((g) => g.para === jugadorId),
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
       teToca: e.orden[e.turnoIdx] === jugadorId,
@@ -602,9 +660,17 @@ const bunkerWars = {
 
   bot(e, jugadorId) {
     const acciones = bunkerWars.legales(e, jugadorId);
-    // Pasa siempre: confirmar > descartar > primera opción disponible
+    if (!acciones.length) return null;
+    const j = e.jugadores[jugadorId];
+
+    if (e.fase === "acciones") return botElegirAccion(e, j, acciones);
+    if (e.fase === "lanzar") return botElegirLanzamiento(e, j, acciones);
+    if (e.fase === "descartar") return botElegirDescarte(e, j, acciones);
+
+    // Fases automáticas: avanzar, robar carta, resolver efectos, etc.
     return acciones.find(a => a.tipo === "confirmar")
-      ?? acciones.find(a => a.tipo === "descartar")
+      ?? acciones.find(a => a.tipo === "pasar_turno")
+      ?? acciones.find(a => a.tipo === "no_lanzar")
       ?? acciones[0]
       ?? null;
   },
@@ -666,7 +732,19 @@ function faseAvance(e, jugadorId, evs) {
     }
   }
 
-  e.fase = "lanzar";
+  e.fase = "defensores";
+  comprobarFin(e);
+  return { estado: e, eventos: evs };
+}
+
+// ── Fase DEFENSORES ──────────────────────────────────────────────────────
+/* Los monstruos de laboratorio avanzan después de los atacantes y después de
+   las lanzaderas. Así las lanzaderas ya se han vaciado y el que llega a la
+   entrada no puede lanzarse en el mismo turno. */
+function faseDefensores(e, jugadorId, evs) {
+  const j = e.jugadores[jugadorId];
+  if (j?.vivo) avanzarMonstruosPropios(j, evs);
+  e.fase = "carta";
   comprobarFin(e);
   return { estado: e, eventos: evs };
 }
@@ -690,9 +768,9 @@ function faseLanzar(e, jugadorId, accion, evs) {
     if (hayLanzamientos(e, jugadorId)) return { estado: e, eventos: evs };
   }
 
-  avanzarMonstruosPropios(j, evs);
-
-  e.fase = "carta";
+  /* Los defensores ya no se mueven aquí: esta fase solo lanza. El avance de
+     los monstruos propios va después de los atacantes, en faseDefensores. */
+  e.fase = "avance";
   return { estado: e, eventos: evs };
 }
 
@@ -739,9 +817,9 @@ function avanzarMonstruosPropios(j, evs) {
   }
 }
 
-/* Fases sin decisión (avance, lanzar sin monstruo en la lanzadera, carta de
-   Destino y monedas) se resuelven solas. Solo se para en "lanzar" cuando hay
-   un monstruo esperando y hay que elegir a quién se le manda. */
+/* La lanzadera sin nada que lanzar se pasa sola. El avance de atacantes, el de
+   defensores y la carta se paran para que el cliente pueda enseñar cada paso
+   con su animación. */
 const AVISO_LUNA_ROJA = "La luna blanca se ha vuelto roja: desde ahora los monstruos llegan con su nivel real.";
 
 function resolverAutomaticas(e, evs) {
@@ -753,10 +831,9 @@ function resolverAutomaticas(e, evs) {
        seguir: nadie tiene jugadas legales. */
     if (!e.jugadores[id]?.vivo) {
       if (avanzarTurno(e)) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
-      e.fase = "avance";
+      e.fase = "lanzar";
       continue;
     }
-    if (e.fase === "avance") { faseAvance(e, id, evs); continue; }
     if (e.fase === "lanzar") {
       /* Solo hay decisión si hay una lanzadera con monstruo y algún camino
          rival libre donde soltarlo. Si no, las lanzaderas se pasan de largo. */
@@ -764,22 +841,61 @@ function resolverAutomaticas(e, evs) {
       faseLanzar(e, id, { tipo: "no_lanzar" }, evs);
       continue;
     }
-    if (e.fase === "carta")   { faseCarta(e, id, evs); continue; }
+    /* Estas fases se paran para que el cliente las enseñe: avance de
+       atacantes, avance de defensores, carta y efecto de la carta. */
+    if (e.fase === "avance" || e.fase === "defensores" || e.fase === "carta" || e.fase === "carta_ver" || e.fase === "carta_efecto") break;
     if (e.fase === "energia") { faseEnergia(e, id, evs); continue; }
+    /* El descarte cierra la jornada. Antes la mesa se quedaba en «fin de
+       turno» esperando un botón que el jugador ni veía: no hay nada que
+       decidir después de descartar, así que el turno pasa solo. */
+    if (e.fase === "fin_turno") { cerrarTurnoYAvanzar(e, id, evs); continue; }
     break;
   }
 }
 
 // ── Fase CARTA ────────────────────────────────────────────────────────────
-function faseCarta(e, jugadorId, evs) {
-  const robar = () => {
-    if (e.mazoDestino.length === 0) {
-      e.mazoDestino = barajar(e.descarteDestino, e);
-      e.descarteDestino = [];
-    }
-    return e.mazoDestino.shift() ?? null;
+/* Una sola carta por ciclo: se roba la primera vez que un jugador llega a su
+   fase de Destino y se reutiliza para todos los demás. Solo se descarta una
+   vez, cuando se fija para el ciclo. El mazo nuevo separa los Avistamientos
+   en tres tramos y solo deja robar los del tramo de la luna actual. */
+function tramoDestino(luna) {
+  if (luna <= 4) return 1;
+  if (luna <= 8) return 2;
+  return 3;
+}
+
+/* Una carta vale desde su tramo en adelante: en la luna 6 sigue valiendo un
+   avistamiento de rastreadores (es el suelo del mazo) pero nunca al revés:
+   un coloso no aparece en la luna 1. */
+function cartaDeTramo(carta, tramo) {
+  return !carta?.tramo || carta.tramo <= tramo;
+}
+
+function cartaDestinoDelCiclo(e, evs) {
+  if (e.destinoCiclo?.luna === e.luna) return e.destinoCiclo.carta ?? null;
+
+  const tramo = tramoDestino(e.luna);
+  const sacar = (filtro = null) => {
+    const i = e.mazoDestino.findIndex(c => cartaDeTramo(c, tramo) && (!filtro || filtro(c)));
+    return i >= 0 ? e.mazoDestino.splice(i, 1)[0] : null;
   };
-  let carta = robar();
+  const recargar = () => {
+    const reciclables = e.descarteDestino.filter(c => cartaDeTramo(c, tramo));
+    if (!reciclables.length) return false;
+    e.descarteDestino = e.descarteDestino.filter(c => !cartaDeTramo(c, tramo));
+    e.mazoDestino = barajar([...e.mazoDestino, ...reciclables], e);
+    return true;
+  };
+  const robar = (filtro = null) => {
+    let carta = sacar(filtro);
+    if (!carta && recargar()) carta = sacar(filtro);
+    return carta;
+  };
+  /* La partida abre con un avistamiento y, después de un evento, la siguiente
+     carta vuelve a traer monstruos: no hay dos ni tres cartas seguidas de las
+     que mueven fichas sin que llegue nada. */
+  const trasEvento = !e.destinoPrevio || !AMENAZAS.has(e.destinoPrevio.tipo);
+  let carta = (trasEvento ? robar(c => AMENAZAS.has(c.tipo)) : null) ?? robar();
   /* Mesas antiguas: la carta roja venía dentro del mazo y se comía el turno de
      quien la sacaba. Si aún queda una en un mazo viejo, se resuelve y se roba
      también la carta que toca, como en las partidas nuevas. */
@@ -789,9 +905,25 @@ function faseCarta(e, jugadorId, evs) {
     evs.push({ tipo: "carta_roja", texto: "¡La luna se ha vuelto roja! Los monstruos llegan con su nivel real." });
     carta = robar();
   }
+  if (carta) e.descarteDestino.push(carta);
+  if (carta) e.destinoPrevio = { tipo: carta.tipo, luna: e.luna };
+  e.destinoCiclo = { luna: e.luna, carta, globalResuelto: false };
+  return carta;
+}
+
+function faseCarta(e, jugadorId, evs) {
+  const carta = cartaDestinoDelCiclo(e, evs);
   if (carta) {
-    e.descarteDestino.push(carta);
     /* La carta queda a la vista en la mesa durante todo el turno. */
+    /* La descripción se calcula con las escaleras que hay libres ahora mismo
+       en el tablero de este jugador. Así no anuncia la central si está
+       ocupada y el monstruo va a entrar por la siguiente de la prioridad. */
+    const senderosDestino = carta.tipo === "amenaza"
+      ? planificarAmenaza(e.jugadores[jugadorId]?.senderos ?? [], carta)
+      : [];
+    const descripcion = carta.tipo === "amenaza"
+      ? describirAmenaza(carta, senderosDestino)
+      : carta.descripcion ?? null;
     e.ultimoDestino = {
       tipo: carta.tipo,
       nivel: carta.nivel ?? null,
@@ -801,13 +933,41 @@ function faseCarta(e, jugadorId, evs) {
       nivelReal: AMENAZAS.has(carta.tipo) ? nivelRealEnemigo(e, carta.nivel) : null,
       prio: carta.prio ?? null,
       cantidad: carta.cantidad ?? null,
+      tramo: carta.tramo ?? null,
+      titulo: carta.titulo ?? null,
+      descripcion,
+      senderosDestino,
       jugadorId,
       luna: e.luna,
     };
-    evs.push(...resolverDestino(e, jugadorId, carta));
   }
-  e.fase = "energia";
+  /* El efecto no se aplica todavía: se guarda para cuando el jugador cierre
+     la carta. Así no entran monstruos ni se mueven fichas por detrás del
+     modal. */
+  e.cartaPendiente = carta ?? null;
+  e.fase = "carta_ver";
   comprobarFin(e);
+  return { estado: e, eventos: evs };
+}
+
+function faseVerCarta(e, jugadorId, evs) {
+  const carta = e.cartaPendiente ?? null;
+  e.cartaPendiente = null;
+  if (carta) {
+    const global = DESTINO_GLOBAL.has(carta.tipo);
+    if (!global || !e.destinoCiclo?.globalResuelto) {
+      evs.push(...resolverDestino(e, jugadorId, carta));
+      if (global && e.destinoCiclo) e.destinoCiclo.globalResuelto = true;
+    }
+  }
+  comprobarFin(e);
+  /* El cliente tiene que ver el resultado de la carta antes de seguir. */
+  e.fase = "carta_efecto";
+  return { estado: e, eventos: evs };
+}
+
+function faseCartaEfecto(e, jugadorId, evs) {
+  if (!e.final) e.fase = "energia";
   return { estado: e, eventos: evs };
 }
 
@@ -825,9 +985,21 @@ function faseEnergia(e, jugadorId, evs) {
   return { estado: e, eventos: evs };
 }
 
+/* Primer hueco libre de los caminos propios, empezando por la casilla pegada
+   al búnker y siguiendo hacia la entrada. */
+function huecoEnCaminos(j) {
+  for (let pos = 3; pos >= 0; pos--) {
+    for (const s of j.senderos ?? []) {
+      if (!s.posiciones?.[pos]) return { posiciones: s.posiciones, pos, sendero: s.id };
+    }
+  }
+  return null;
+}
+
 /* Entrega los envíos pendientes al jugador que empieza su fase de decretos.
-   Las monedas y los decretos ya están repartidos; los monstruos solo ocupan
-   huecos libres de las cuatro jaulas visibles. */
+   Las monedas y los decretos ya están repartidos; los monstruos ocupan huecos
+   libres de las cuatro jaulas visibles y, si no hay, se quedan defendiendo en
+   el primer hueco libre de sus caminos (del búnker hacia la entrada). */
 function entregarRegalos(e, jugadorId, evs) {
   if (!e.regalos?.length) return;
   const j = e.jugadores[jugadorId];
@@ -839,35 +1011,89 @@ function entregarRegalos(e, jugadorId, evs) {
     j.energia += g.monedas ?? 0;
     j.accionesRestantes += g.decretos ?? 0;
     const recibidos = [];
+    const calles = [];
     const sobran = [];
     for (const m of g.monstruos ?? []) {
       const i = j.box.findIndex((x, idx) => idx < 4 && !x);
       if (i >= 0) {
         j.box[i] = { ...m, dueno: jugadorId };
         recibidos.push({ ...m, dueno: jugadorId });
-      } else {
-        sobran.push(m);
+        continue;
       }
+      /* Sin jaula libre no se queda esperando: entra a defender en el hueco
+         libre más cercano al búnker y, si no, hacia la entrada. */
+      const hueco = huecoEnCaminos(j);
+      if (hueco) {
+        hueco.posiciones[hueco.pos] = { id: uid("r"), nivel: m.nivel, dueno: jugadorId };
+        calles.push(m.nivel);
+        continue;
+      }
+      sobran.push(m);
     }
-    j.regalos = [...(j.regalos ?? []), {
-      id: g.id,
-      de: g.deNombre ?? "Un aliado",
-      monedas: g.monedas ?? 0,
-      decretos: g.decretos ?? 0,
-      monstruos: recibidos.map((m) => m.nivel),
-      sobran: sobran.map((m) => m.nivel),
-    }];
-    evs.push({
-      tipo: "regalo",
-      texto: `${g.deNombre ?? "Un aliado"} envía a ${j.nombre}: ${g.monedas ?? 0} monedas, ${g.decretos ?? 0} decretos y ${recibidos.length} monstruo(s).`,
-      a: jugadorId,
-    });
+    /* Un monstruo que no cabe no se pierde: la caja se queda esperando en la
+       mesa y se vuelve a intentar en el siguiente turno del destinatario. */
+    if (sobran.length) {
+      e.regalos.push({ ...g, monedas: 0, decretos: 0, monstruos: sobran, esperando: true });
+    }
+    /* Se avisa cuando entra algo y la primera vez que la caja se queda sin
+       sitio; después no se repite el aviso en cada turno. */
+    const entraAlgo = recibidos.length > 0 || calles.length > 0
+      || (g.monedas ?? 0) > 0 || (g.decretos ?? 0) > 0;
+    if (entraAlgo || !g.esperando) {
+      j.regalos = [...(j.regalos ?? []), {
+        id: uid("g"),
+        de: g.deNombre ?? "Un aliado",
+        monedas: g.monedas ?? 0,
+        decretos: g.decretos ?? 0,
+        monstruos: recibidos.map((m) => m.nivel),
+        calles,
+        sobran: sobran.map((m) => m.nivel),
+      }];
+      evs.push({
+        tipo: "regalo",
+        texto: `${g.deNombre ?? "Un aliado"} envía a ${j.nombre}: ${g.monedas ?? 0} monedas, ${g.decretos ?? 0} decretos y ${recibidos.length + calles.length} monstruo(s).`
+          + (calles.length ? ` ${calles.length} a los caminos.` : "")
+          + (sobran.length ? ` ${sobran.length} esperan hueco.` : ""),
+        a: jugadorId,
+      });
+    }
   }
 }
 
 // ── Fase DECRETOS (interna: acciones) ─────────────────────────────────────
 function faseAcciones(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
+
+  /* Petición a los aliados: es gratis, no gasta monedas, decretos ni acciones.
+     Se guarda una por jugador y ronda: si vuelve a pedir, sustituye la anterior. */
+  if (accion.tipo === "pedir_aliado") {
+    const pide = {
+      monedas: accion.monedas === true,
+      decretos: accion.decretos === true,
+      monstruos: accion.monstruos === true,
+    };
+    if (!pide.monedas && !pide.decretos && !pide.monstruos) {
+      return { estado: e, eventos: evs };
+    }
+    const hayAliados = Object.values(e.jugadores)
+      .some((o) => o.vivo && o.id !== jugadorId && esAliado(e, jugadorId, o.id));
+    if (!hayAliados) return { estado: e, eventos: evs };
+
+    /* Una petición por jugador: sigue abierta entre rondas hasta que alguien
+       la cubra o el propio jugador la cancele. */
+    e.peticiones = (e.peticiones ?? []).filter((p) => p.de !== jugadorId);
+    e.peticiones.push({
+      id: uid("p"), de: jugadorId, deNombre: j.nombre,
+      ...pide, luna: e.luna,
+    });
+    const cosas = [
+      pide.monedas ? "monedas" : "",
+      pide.decretos ? "decretos" : "",
+      pide.monstruos ? "monstruos" : "",
+    ].filter(Boolean);
+    evs.push({ tipo: "peticion", texto: `${j.nombre} pide a sus aliados: ${cosas.join(", ")}.` });
+    return { estado: e, eventos: evs };
+  }
 
   /* Envío a un aliado: no es una jugada de las cartas, sino un traspaso que
      se queda esperando al siguiente turno del destinatario. */
@@ -888,6 +1114,9 @@ function faseAcciones(e, jugadorId, accion, evs) {
     if (monstruos.length > huecos) return { estado: e, eventos: evs };
     if (!monedas && !decretos && !monstruos.length) return { estado: e, eventos: evs };
 
+    /* Un envío por jugador y ronda: el bot no debe vaciar su economía
+       mandando monedas en cada vuelta del bucle de acciones. */
+    j.ultimoEnvioLuna = e.luna;
     j.energia -= monedas;
     j.accionesRestantes -= decretos;
     for (const m of monstruos) {
@@ -899,7 +1128,17 @@ function faseAcciones(e, jugadorId, accion, evs) {
       id: uid("g"), de: j.id, deNombre: j.nombre, para: para.id,
       monedas, decretos, monstruos: monstruos.map((m) => ({ ...m, dueno: para.id })), luna: e.luna,
     });
+    /* El envío ya cubre la petición de quien lo recibe: se retira de la mesa. */
+    e.peticiones = (e.peticiones ?? []).filter((p) => p.de !== para.id);
     evs.push({ tipo: "envio", texto: `${j.nombre} envía a ${para.nombre}: ${monedas} monedas, ${decretos} decretos y ${monstruos.length} monstruo(s).`, a: para.id });
+    return { estado: e, eventos: evs };
+  }
+
+  /* Cancelar la propia petición también es gratis. */
+  if (accion.tipo === "cancelar_peticion") {
+    const tenia = (e.peticiones ?? []).some((p) => p.de === jugadorId);
+    e.peticiones = (e.peticiones ?? []).filter((p) => p.de !== jugadorId);
+    if (tenia) evs.push({ tipo: "peticion", texto: `${j.nombre} cancela su petición.` });
     return { estado: e, eventos: evs };
   }
 
@@ -1051,7 +1290,9 @@ function faseAcciones(e, jugadorId, accion, evs) {
         j.energia--;
         j.accionesRestantes--;
         s.posiciones[posOrigen] = null;
-        s.posiciones[posDest] = monstruoSobrevive ? { ...mMon } : null;
+        /* Si el que se mueve pierde, el atacante se queda donde estaba: antes
+           se borraban los dos y parecía que un nivel 1 mataba a un nivel 7. */
+        s.posiciones[posDest] = monstruoSobrevive ? { ...mMon } : ocupante;
         evs.push(enemigoMuere
           ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId }
           : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
@@ -1112,33 +1353,49 @@ function faseAcciones(e, jugadorId, accion, evs) {
 // ── Fase DESCARTAR ────────────────────────────────────────────────────────
 function faseDescartar(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
-  /* Descartar es opcional: hasta 2 cartas por turno, o ninguna. */
   const ids = (accion.cartaIds ?? []).slice(0, 2);
+
+  /* Sin cartas jugadas, descartar una es obligatorio (si hay mano). Con cartas
+     jugadas, se pueden descartar hasta dos o ninguna. */
+  if ((j.cartasJugadasEsteTurno ?? 0) === 0 && j.mano.length > 0 && ids.length === 0) {
+    return { estado: e, eventos: evs };
+  }
 
   for (const uid of ids) {
     const idx = j.mano.findIndex(c => c.uid === uid);
     if (idx >= 0) j.descarteBunker.push(j.mano.splice(idx, 1)[0]);
   }
 
-  // Robar hasta 4
+  // Robar hasta 4 antes de cerrar la jornada.
   while (j.mano.length < 4) {
     const carta = robarBunker(j, e);
     if (!carta) break;
     j.mano.push(carta);
   }
 
-  const lunaRoja = avanzarTurno(e);
   comprobarFin(e);
+  if (!e.final) e.fase = "fin_turno";
+  return { estado: e, eventos: evs };
+}
 
+// ── Fase FIN DE TURNO ─────────────────────────────────────────────────────
+function faseFinTurno(e, jugadorId, accion, evs) {
+  if (accion?.tipo !== "pasar_turno") return { estado: e, eventos: evs };
+  return cerrarTurnoYAvanzar(e, jugadorId, evs);
+}
+
+/* Cierra la jornada actual y deja el turno en el siguiente jugador vivo. Se
+   usa al final del turno y también cuando el jugador pulsa «pasar turno» en
+   cualquier otra fase. */
+function cerrarTurnoYAvanzar(e, jugadorId, evs) {
+  const lunaRoja = avanzarTurno(e);
+  e.fase = "lanzar";
+  comprobarFin(e);
   if (!e.final) {
-    e.fase = "avance";
     const sigJugador = e.jugadores[e.orden[e.turnoIdx]];
-    if (lunaRoja) {
-      evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
-    }
+    if (lunaRoja) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
     evs.push({ tipo: "nuevo_turno", texto: `Luna ${e.luna} — turno de ${sigJugador?.nombre}.` });
   }
-
   return { estado: e, eventos: evs };
 }
 
@@ -1171,7 +1428,14 @@ function legalesAcciones(e, jugadorId) {
   const acc = [{ tipo: "pasar", texto: "Terminar decretos" }];
   const aliadosVivos = Object.values(e.jugadores)
     .filter((o) => o.vivo && esAliado(e, jugadorId, o.id));
-  if (aliadosVivos.length) acc.push({ tipo: "enviar_aliado", libre: true, texto: "Enviar a un aliado" });
+  if (aliadosVivos.length) {
+    acc.push({ tipo: "enviar_aliado", libre: true, texto: "Enviar a un aliado" });
+    /* Pedir es gratis: sigue disponible aunque no queden decretos. */
+    acc.push({ tipo: "pedir_aliado", libre: true, texto: "Pedir a los aliados" });
+  }
+  if ((e.peticiones ?? []).some((p) => p.de === jugadorId)) {
+    acc.push({ tipo: "cancelar_peticion", libre: true, texto: "Cancelar petición" });
+  }
   if (!j.accionesRestantes) return acc;
 
   for (const carta of j.mano) {
@@ -1222,29 +1486,6 @@ function legalesAcciones(e, jugadorId) {
           });
         });
       }
-    } else if (carta.efecto === "avanzar_rival_1") {
-      for (const otro of Object.values(e.jugadores)) {
-        if (!otro.vivo || !esRival(e, jugadorId, otro.id)) continue;
-        for (const s of otro.senderos) {
-          s.posiciones.forEach((f, posicion) => {
-            if (f?.tipo !== "atacante" || f.dueno !== jugadorId || f.nivel > 3) return;
-            if (posicion < 3) {
-              const destino = s.posiciones[posicion + 1];
-              if (destino && destino.tipo !== "monstruo") return; // tapado por otro atacante
-            }
-            const objetivo = { jugadorId: otro.id, sendero: s.id, posicion };
-            acc.push({
-              tipo: "mejorar_bunker", cartaId: carta.uid, objetivo,
-              etiqueta: posicion === 3
-                ? `Entrar en búnker de ${otro.nombre} (C${s.id})`
-                : `M${f.nivel} avanza en E${s.id} de ${otro.nombre}`,
-              texto: posicion === 3
-                ? `Avanza al rival: monstruo ${f.nivel} entra en el búnker de ${otro.nombre}`
-                : `Avanza al rival: monstruo ${f.nivel} → peldaño ${posicion + 2} de C${s.id} (${otro.nombre})`,
-            });
-          });
-        }
-      }
     } else if (carta.efecto === "evolucionar_torreta") {
       normalizarTorres(j);
       j.bunker.torres.forEach((t, i) => {
@@ -1266,23 +1507,6 @@ function legalesAcciones(e, jugadorId) {
           texto: t ? `Torre de nivel 2: subir la torre ${i + 1} a 2` : `Torre de nivel 2 en la posición ${i + 1}`,
         });
       });
-    } else if (carta.efecto === "vuelo_seguro") {
-      for (let i = 0; i < j.box.length; i++) {
-        const m = j.box[i];
-        if (!m || m.nivel > 3) continue;
-        for (const otro of Object.values(e.jugadores)) {
-          if (!otro.vivo || !esRival(e, jugadorId, otro.id)) continue;
-          for (const s of otro.senderos) {
-            if (s.posiciones[0]) continue; // entrada ocupada
-            acc.push({
-              tipo: "mejorar_bunker", cartaId: carta.uid,
-              monstruoId: m.id, rivalId: otro.id, sendero: s.id,
-              etiqueta: `M${m.nivel} (box ${boxDeIndice(i) + 1}) → C${s.id} de ${otro.nombre}`,
-              texto: `Vuelo seguro: monstruo ${m.nivel} a la entrada de la escalera ${s.id} de ${otro.nombre}`,
-            });
-          }
-        }
-      }
     } else if (carta.efecto === "monstruo3_gratis") {
       for (let b = 0; b < Math.ceil(j.box.length / BOX_TAM); b++) {
         if (!Array.from({ length: BOX_TAM }, (_, k) => b * BOX_TAM + k).some((i) => !j.box[i])) continue;
@@ -1397,6 +1621,202 @@ function legalesAcciones(e, jugadorId) {
   return acc;
 }
 
+// ── Estrategia de los bots ────────────────────────────────────────────────
+/* Los bots no juegan al azar: primero montan economía y defensas, luego
+   atacan lo que se acerca, mandan parte de sus recursos a un aliado y, con
+   lo que sobra, crían y lanzan monstruos. Cada turno devuelven una sola
+   acción; el servidor vuelve a llamarlos hasta que pasan. */
+function botAtacantesPropios(j) {
+  return j.senderos.reduce((s, sendero) =>
+    s + sendero.posiciones.filter((f) => f?.tipo === "atacante").length, 0);
+}
+
+function botAliado(e, jugadorId) {
+  /* En equipos, el humano primero: así el bot aliado manda sus recursos a la
+     persona y no se los queda otro bot de la misma mesa. */
+  return Object.values(e.jugadores)
+    .filter((o) => o.vivo && o.id !== jugadorId && esAliado(e, jugadorId, o.id))
+    .sort((a, b) => (a.esBot ? 1 : 0) - (b.esBot ? 1 : 0))[0] ?? null;
+}
+
+/* Petición abierta de un aliado. El bot la mira antes que nada: si alguien de
+   su equipo ha pedido algo, le responde a él y no al goteo de siempre. */
+function botPeticionAbierta(e, j) {
+  return (e.peticiones ?? []).find((p) =>
+    p.de !== j.id && e.jugadores[p.de]?.vivo && esAliado(e, j.id, p.de)) ?? null;
+}
+
+function botAccionEnvio(e, j, aliado) {
+  if (j.ultimoEnvioLuna === e.luna) return null;
+  const peticion = botPeticionAbierta(e, j);
+  const para = peticion?.de ?? aliado?.id ?? null;
+  if (!para) return null;
+  const destino = e.jugadores[para];
+
+  /* Con petición se manda lo que pide, dentro de lo que el bot puede soltar:
+     deja una moneda para poder jugar y un decreto para seguir el turno. Sin
+     petición, el goteo de siempre. */
+  const monedas = peticion
+    ? (peticion.monedas ? Math.min(2, Math.max(0, j.energia - 1)) : 0)
+    : (j.energia >= 2 ? (j.energia >= 7 ? 2 : 1) : 0);
+  const decretos = peticion
+    ? (peticion.decretos ? Math.min(1, Math.max(0, j.accionesRestantes - 1)) : 0)
+    : (j.accionesRestantes >= 3 ? 1 : 0);
+
+  /* Monstruos: los más flojos de sus jaulas, y solo los que quepan en las del
+     destinatario (los envíos van a los cuatro huecos visibles). */
+  const monstruos = [];
+  if (peticion?.monstruos) {
+    const huecos = Array.from({ length: 4 }, (_, i) => destino?.box?.[i]).filter((m) => !m).length;
+    const flojos = j.box.filter(Boolean).sort((a, b) => (a.nivel ?? 0) - (b.nivel ?? 0));
+    for (const m of flojos) {
+      if (monstruos.length >= Math.min(2, huecos)) break;
+      monstruos.push(m.id);
+    }
+  }
+
+  if (!monedas && !decretos && !monstruos.length) return null;
+  return {
+    tipo: "enviar_aliado", para, monedas, decretos,
+    ...(monstruos.length ? { monstruos } : {}),
+  };
+}
+
+function botValorCarta(c) {
+  if (!c) return 0;
+  if (c.tipo === "recursos") return 100;
+  if (c.tipo === "armeria") return 96;
+  if (c.tipo === "laboratorio") return 72;
+  if (c.efecto === "subir_recursos") return 98;
+  if (c.efecto === "subir_armeria") return 95;
+  if (c.efecto === "subir_lab_o_arm") return 92;
+  if (c.efecto === "torreta2_gratis") return 90;
+  if (c.efecto === "evolucionar_torreta") return 88;
+  if (c.efecto === "subir_laboratorio") return 70;
+  if (c.efecto === "purga") return 86;
+  if (c.efecto === "convertir_aliado") return 84;
+  if (c.efecto === "bajar_nivel_enemigo") return 82;
+  if (c.efecto === "subir_rango") return 80;
+  if (c.efecto === "monstruo3_gratis") return 74;
+  if (c.tipo === "ciencia") return 68;
+  return 60;
+}
+
+function botPuntuarMejora(e, j, a) {
+  const carta = j.mano.find((c) => c.uid === a.cartaId);
+  if (!carta) return 0;
+  let puntos = botValorCarta(carta) * 10;
+
+  if (carta.efecto === "subir_lab_o_arm") {
+    /* La armería abre torres; el criadero solo cuando ya hay defensa. */
+    puntos += a.edificio === "armeria" ? 8 : -10;
+  }
+  if (carta.efecto === "purga" && !botAtacantesPropios(j)) puntos -= 500;
+  if ((carta.efecto === "convertir_aliado" || carta.efecto === "bajar_nivel_enemigo")
+      && !botAtacantesPropios(j)) puntos -= 450;
+  return puntos;
+}
+
+function botPuntuarAccion(e, j, a) {
+  switch (a.tipo) {
+    case "mejorar_bunker":
+      return botPuntuarMejora(e, j, a);
+
+    case "construir_torreta": {
+      const pos = Number(a.posicion ?? a.sendero) || 0;
+      const amenaza = j.senderos[pos - 1]?.posiciones
+        .filter((f) => f?.tipo === "atacante").length ?? 0;
+      return 910 + amenaza * 20;
+    }
+
+    case "atacar_monstruo":
+      /* Cuanto más cerca está de entrar, más urgente es dispararle. */
+      return 760 + Math.max(0, Number(a.posicion) || 0) * 70;
+
+    case "evolucionar_torreta": {
+      const pos = Number(a.posicion) || 0;
+      const amenaza = j.senderos[pos - 1]?.posiciones
+        .filter((f) => f?.tipo === "atacante").length ?? 0;
+      return 875 + amenaza * 20;
+    }
+
+    case "crear_monstruo":
+      return 600 + (Number(a.nivel) || 1) * 20;
+
+    case "mover_a_lanzadera":
+      return 640;
+
+    case "mover_a_sendero":
+      return botAtacantesPropios(j) ? 855 : 540;
+
+    case "avanzar_monstruo": {
+      const sendero = j.senderos.find((s) => s.id === a.sendero);
+      const destino = sendero?.posiciones?.[a.posicion];
+      return destino?.tipo === "atacante" ? 810 : 520;
+    }
+
+    case "enviar_aliado":
+      return 850;
+
+    case "pasar":
+      return -1;
+
+    default:
+      return 400;
+  }
+}
+
+function botElegirAccion(e, j, acciones) {
+  const aliado = botAliado(e, j.id);
+  const envio = botAccionEnvio(e, j, aliado);
+  /* Cubrir una petición va por delante de sus otras jugadas del turno: así el
+     aviso de la caja llega en la ronda en la que se pide. */
+  const peticion = botPeticionAbierta(e, j);
+  const opciones = [];
+
+  for (const a of acciones) {
+    if (a.tipo === "enviar_aliado" || a.tipo === "pedir_aliado"
+        || a.tipo === "cancelar_peticion" || a.tipo === "pasar") continue;
+    const puntos = botPuntuarAccion(e, j, a);
+    if (puntos > 0) opciones.push({ accion: a, puntos });
+  }
+  if (envio) opciones.push({ accion: envio, puntos: peticion ? 940 : 850 });
+
+  opciones.sort((a, b) => b.puntos - a.puntos);
+  if (opciones.length) return opciones[0].accion;
+  return acciones.find((a) => a.tipo === "pasar") ?? acciones[0] ?? null;
+}
+
+function botElegirLanzamiento(e, j, acciones) {
+  const lanzamientos = acciones.filter((a) => a.tipo === "lanzar");
+  if (!lanzamientos.length) {
+    return acciones.find((a) => a.tipo === "no_lanzar") ?? acciones[0] ?? null;
+  }
+  const puntos = (a) => {
+    const rival = e.jugadores[a.rivalId];
+    const monstruo = j.lanzaderas[a.lanzadera]?.nivel ?? 0;
+    const torre = rival?.bunker?.torres?.[a.sendero - 1]?.nivel ?? 0;
+    return monstruo * 10 + (20 - (rival?.puntosMonsters ?? 0)) + (3 - torre) * 2;
+  };
+  return lanzamientos.sort((a, b) => puntos(b) - puntos(a))[0];
+}
+
+function botElegirDescarte(e, j, acciones) {
+  const descartes = acciones.filter((a) => a.tipo === "descartar");
+  const obligatorio = (j.cartasJugadasEsteTurno ?? 0) === 0 && j.mano.length > 0;
+  if (!obligatorio) {
+    const noDescartar = descartes.find((a) => !(a.cartaIds?.length));
+    if (noDescartar) return noDescartar;
+  }
+  const una = descartes.filter((a) => a.cartaIds?.length === 1);
+  if (!una.length) return descartes.find((a) => !(a.cartaIds?.length)) ?? descartes[0] ?? null;
+  const valor = (a) => {
+    const carta = j.mano.find((c) => c.uid === a.cartaIds[0]);
+    return botValorCarta(carta);
+  };
+  return una.sort((a, b) => valor(a) - valor(b))[0];
+}
+
 /* Nombre legible de una carta, para que cada botón diga qué descarta
    exactamente: con dos cartas iguales o tres "Descartar 2 cartas" idénticos
    el jugador no puede saber qué está eligiendo. */
@@ -1407,6 +1827,7 @@ function nombreCarta(c) {
 function legalesDescartar(e, jugadorId) {
   const j = e.jugadores[jugadorId];
   const max = 2;
+  const obligatorio = (j.cartasJugadasEsteTurno ?? 0) === 0 && j.mano.length > 0;
   /* Si hay cartas repetidas, se numeran, para que dos botones iguales no
      lleven a descartar la que no era. */
   const repes = new Map();
@@ -1432,7 +1853,8 @@ function legalesDescartar(e, jugadorId) {
       }
     }
   }
-  acc.push({ tipo: "descartar", cartaIds: [], texto: "No descartar" });
+  if (!obligatorio) acc.push({ tipo: "descartar", cartaIds: [], texto: "No descartar" });
+  else if (!j.mano.length) acc.push({ tipo: "descartar", cartaIds: [], texto: "Continuar" });
   return acc;
 }
 
@@ -1537,8 +1959,8 @@ function monstruosSubibles(e, jugadorId) {
 
 /* Efectos que necesitan elegir algo (un monstruo, una torre, una calle…). */
 const CIENCIAS_CON_OBJETIVO = new Set([
-  "subir_rango", "avanzar_rival_1", "convertir_aliado", "bajar_nivel_enemigo",
-  "evolucionar_torreta", "vuelo_seguro", "torreta2_gratis", "monstruo3_gratis",
+  "subir_rango", "convertir_aliado", "bajar_nivel_enemigo",
+  "evolucionar_torreta", "torreta2_gratis", "monstruo3_gratis",
 ]);
 
 /* Resuelve el objetivo de una ciencia instantánea: devuelve lo necesario para
@@ -1565,16 +1987,6 @@ function objetivoDe(e, j, efecto, accion) {
       const f = fichaEn(e, j.id, o.sendero, o.posicion);
       return f?.tipo === "atacante" && f.nivel <= 5 ? { ficha: f } : null;
     }
-    case "avanzar_rival_1": {
-      const rival = e.jugadores[o.jugadorId];
-      const s = rival?.senderos.find(s => s.id === o.sendero);
-      const f = s?.posiciones?.[o.posicion];
-      if (!rival?.vivo || !f || f.tipo !== "atacante" || f.dueno !== j.id || f.nivel > 3) return null;
-      if (o.posicion === 3) return { rival, sendero: s, ficha: f, posicion: 3, entra: true };
-      const destino = s.posiciones[o.posicion + 1];
-      if (destino && destino.tipo !== "monstruo") return null; // atacante en medio
-      return { rival, sendero: s, ficha: f, posicion: o.posicion, entra: false, destino };
-    }
     case "evolucionar_torreta": {
       const t = j.bunker.torres?.[(o.posicion ?? 0) - 1];
       return t && t.nivel < 3 ? { torre: t, pos: o.posicion } : null;
@@ -1585,15 +1997,6 @@ function objetivoDe(e, j, efecto, accion) {
       const t = j.bunker.torres?.[pos - 1];
       if (t && t.nivel >= 2) return null;
       return { torre: t ?? null, pos };
-    }
-    case "vuelo_seguro": {
-      const i = j.box.findIndex(m => m && m.id === accion?.monstruoId);
-      const m = j.box[i];
-      if (!m || m.nivel > 3) return null;
-      const rival = e.jugadores[accion?.rivalId];
-      const s = rival?.senderos.find(s => s.id === accion?.sendero);
-      if (!rival?.vivo || !s || s.posiciones[0]) return null;
-      return { boxIdx: i, monstruo: m, rival, sendero: s };
     }
     case "monstruo3_gratis": {
       const b = accion?.boxIdx;
@@ -1665,30 +2068,6 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
       evs.push({ tipo: "convertir", texto: `Un atacante ${nivel} de ${j.nombre} se convierte en aliado.` });
       return true;
     }
-    case "avanzar_rival_1": {
-      const { rival, sendero, ficha, posicion } = o;
-      if (o.entra) {
-        sendero.posiciones[posicion] = null;
-        rival.puntosMonsters += ficha.nivel;
-        evs.push({ tipo: "entrada", texto: `¡Monstruo ${ficha.nivel} de ${j.nombre} entra en el búnker de ${rival.nombre}! (+${ficha.nivel} pts)` });
-        if (rival.puntosMonsters > 20) {
-          rival.vivo = false;
-          evs.push({ tipo: "derrota", texto: `El búnker de ${rival.nombre} ha sido destruido.`, a: rival.id });
-        }
-      } else if (o.destino) {
-        const gana = resolverCombate(ficha, o.destino).monstruoSobrevive;
-        evs.push(gana
-          ? { tipo: "combate", texto: `El monstruo ${ficha.nivel} de ${j.nombre} destruye al monstruo ${o.destino.nivel} de ${rival.nombre}.` }
-          : { tipo: "combate", texto: `El monstruo ${ficha.nivel} de ${j.nombre} muere al atacar al monstruo ${o.destino.nivel} de ${rival.nombre}.` });
-        sendero.posiciones[posicion] = null;
-        if (gana) sendero.posiciones[posicion + 1] = ficha;
-      } else {
-        sendero.posiciones[posicion] = null;
-        sendero.posiciones[posicion + 1] = ficha;
-      }
-      comprobarFin(e);
-      return true;
-    }
     case "evolucionar_torreta": {
       o.torre.nivel += 1;
       evs.push({ tipo: "torre", texto: `${j.nombre} evoluciona la torre de la posición ${o.pos} a nivel ${o.torre.nivel}.` });
@@ -1702,12 +2081,6 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
         j.bunker.torres[o.pos - 1] = { id: uid("t"), nivel: 2, sendero: o.pos, inhabilitada: false };
       }
       evs.push({ tipo: "torre", texto: `${j.nombre} pone una torre de nivel 2 en la posición ${o.pos}.` });
-      return true;
-    }
-    case "vuelo_seguro": {
-      o.sendero.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: o.monstruo.nivel, dueno: j.id };
-      j.box[o.boxIdx] = null;
-      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} manda en vuelo seguro un monstruo ${o.monstruo.nivel} a la entrada de la escalera ${o.sendero.id} de ${o.rival.nombre}.` });
       return true;
     }
     case "monstruo3_gratis": {
@@ -1839,6 +2212,46 @@ function priorizarSendero(senderos, prio) {
   return null;
 }
 
+/* Las cartas de Avistamiento traen una prioridad, pero la escalera que se
+   anuncia en la carta tiene que ser la que de verdad queda libre. Si la
+   central está ocupada, se usa la siguiente de la prioridad. */
+const NOMBRE_ESCALERA = { 1: "izquierda", 2: "central", 3: "derecha" };
+const ESCALERA_LARGA = { 1: "de la izquierda", 2: "central", 3: "de la derecha" };
+
+function planificarAmenaza(senderos, carta) {
+  const cantidad = Math.min(3, Math.max(1, Number(carta.cantidad) || 1));
+  const libres = new Set(
+    (senderos ?? []).filter(s => !s.posiciones[0]).map(s => s.id),
+  );
+  const ids = [];
+  for (const id of (carta.prio ?? [1, 2, 3])) {
+    if (ids.length >= cantidad) break;
+    if (libres.has(id)) {
+      ids.push(id);
+      libres.delete(id);
+    }
+  }
+  return ids;
+}
+
+function fraseEscaleras(ids) {
+  if (ids.length === 1) return `por la escalera ${ESCALERA_LARGA[ids[0]] ?? "central"}`;
+  if (ids.length === 2) {
+    return `por las escaleras ${NOMBRE_ESCALERA[ids[0]] ?? "central"} y ${NOMBRE_ESCALERA[ids[1]] ?? "central"}`;
+  }
+  return "por las tres escaleras";
+}
+
+function describirAmenaza(carta, ids) {
+  const base = String(carta.descripcion ?? "").trim();
+  const cantidad = Math.min(3, Math.max(1, Number(carta.cantidad) || 1));
+  if (!ids.length) {
+    return `${base} ${cantidad === 1 ? "No encuentra" : "No encuentran"} hueco libre en las escaleras.`.trim();
+  }
+  const verbo = ids.length === 1 ? "Sube" : "Suben";
+  return `${base} ${verbo} ${fraseEscaleras(ids)}.`.trim();
+}
+
 function colocarAtacante(senderos, senderoId, nivel) {
   const s = senderos.find(s => s.id === senderoId);
   if (s && !s.posiciones[0]) {
@@ -1855,10 +2268,10 @@ function resolverDestino(e, jugadorId, carta) {
   switch (carta.tipo) {
     case "amenaza": {
       const nv = nivelRealEnemigo(e, carta.nivel);
-      const sid = priorizarSendero(j.senderos, carta.prio);
-      if (sid !== null) {
-        colocarAtacante(j.senderos, sid, nv);
-        evs.push({ tipo: "amenaza", texto: `Destino: monstruo ${nv} en la escalera ${sid} de ${j.nombre}.` });
+      const ids = planificarAmenaza(j.senderos, carta);
+      for (const id of ids) colocarAtacante(j.senderos, id, nv);
+      if (ids.length) {
+        evs.push({ tipo: "amenaza", texto: `Destino: ${ids.length} monstruo(s) ${nv} en las escaleras de ${j.nombre}.` });
       }
       break;
     }
@@ -1904,40 +2317,73 @@ function resolverDestino(e, jugadorId, carta) {
       evs.push({ tipo: "buscar_bunker", texto: `${j.nombre} encuentra una carta de búnker.`, a: jugadorId });
       break;
     case "aniquilar_entrada":
+      /* Solo los atacantes que están entrando en tus caminos. */
       for (const s of j.senderos) {
-        if (s.posiciones[0]) {
+        const f = s.posiciones[0];
+        if (f?.tipo === "atacante") {
           evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo en la entrada de la escalera ${s.id} de ${j.nombre}.` });
           s.posiciones[0] = null;
         }
       }
       break;
     case "aniquilar_nivel":
-      for (const s of j.senderos) {
-        for (let p = 0; p < 4; p++) {
-          const f = s.posiciones[p];
-          if (f?.tipo === "atacante" && f.nivel <= carta.nivelMax) {
-            evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo ${f.nivel} en la escalera ${s.id} de ${j.nombre}.` });
-            s.posiciones[p] = null;
+      /* Todos los monstruos de los caminos, propios o ajenos, pero nunca
+         lanzaderas, jaulas ni cajas. */
+      for (const otro of Object.values(e.jugadores)) {
+        if (!otro.vivo) continue;
+        for (const s of otro.senderos) {
+          for (let p = 0; p < 4; p++) {
+            const f = s.posiciones[p];
+            if ((f?.tipo === "atacante" || f?.tipo === "monstruo") && f.nivel <= carta.nivelMax) {
+              evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo ${f.nivel} en la escalera ${s.id} de ${otro.nombre}.` });
+              s.posiciones[p] = null;
+            }
           }
         }
       }
       break;
     case "matar_mayor": {
-      let mayor = null, sm = null, pm = null;
-      for (const s of j.senderos) {
-        for (let p = 0; p < 4; p++) {
-          if (s.posiciones[p]?.tipo === "atacante" && (!mayor || s.posiciones[p].nivel > mayor)) {
-            mayor = s.posiciones[p].nivel; sm = s; pm = p;
+      let mayor = -1;
+      const objetivos = [];
+      for (const otro of Object.values(e.jugadores)) {
+        if (!otro.vivo) continue;
+        for (const s of otro.senderos) {
+          for (let p = 0; p < 4; p++) {
+            const f = s.posiciones[p];
+            if ((f?.tipo !== "atacante" && f?.tipo !== "monstruo")) continue;
+            if (f.nivel > mayor) {
+              mayor = f.nivel;
+              objetivos.length = 0;
+              objetivos.push({ s, p, f, otro });
+            } else if (f.nivel === mayor) {
+              objetivos.push({ s, p, f, otro });
+            }
           }
         }
       }
-      if (sm) {
-        sm.posiciones[pm] = null;
-        evs.push({ tipo: "aniquilar", texto: `El monstruo más poderoso (${mayor}) de ${j.nombre} muere.` });
+      for (const o of objetivos) o.s.posiciones[o.p] = null;
+      if (objetivos.length) {
+        evs.push({ tipo: "aniquilar", texto: `Caen los monstruos más fuertes (${mayor}) de los caminos: ${objetivos.length}.` });
       }
       break;
     }
     case "avanzar_extra":
+      /* Un peldaño más para todos. Los que ya estaban en la casilla de la
+         puerta, junto a las torres, no tienen casilla delante: entran en el
+         búnker y le quitan vida, igual que en el avance de cada turno. Antes
+         el empujón solo movía la fila de atrás y los de la puerta se quedaban
+         esperando otra vuelta con la fortaleza intacta. */
+      for (const s of j.senderos) {
+        const enLaPuerta = s.posiciones[3];
+        if (enLaPuerta?.tipo !== "atacante") continue;
+        j.puntosMonsters += enLaPuerta.nivel;
+        s.posiciones[3] = null;
+        evs.push({ tipo: "entrada", texto: `¡Monstruo ${enLaPuerta.nivel} entra en el búnker de ${j.nombre}! (+${enLaPuerta.nivel} pts)` });
+        if (j.puntosMonsters > 20) {
+          j.vivo = false;
+          evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
+        }
+      }
       for (const s of j.senderos) {
         for (let pos = 3; pos > 0; pos--) {
           const f = s.posiciones[pos - 1];
@@ -1996,17 +2442,38 @@ function resolverDestino(e, jugadorId, carta) {
           : `¡Miedo! Ninguno de los ${vivos} atacantes puede retroceder.` });
       break;
     }
-    case "convertir_aliado":
+    case "convertir_aliado": {
+      const candidatos = [];
       for (const s of j.senderos) {
-        const f = s.posiciones[0];
-        if (f?.tipo === "atacante" && f.nivel <= 5) {
-          f.tipo = "monstruo";
-          f.dueno = j.id;
-          evs.push({ tipo: "convertir", texto: `Atacante ${f.nivel} en la escalera ${s.id} de ${j.nombre} se convierte en aliado.` });
-          break;
+        for (let p = 0; p < 4; p++) {
+          const f = s.posiciones[p];
+          if (f?.tipo === "atacante" && f.nivel <= 5) candidatos.push({ s, p, f });
         }
       }
+      if (candidatos.length) {
+        const o = candidatos[Math.floor(tirar(e) * candidatos.length)];
+        o.f.tipo = "monstruo";
+        o.f.dueno = j.id;
+        evs.push({ tipo: "convertir", texto: `Atacante ${o.f.nivel} en la escalera ${o.s.id} de ${j.nombre} se convierte en aliado.` });
+      }
       break;
+    }
+    case "desercion": {
+      const candidatos = [];
+      for (const s of j.senderos) {
+        for (let p = 0; p < 4; p++) {
+          const f = s.posiciones[p];
+          if (f?.tipo === "monstruo") candidatos.push({ s, p, f });
+        }
+      }
+      if (candidatos.length) {
+        const o = candidatos[Math.floor(tirar(e) * candidatos.length)];
+        o.f.tipo = "atacante";
+        o.f.dueno = j.id;
+        evs.push({ tipo: "convertir", texto: `Un monstruo ${o.f.nivel} de ${j.nombre} deserta en la escalera ${o.s.id}.` });
+      }
+      break;
+    }
     case "subir_monstruos":
       for (const s of j.senderos) {
         for (let p = 0; p < 4; p++) {

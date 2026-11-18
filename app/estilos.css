@@ -9,7 +9,7 @@
   --tinta: #eef1f4;
   --tinta-suave: #aeb7c0;
   --tinta-tenue: #7d8790;
-  --fondo: #0f1214;
+  --fondo: #000;
   --panel: #171b1e;
   --panel-2: #20262a;
   --borde: rgba(233, 239, 244, 0.09);
@@ -99,6 +99,12 @@
 html, body {
   margin: 0;
   min-height: 100%;
+  /* `clip` en vez de `hidden`: `hidden` convierte el body en contenedor de
+     scroll y en iOS eso descoloca lo que va con `position: fixed` (las barras
+     del juego se movían al hacer scroll). Si el navegador no lo entiende, se
+     queda el `hidden` de la línea anterior. */
+  overflow-x: hidden;
+  overflow-x: clip;
   background: var(--fondo);
   color: var(--tinta);
   font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -109,7 +115,7 @@ html, body {
 
 body {
   min-height: 100dvh;
-  padding-top: env(safe-area-inset-top);
+  padding-top: calc(37px + env(safe-area-inset-top));
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -128,8 +134,10 @@ a { color: var(--plata); }
 /* ── Barra ─────────────────────────────────────────────────────────────── */
 
 .barra {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 20;
   /* Tres columnas: la marca queda en el centro exacto y los iconos a la
      derecha, aunque el ancho de cada lado sea distinto. */
@@ -139,15 +147,12 @@ a { color: var(--plata); }
   gap: 8px;
   /* 7 px arriba y abajo: lo justo para que el contenido respire, igual por los
      dos lados. */
-  padding: 7px 12px;
-  background: linear-gradient(to bottom, rgba(18, 16, 14, 0.96), rgba(18, 16, 14, 0.78));
+  padding: calc(7px + env(safe-area-inset-top)) 12px 7px;
+  background: linear-gradient(to bottom, rgba(18, 16, 14, 1), rgba(18, 16, 14, 0.78));
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--borde);
-  /* Un 20 % más alta que antes (31 px → 37) y ni un píxel más: el alto es fijo,
-     así que nada de dentro puede estirarla. El juego mide este alto para
-     colgar el mapa. */
-  height: 37px;
-  min-height: 37px;
+  height: calc(37px + env(safe-area-inset-top));
+  min-height: calc(37px + env(safe-area-inset-top));
 }
 
 /* En el centro exacto de la barra, el avatar de quien juega: es también el
@@ -471,6 +476,9 @@ input::placeholder { color: var(--tinta-tenue); }
 /* ── Entrada ───────────────────────────────────────────────────────────── */
 
 .entrada { padding-top: 4dvh; }
+.entrada > .subtitulo,
+.entrada > .entrada-titulo { text-align: center; }
+.entrada > .entrada-titulo { padding-bottom: 50px; }
 
 .pestanas {
   display: grid;
@@ -508,6 +516,120 @@ input::placeholder { color: var(--tinta-tenue); }
 .saludo .titulo { margin-bottom: 4px; }
 
 .acciones-inicio { display: grid; gap: 12px; }
+
+/* Vista de juego a pantalla completa */
+.inicio-juego {
+  position: fixed;
+  inset: calc(37px + env(safe-area-inset-top)) 0 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: #000 center top / contain no-repeat;
+}
+.inicio-juego::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 25%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 75%, #000 90%);
+  pointer-events: none;
+}
+.inicio-juego-volver {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  z-index: 1;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,255,255,.18);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.inicio-juego-pie {
+  position: relative;
+  z-index: 1;
+  padding: 0 20px calc(40px + var(--safe, env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inicio-juego-titulo {
+  margin: 0 0 2px;
+  font: 700 clamp(22px, 7vw, 30px)/1.1 ui-serif, Georgia, serif;
+  color: #fff;
+  text-shadow: 0 2px 16px rgba(0,0,0,.7);
+}
+.inicio-juego-resumen {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  color: rgba(255,255,255,.65);
+  line-height: 1.4;
+}
+.inicio-juego-pie .boton {
+  width: 100%;
+  background: linear-gradient(180deg, #f5d76e 0%, #e8b820 20%, #c9920a 50%, #e8b820 80%, #f5d76e 100%);
+  border-color: #a07010;
+  box-shadow: inset 0 1px 0 rgba(255,255,230,.5), 0 1px 4px rgba(0,0,0,.4);
+  color: #1a1000;
+  text-shadow: none;
+  font-size: 15px;
+  font-weight: 700;
+}
+.inicio-juego-pie .unirse { display: flex; gap: 8px; }
+.inicio-juego-pie .unirse input { flex: 1; }
+
+/* Grid 2×2 de juegos */
+.juegos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.juego-card {
+  position: relative;
+  aspect-ratio: 3/4;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  background: var(--panel) center top / cover no-repeat;
+}
+.juego-card-nombre {
+  position: absolute;
+  bottom: 44px; left: 0; right: 0;
+  padding: 36px 12px 8px;
+  background: linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 100%);
+  font: 700 14px/1.2 ui-serif, Georgia, serif;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.juego-card-btn {
+  position: absolute;
+  bottom: 10px; left: 10px; right: 10px;
+  width: calc(100% - 20px);
+  box-sizing: border-box;
+  padding: 8px;
+  font-size: 13px;
+  min-height: 0;
+  background: linear-gradient(180deg, #f5d76e 0%, #e8b820 20%, #c9920a 50%, #e8b820 80%, #f5d76e 100%);
+  border-color: #a07010;
+  box-shadow: inset 0 1px 0 rgba(255,255,230,.5), 0 1px 4px rgba(0,0,0,.4);
+  color: #1a1000;
+  font-weight: 700;
+}
+.juego-acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.juego-acciones .boton { width: 100%; }
+.juego-acciones .unirse {
+  grid-column: 1 / -1;
+  display: flex; gap: 8px;
+}
+.juego-acciones .unirse input { flex: 1; }
+.juego-acciones .unirse .boton { width: auto; padding: 0 18px; }
 
 /* Un juego de la lista: nombre, resumen y crear/entrar en la misma tarjeta. */
 .juego-slot {
@@ -587,21 +709,66 @@ input::placeholder { color: var(--tinta-tenue); }
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--borde);
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.6);
 }
-.jugador.tu { border-color: rgba(206, 214, 222, 0.35); background: rgba(206, 214, 222, 0.07); }
+.jugador.tu { border-color: rgba(206, 214, 222, 0.35); }
 .jugador .avatar { width: 38px; height: 38px; flex: none; }
 .jugador .nombre { flex: 1; font-weight: 600; font-size: 15px; }
 .jugador .nombre small { display: block; font-weight: 400; color: var(--tinta-tenue); font-size: 12px; }
 
+/* Vestíbulo con imagen de fondo — igual que .inicio-juego */
+.vestibulo-portada {
+  position: fixed;
+  top: calc(37px + env(safe-area-inset-top));
+  left: 0; right: 0;
+  height: calc(100svh - 37px - env(safe-area-inset-top));
+  z-index: 10;
+  overflow: hidden;
+  background: #000;
+  padding: 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+.vestibulo-portada::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--vbg);
+  background-size: cover;
+  background-position: center top;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 0;
+}
+.vestibulo-portada::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 25%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 75%, #000 90%);
+  pointer-events: none;
+  z-index: 1;
+}
+.vestibulo-portada > * { position: relative; z-index: 2; }
+.vestibulo-portada .cabecera-mesa .subtitulo,
+.vestibulo-portada .mesa-cabecera .subtitulo { color: #fff; }
+.vestibulo-portada > section { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.vestibulo-portada .personalizacion { flex: 0 0 auto; }
+.vestibulo-portada .seccion { flex: 1; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
+.vestibulo-portada .acciones { flex-shrink: 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+
+
 /* Personalización del vestíbulo: dos modos y reparto de equipos. */
 .personalizacion {
   padding: 14px;
-  border: 1px solid var(--borde);
+  border: 1px solid rgba(255,255,255,.12);
   border-radius: var(--radio);
-  background: var(--panel);
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(6px);
 }
 .personalizacion .subtitulo { margin-bottom: 8px; }
 .modo-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -619,9 +786,10 @@ input::placeholder { color: var(--tinta-tenue); }
   cursor: pointer;
 }
 .modo-opcion.on {
-  border-color: rgba(206, 214, 222, 0.55);
-  background: rgba(206, 214, 222, 0.12);
-  color: var(--tinta);
+  background: linear-gradient(180deg, #f5d76e 0%, #e8b820 20%, #c9920a 50%, #e8b820 80%, #f5d76e 100%);
+  border-color: #a07010;
+  color: #1a1000;
+  font-weight: 700;
 }
 .modo-opcion:disabled { opacity: 0.65; cursor: default; }
 .equipos { list-style: none; display: grid; gap: 0; margin: 12px 0 0; padding: 0; }
@@ -738,8 +906,7 @@ input::placeholder { color: var(--tinta-tenue); }
   color: var(--plata);
   font: 600 12px/1.2 inherit;
   letter-spacing: 0.03em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -807,6 +974,18 @@ input::placeholder { color: var(--tinta-tenue); }
 }
 
 .acciones { display: grid; gap: 8px; margin-top: 16px; }
+.acciones .boton:not(.peligro):not(.secundario) {
+  background: linear-gradient(180deg, #f5d76e 0%, #e8b820 20%, #c9920a 50%, #e8b820 80%, #f5d76e 100%);
+  border-color: #a07010;
+  box-shadow: inset 0 1px 0 rgba(255,255,230,.5), 0 1px 4px rgba(0,0,0,.4);
+  color: #1a1000; text-shadow: none; font-size: 15px; font-weight: 700;
+}
+.acciones .boton:not(.peligro):not(.secundario):disabled {
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.35);
+  box-shadow: none;
+}
 .accion {
   display: flex;
   align-items: center;
@@ -867,10 +1046,11 @@ input::placeholder { color: var(--tinta-tenue); }
   position: fixed;
   left: 50%;
   /* Arriba del todo, 20 px: los avisos de conexión y reconexión se ven al
-     instante en lugar de perderse abajo entre las cartas. */
+     instante en lugar de perderse abajo entre las cartas. Van por encima de
+     modales, paneles y avisos de la partida. */
   top: calc(20px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: 2147483647;
   display: grid;
   /* Cada aviso se ajusta a su texto: píldora, no barra de lado a lado. */
   justify-items: center;
@@ -950,8 +1130,7 @@ input::placeholder { color: var(--tinta-tenue); }
 
 .modal.obligatorio .cerrar { display: none; }
 
-/* Modal de versión nueva: el marco de piedra del juego como fondo, el aviso
-   dentro del hueco del pergamino y el botón negro debajo. */
+/* Modal de «es tu turno» en Bunker Wars: marco de pergamino del Himalaya. */
 .modal.modal-version {
   /* La caja no pinta nada: el marco es el fondo del texto y el botón cuelga
      debajo, a lo ancho de la pantalla. */
@@ -992,6 +1171,14 @@ input::placeholder { color: var(--tinta-tenue); }
   letter-spacing: 0.01em;
   min-height: calc(var(--btn-alto) * 0.98);
 }
+
+/* Modal de nueva versión de la app: estilo básico, sin tema de juego. */
+.modal.modal-nueva-version {
+  text-align: center;
+  padding: 2rem 1.5rem 1.5rem;
+}
+.modal.modal-nueva-version h2 { display: none; }
+.modal.modal-nueva-version p { margin: 0 0 1.5rem; }
 
 /* La X va dentro del modal, arriba a la derecha, en un círculo gris. Es
    absoluta respecto del propio modal (que ya es `position: relative`); antes

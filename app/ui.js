@@ -65,14 +65,19 @@ export function iconoUsuario(tam = 20) {
 
 const cajaAvisos = () => document.getElementById("avisos");
 
+/* Con `ms: 0` el aviso no se va solo: se queda hasta que quien lo puso lo
+   retire (el de «sin conexión», que tiene que durar lo que dure la caída). */
 export function aviso(texto, { error = false, ms = 3200 } = {}) {
   const nodo = h(`<div class="toast${error ? " error" : ""}">${esc(texto)}</div>`);
   cajaAvisos().append(nodo);
-  setTimeout(() => {
-    nodo.style.opacity = "0";
-    nodo.style.transition = "opacity .25s";
-    setTimeout(() => nodo.remove(), 260);
-  }, ms);
+  if (ms > 0) {
+    setTimeout(() => {
+      nodo.style.opacity = "0";
+      nodo.style.transition = "opacity .25s";
+      setTimeout(() => nodo.remove(), 260);
+    }, ms);
+  }
+  return nodo;
 }
 
 /* ── Modal ─────────────────────────────────────────────────────────────── */
@@ -81,12 +86,12 @@ let abierto = null;
 
 /* Un modal con botones. Devuelve una promesa con el `valor` del botón pulsado.
    `obligatorio` quita la X y el clic fuera: se usa para la versión nueva. */
-export function modal({ titulo, texto = "", botones = [], obligatorio = false, html = "", clase = "" }) {
+export function modal({ titulo, texto = "", botones = [], obligatorio = false, html = "", clase = "", sinX = false }) {
   cerrarModal();
   const capa = document.getElementById("capa");
   const caja = h(`
     <div class="modal${obligatorio ? " obligatorio" : ""}${clase ? " " + clase : ""}" role="dialog" aria-modal="true">
-      ${obligatorio ? "" : `<button class="cerrar" type="button" aria-label="Cerrar">×</button>`}
+      ${obligatorio || sinX ? "" : `<button class="cerrar" type="button" aria-label="Cerrar">×</button>`}
       <h2>${esc(titulo)}</h2>
       ${texto ? `<p>${esc(texto)}</p>` : ""}
       ${html}
