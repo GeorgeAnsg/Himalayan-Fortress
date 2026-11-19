@@ -1,5 +1,7 @@
 node_modules/
 datos/
+# La base y las claves de push: van en el volumen, no en el repo.
+app/data/
 *.db
 *.db-wal
 *.db-shm

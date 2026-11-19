@@ -19,9 +19,10 @@
    · `suscripciones` — los endpoints de Web Push, por usuario, no por partida:
      con la app cerrada hay que poder avisar de que le toca.
 
-   Dónde vive el fichero: `MADRIGUERAS_DB` si está puesto; si no, `/datos/…`
-   cuando existe `/datos` (el volumen del contenedor) y si no `datos/…` junto al
-   proyecto, que es lo que se usa en local.
+   Dónde vive el fichero: `MADRIGUERAS_DB` si está puesto; si no, `app/data/…`.
+   Esa carpeta es la que se monta como volumen en el contenedor (y la que el
+   servidor estático nunca sirve), así que en local y en producción la ruta es
+   la misma: lo que se prueba en el Mac es lo que corre en Coolify.
 
    Límite dicho claro: esto es para **una instancia**. Dos contenedores con el
    mismo fichero se pisarían. */
@@ -36,8 +37,9 @@ const RAIZ = path.resolve(AQUI, "..");
 
 function elegirRuta() {
   if (process.env.MADRIGUERAS_DB) return process.env.MADRIGUERAS_DB;
-  if (fs.existsSync("/datos")) return "/datos/madrigueras.db";
-  return path.join(RAIZ, "datos", "madrigueras.db");
+  /* `app/data` en los dos sitios: fuera del contenedor es la carpeta del
+     proyecto y dentro es /app/app/data, que es donde se monta el volumen. */
+  return path.join(RAIZ, "app", "data", "madrigueras.db");
 }
 
 export const RUTA = elegirRuta();

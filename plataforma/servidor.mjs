@@ -469,7 +469,10 @@ const httpServidor = http.createServer(async (req, res) => {
   /* Se sirven dos cosas: la app y los tableros de los juegos. El motor del
      juego (las reglas) no sale del servidor. */
   const permitido = rel.startsWith("app/") || rel.startsWith("juego/cliente/");
-  if (!permitido) {
+  /* `app/` se sirve entero menos `app/data`: ahí viven la base SQLite y las
+     claves de push, y son la carpeta que se monta como volumen. Aunque la ruta
+     caiga bajo app/, no sale nunca por HTTP. */
+  if (!permitido || /^app\/data(\/|$)/.test(rel)) {
     console.log(`[estático] 404 (ruta no permitida) · ${req.url}`);
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     return res.end("no está");

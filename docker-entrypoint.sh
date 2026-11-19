@@ -5,8 +5,8 @@
 set -e
 
 if [ "$(id -u)" = "0" ]; then
-  mkdir -p /datos
-  chown -R node:node /datos 2>/dev/null || true
+  mkdir -p /app/app/data
+  chown -R node:node /app/app/data 2>/dev/null || true
   exec su-exec node "$@"
 fi
 

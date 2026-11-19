@@ -19,9 +19,10 @@ COPY plataforma ./plataforma
 COPY juego ./juego
 COPY app ./app
 
-# La base y las claves VAPID viven en /datos, que es donde se monta el volumen.
-# Se crea con el dueño correcto para que el proceso `node` pueda escribir.
-RUN mkdir -p /datos && chown -R node:node /datos
+# La base y las claves VAPID viven en app/data, que es donde se monta el
+# volumen (en el contenedor, /app/app/data). Se crea con el dueño correcto para
+# que el proceso `node` pueda escribir.
+RUN mkdir -p /app/app/data && chown -R node:node /app/app/data
 
 # su-exec cambia de usuario sin fork: Node hereda el PID 1 y recibe SIGTERM.
 RUN apk add --no-cache su-exec

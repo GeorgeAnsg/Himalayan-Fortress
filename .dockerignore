@@ -1,5 +1,6 @@
 node_modules
 datos
+app/data
 *.db
 *.db-wal
 *.db-shm
