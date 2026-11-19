@@ -737,19 +737,23 @@ function animarFichas(raiz, { diferir = true } = {}) {
           el.style.left = finL;
           el.style.top = finT;
         }
-        const anim = el.animate?.(
-          [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }],
-          {
+        const frames = entra
+          ? [{ left: `${ol}%`, top: `${ot}%`, opacity: 0 }, { left: finL, top: finT, opacity: 1 }]
+          : [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }];
+        const anim = el.animate?.(frames, {
             duration: MS_FICHA,
             easing: "cubic-bezier(.45,.05,.3,1)",
             ...(entra ? { fill: "forwards" } : {}),
           }
         );
-        if (entra && anim) anim.onfinish = () => {
-          el.style.left = finL;
-          el.style.top = finT;
-          anim.cancel();
-        };
+        if (entra && anim) {
+          if (el.dataset.fid) llegadasAnunciadas.add(el.dataset.fid);
+          anim.onfinish = () => {
+            el.style.left = finL;
+            el.style.top = finT;
+            anim.cancel();
+          };
+        }
       };
       if (retardo > 0) setTimeout(mover, retardo);
       else mover();
@@ -1144,11 +1148,7 @@ function iniciarFase(anim) {
     });
     if (!anim.movidas && !anim.entradas) { verEfecto(); return; }
     bloquearPorAvance(true);
-    bajarAlTablero().then(() => {
-      const llegada = animarLlegadaEnviados();
-      if (llegada) setTimeout(verEfecto, llegada + MS_ESPERA_BAJADA);
-      else verEfecto();
-    });
+    bajarAlTablero().then(verEfecto);
   }
 }
 
