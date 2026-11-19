@@ -19,6 +19,12 @@ import { fileURLToPath } from "node:url";
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.resolve(AQUI, "..");
 
+/* Carpetas que se quedan fuera de la huella. `app/data` es el volumen: ahí
+   viven la base SQLite y las claves de push, y el fichero cambia en cada
+   guardado. Si entrara en el hash, la app vería una «versión nueva» cada vez
+   que alguien juega una carta y el aviso de actualizar no pararía nunca. */
+const EXCLUIDAS = new Set([path.join("app", "data")]);
+
 function ficheros(dir) {
   const out = [];
   let entradas;
@@ -30,6 +36,7 @@ function ficheros(dir) {
   for (const e of entradas) {
     if (e.name.startsWith(".")) continue;
     const p = path.join(dir, e.name);
+    if (EXCLUIDAS.has(path.relative(RAIZ, p))) continue;
     if (e.isDirectory()) out.push(...ficheros(p));
     else out.push(p);
   }
