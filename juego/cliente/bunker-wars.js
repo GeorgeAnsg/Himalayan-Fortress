@@ -4312,7 +4312,7 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
       energia: null,
       accionesRestantes: null,
       mano: [],
-      box: datosAliado?.box ?? [],
+      box: datosAliado?.box ?? rival.box ?? [],
       lanzaderas: datosAliado?.lanzaderas ?? rival.lanzaderas ?? [],
       teToca: false,
     }, publica.fase, { sinLuchas: true })}`;
@@ -5801,6 +5801,8 @@ function cssAdicional() {
     .vista-rival-enemigo .torre .nivel { background: rgba(122,16,16,.9); }
     .vista-rival-enemigo .ficha.atacante .ficha-nv { background: rgba(var(--c-propio),.85); }
     .vista-rival-enemigo .ficha.mia .ficha-nv { background: rgba(122,16,16,.8); }
+    .vista-rival-enemigo .bw-box-nv { background: rgba(122,16,16,.92); }
+    .vista-rival-enemigo .lanzadera-nv { background: rgba(122,16,16,.9); }
     .vista-rival-aliado .bw-torre-slot.atacante,
     .vista-rival-enemigo .bw-torre-slot.atacante { border-color: rgb(var(--c-propio)); }
     .vista-rival-aliado .bw-torre-slot.atacante .bw-box-nv,

@@ -631,8 +631,8 @@ const bunkerWars = {
           puntosMonsters: j.puntosMonsters,
           bunker: j.bunker,
           senderos: j.senderos,
-          lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel } : null)),
-          boxOcupados: j.box.filter(Boolean).length,
+          lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor" } : null)),
+          box: j.box.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor", id: m.id } : null)),
         }])
       ),
       /* Caídos en orden: el cliente saca de aquí el puesto de cada uno. */
