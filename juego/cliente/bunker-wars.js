@@ -2214,7 +2214,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const img = imgMonstruo(nivelDe(f), esAtacante);
       /* Monstruo recién llegado que aún no ha sido anunciado: se esconde hasta
          que animarLlegadaEnviados lo haga emerger de la niebla en el avance. */
-      const ocultoHastaAvance = entra && f.id && !llegadasAnunciadas.has(f.id);
+      const ocultoHastaAvance = paso === 0 && esAtacante && f.id && !llegadasAnunciadas.has(f.id);
       return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
@@ -4302,6 +4302,8 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
   const datosAliado = esAliadoRival ? (miPrivada?.vistasAliados?.[id] ?? null) : null;
   contenedor.classList.toggle("vista-rival-aliado", esAliadoRival);
   contenedor.classList.toggle("vista-rival-enemigo", !esAliadoRival);
+  const pantalla = document.getElementById("pantalla");
+  const scrollPrevio = pantalla?.scrollTop ?? 0;
   contenedor.innerHTML = `
     <div class="bw-volver-barra">
       <button type="button" class="bw-volver">Volver</button>
@@ -4316,6 +4318,11 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
     }, publica.fase, { sinLuchas: true })}`;
 
   vistaRival = false;
+
+  if (scrollPrevio > 0 && pantalla) {
+    requestAnimationFrame(() => { if (pantalla.isConnected) pantalla.scrollTop = scrollPrevio; });
+  }
+  contenedor.querySelector(".bw-edif-ciencia")?.addEventListener("click", abrirCiencia);
 
   contenedor.querySelector(".bw-volver")?.addEventListener("click", () => {
     viendoJugador = null;
