@@ -177,6 +177,13 @@ function alMesa(vista) {
     if (vista.esMiTurno && !antes.esMiTurno) {
       avisos.avisarLocal("Te toca", "Elige tu jugada.", `turno-${vista.codigo}`);
     }
+    const juego = vista.juego?.id;
+    if (juego === "bunker-wars" && (vista.publica?.luna ?? 0) > (antes.publica?.luna ?? 0)) {
+      avisos.avisarLocal("Nuevo ciclo", `Ciclo ${vista.publica.luna}`, `ciclo-${vista.codigo}`);
+    }
+    if (juego === "say-my-name" && (vista.publica?.dia ?? 0) > (antes.publica?.dia ?? 0)) {
+      avisos.avisarLocal("Nueva jornada", `Día ${vista.publica.dia}`, `jornada-${vista.codigo}`);
+    }
   }
 
   if (vista.fase === "vestibulo") pintarVestibulo();
