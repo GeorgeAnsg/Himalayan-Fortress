@@ -78,7 +78,13 @@ async function arrancar() {
   estado.usuario = yo.datos.usuario;
   actualizarBarra();
   conectar();
-  pintarInicio(yo.datos.sala ?? guardada.sala);
+  /* Si el servidor sabe que estamos en partida activa, no mostramos el lobby:
+     el WebSocket llegará solo y alMesa() lo pondrá todo en su sitio. */
+  if (yo.datos.sala?.fase === "jugando") {
+    $pantalla().innerHTML = `<p style="text-align:center;padding:3rem;opacity:.6">Volviendo a la partida…</p>`;
+  } else {
+    pintarInicio(yo.datos.sala ?? guardada.sala);
+  }
 
   if (invitacion) intentarUnirse(invitacion);
   else {
