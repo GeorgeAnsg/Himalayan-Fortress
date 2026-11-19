@@ -2323,12 +2323,15 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       : "";
     return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
   }).join("")
-  /* Cola de lanzadera: hasta 2 monstruos en espera, en los mismos ejes X pero
-     algo más abajo. Solo se muestran si hay alguno. */
-  + (colaLanzaderas.length ? [{l:"37.1",t:"91.5"},{l:"63.3",t:"91.5"}].slice(0, colaLanzaderas.length).map((pos, i) => {
-    const c = colaLanzaderas[i];
-    return `<div class="lanzadera lanzadera-llena lanzadera-cola" title="En espera de lanzadera" style="left:${pos.l}%;top:${pos.t}%;opacity:.8"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
-  }).join("") : "");
+  /* Cola de lanzadera: se apilan justo detrás de la lanzadera (misma X, un
+     peldaño más abajo y algo más pequeñas), igual que los monstruos de las
+     jaulas se ven uno detrás del otro. */
+  + colaLanzaderas.slice(0, 2).map((c, i) => {
+    const pos = i === 0
+      ? { l: "37.1", t: "86.5" }
+      : { l: "63.3", t: "86.5" };
+    return `<div class="lanzadera lanzadera-llena lanzadera-cola" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t}%;transform:scale(.78);opacity:.6;filter:blur(1px)"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
+  }).join("");
 
   /* Losas */
   const losasHtml = LOSAS.flatMap(calles => calles.map(pos =>
