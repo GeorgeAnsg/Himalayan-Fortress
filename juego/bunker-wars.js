@@ -128,9 +128,13 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Genera 2 monedas extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Genera 2 monedas extra al comienzo de cada turno." },
   { tipo:"decreto",     nivel:1, coste:2, titulo: "DECRETO 1",  descripcion: "Genera 1 decreto extra al comienzo de cada turno." },
   { tipo:"decreto",     nivel:1, coste:2, titulo: "DECRETO 1",  descripcion: "Genera 1 decreto extra al comienzo de cada turno." },
-  { tipo:"recursos",    nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 decreto extra cada turno." },
+  { tipo:"recursos_mix", nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Genera 1 moneda y 1 decreto extra al comienzo de cada turno." },
+  { tipo:"recursos_mix", nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Genera 1 moneda y 1 decreto extra al comienzo de cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
   { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
@@ -151,7 +155,7 @@ const PLANTILLAS_BUNKER = [
      atajo. */
   { tipo:"ciencia_i",   efecto:"subir_armeria",      coste:3, titulo: "Subir armería", descripcion: "Aumenta un nivel la armería." },
   { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir criadero", descripcion: "Aumenta un nivel el criadero." },
-  { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Suma 1 moneda y 1 decreto por turno a tu búnker." },
+  { tipo:"ciencia_i",   efecto:"bombardear",         coste:3, titulo: "Bombardear", descripcion: "Baja un nivel a una torre enemiga. Si es de nivel 1, la destruye." },
   { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Criadero o armería", descripcion: "Aumenta un nivel el criadero o la armería." },
 ];
 
@@ -163,7 +167,7 @@ const TOPE_RECURSOS = 4;
 
 // Una copia de cada carta — mazo sin duplicados
 const COPIAS_BUNKER = {
-  recursos: 1, decreto: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
+  recursos: 1, decreto: 1, recursos_mix: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
 };
 
 /* Cartas que todavía le sirven al jugador: recursos mientras quede hueco en el
@@ -173,8 +177,6 @@ function cartasUtiles(j) {
   for (const p of PLANTILLAS_BUNKER) {
     const n = COPIAS_BUNKER[p.tipo] ?? 1;
     if (!n) continue;
-    if (p.tipo === "recursos" && (j.bunker.recursos?.length ?? 0) >= 4) continue;
-    if (p.tipo === "decreto"  && (j.bunker.decretos?.length ?? 0) >= 2) continue;
     if (p.tipo === "armeria" && p.nivel <= (j.bunker.armeria ?? 0)) continue;
     if (p.tipo === "laboratorio" && p.nivel <= (j.bunker.laboratorio ?? 0)) continue;
     if (p.tipo === "ciencia" && tieneCiencia(j, p.efecto)) continue;
@@ -218,15 +220,15 @@ function robarBunker(j, e) {
 
 // ── Helpers de búnker ─────────────────────────────────────────────────────
 function energiaTotal(j) {
-  return 3 + (j.bunker.extra?.monedas ?? 0) + j.bunker.recursos.reduce((s, c) => {
-    return s + (c.nivel >= 4 ? 4 : c.nivel >= 3 ? 3 : c.nivel >= 2 ? 2 : 1);
-  }, 0);
+  return 3 + (j.bunker.extra?.monedas ?? 0)
+    + j.bunker.recursos.reduce((s, c) => s + (c.nivel >= 2 ? 2 : 1), 0)
+    + (j.bunker.recursos_mix?.length ?? 0);
 }
 
 function accionesTotal(j) {
   return 2 + (j.bunker.extra?.monjes ?? 0)
-    + j.bunker.recursos.reduce((s, c) => s + (c.nivel >= 4 ? 2 : c.nivel >= 2 ? 1 : 0), 0)
-    + (j.bunker.decretos?.length ?? 0);
+    + (j.bunker.decretos?.length ?? 0)
+    + (j.bunker.recursos_mix?.length ?? 0);
 }
 
 /* Nivel máximo de monstruo que permite crear el criadero:
@@ -487,7 +489,7 @@ function costeDisparo(j, senderoId, daño) {
 
 // ── Inicialización de jugador ─────────────────────────────────────────────
 function jugadorInicial(info, e) {
-  const bunker = { armeria: 1, laboratorio: 1, recursos: [], decretos: [], ciencia: [], torres: [null, null, null],
+  const bunker = { armeria: 1, laboratorio: 1, recursos: [], decretos: [], recursos_mix: [], ciencia: [], torres: [null, null, null],
     extra: { monedas: 0, monjes: 0 } };
   const mazo = crearMazoBunker(e, { bunker });
   const mano = mazo.splice(0, 4);
@@ -1563,6 +1565,20 @@ function legalesAcciones(e, jugadorId) {
           texto: `Monstruo de nivel 3 en la jaula ${b + 1}`,
         });
       }
+    } else if (carta.efecto === "bombardear") {
+      e.jugadores.forEach(enemigo => {
+        if (enemigo.id === j.id) return;
+        normalizarTorres(enemigo);
+        enemigo.bunker.torres.forEach((t, i) => {
+          if (!t) return;
+          acc.push({
+            tipo: "mejorar_bunker", cartaId: carta.uid,
+            objetivo: { enemigoId: enemigo.id, posicion: i + 1 },
+            etiqueta: `Bombardear torre ${i + 1} de ${enemigo.nombre} (nv ${t.nivel})`,
+            texto: `Bombardear: bajar torre ${i + 1} de ${enemigo.nombre} a nivel ${t.nivel - 1 || "destruida"}`,
+          });
+        });
+      });
     } else if (carta.efecto === "subir_lab_o_arm") {
       /* Esta sí obliga a decidir: una opción por cada edificio que no esté al
          tope. */
@@ -1913,12 +1929,9 @@ function puedeJugarCarta(j, carta) {
   if (carta.tipo === "laboratorio") {
     return carta.nivel === j.bunker.laboratorio + 1;
   }
-  if (carta.tipo === "recursos") {
-    return j.bunker.recursos.length < 4;
-  }
-  if (carta.tipo === "decreto") {
-    return (j.bunker.decretos?.length ?? 0) < 2;
-  }
+  if (carta.tipo === "recursos")     { return true; }
+  if (carta.tipo === "decreto")      { return true; }
+  if (carta.tipo === "recursos_mix") { return true; }
   if (carta.tipo === "ciencia") {
     /* Con los dos huecos ocupados sigue siendo jugable: al instalarla se elige
        cuál de las dos sale (lo comprueba faseAcciones). */
@@ -2011,6 +2024,7 @@ function monstruosSubibles(e, jugadorId) {
 const CIENCIAS_CON_OBJETIVO = new Set([
   "subir_rango", "convertir_aliado", "bajar_nivel_enemigo",
   "evolucionar_torreta", "torreta2_gratis", "monstruo3_gratis",
+  "bombardear",
 ]);
 
 /* Resuelve el objetivo de una ciencia instantánea: devuelve lo necesario para
@@ -2047,6 +2061,13 @@ function objetivoDe(e, j, efecto, accion) {
       const t = j.bunker.torres?.[pos - 1];
       if (t && t.nivel >= 2) return null;
       return { torre: t ?? null, pos };
+    }
+    case "bombardear": {
+      const enemigo = e.jugadores.find(p => p.id === o.enemigoId);
+      if (!enemigo) return null;
+      const pos = o.posicion;
+      const t = enemigo.bunker.torres?.[(pos ?? 0) - 1];
+      return t ? { enemigo, torre: t, pos } : null;
     }
     case "monstruo3_gratis": {
       const b = accion?.boxIdx;
@@ -2146,6 +2167,16 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
       evs.push({ tipo: "crear", texto: `${j.nombre} crea un monstruo 3 en la jaula ${o.boxIdx + 1}.` });
       return true;
     }
+    case "bombardear": {
+      if (o.torre.nivel <= 1) {
+        o.enemigo.bunker.torres[o.pos - 1] = null;
+        evs.push({ tipo: "torre", texto: `${j.nombre} bombardea y destruye la torre ${o.pos} de ${o.enemigo.nombre}.` });
+      } else {
+        o.torre.nivel -= 1;
+        evs.push({ tipo: "torre", texto: `${j.nombre} bombardea la torre ${o.pos} de ${o.enemigo.nombre}: baja a nivel ${o.torre.nivel}.` });
+      }
+      return true;
+    }
     default: return false;
   }
 }
@@ -2154,8 +2185,9 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
    cuando ya hay dos huecos ocupados. `edificio` es la elección de
    "Laboratorio o armería". */
 function aplicarMejoraBunker(j, carta, e, evs, reemplazo, accion) {
-  if (carta.tipo === "recursos")    { j.bunker.recursos.push(carta); return; }
-  if (carta.tipo === "decreto")     { j.bunker.decretos.push(carta); return; }
+  if (carta.tipo === "recursos")     { j.bunker.recursos.push(carta); return; }
+  if (carta.tipo === "decreto")      { j.bunker.decretos.push(carta); return; }
+  if (carta.tipo === "recursos_mix") { j.bunker.recursos_mix.push(carta); return; }
   if (carta.tipo === "armeria")     { j.bunker.armeria     = carta.nivel; return; }
   if (carta.tipo === "laboratorio") { j.bunker.laboratorio = carta.nivel; return; }
   if (carta.tipo === "ciencia") {
