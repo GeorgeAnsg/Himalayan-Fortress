@@ -47,24 +47,24 @@ const LUNA_ROJA = 5;
    2 = lunas 5-8, 3 = desde la luna 9) y su cantidad de monstruos. Las cartas
    de eventos del mazo anterior quedan fuera hasta que las recuperemos. */
 const PLANTILLAS_DESTINO = [
-  // Tramo I — lunas 1-4
-  { id:"a01", tipo:"amenaza", nivel:1, cantidad:1, prio:[1,2,3], tramo:1,
+  // Tramo I — lunas 1-4 (solo tramo 1: no aparecen en tramos superiores)
+  { id:"a01", tipo:"amenaza", nivel:1, cantidad:1, prio:[1,2,3], tramo:1, tramoMax:1,
     titulo:"Se ha avistado un rastreador",
     descripcion:"Un rastreador se arrastra desde la nieve." },
-  { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1,
+  { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
     titulo:"Un rastreador",
     descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
-  { id:"a03", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1,
+  { id:"a03", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
     titulo:"Dos rastreadores",
     descripcion:"Dos rastreadores salen de la ventisca." },
-  { id:"a04", tipo:"amenaza", nivel:1, cantidad:3, prio:[1,2,3], tramo:1,
+  { id:"a04", tipo:"amenaza", nivel:1, cantidad:3, prio:[1,2,3], tramo:1, tramoMax:1,
     titulo:"Tres rastreadores",
     descripcion:"Tres rastreadores emergen de la nieve." },
-  // Tramo II — lunas 5-8
-  { id:"a05", tipo:"amenaza", nivel:2, cantidad:1, prio:[1,2,3], tramo:2,
+  // Tramo II — lunas 5-8 (solo tramo 2: nivel 2 no aparece en tramo 3)
+  { id:"a05", tipo:"amenaza", nivel:2, cantidad:1, prio:[1,2,3], tramo:2, tramoMax:2,
     titulo:"Un carroñero",
     descripcion:"Un carroñero husmea entre las rocas." },
-  { id:"a06", tipo:"amenaza", nivel:2, cantidad:2, prio:[2,1,3], tramo:2,
+  { id:"a06", tipo:"amenaza", nivel:2, cantidad:2, prio:[2,1,3], tramo:2, tramoMax:2,
     titulo:"Dos carroñeros",
     descripcion:"Dos carroñeros avanzan hacia la fortaleza." },
   { id:"a07", tipo:"amenaza", nivel:3, cantidad:3, prio:[2,3,1], tramo:2,
@@ -117,7 +117,7 @@ const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null
    una carta fea en la luna 1 la decidía; así todas las mesas empiezan igual.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
-const APERTURA_DESTINO = { 1: "a01", 2: "d21", 3: "a03", 4: "d21" };
+const APERTURA_DESTINO = { 1: "a01", 2: "d21", 3: "a04", 4: "d21" };
 
 function crearMazoDestino(nJugadores, e) {
   return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
@@ -649,6 +649,11 @@ const bunkerWars = {
         e.jugadores[p.de]?.vivo
         && (p.de === jugadorId || esAliado(e, jugadorId, p.de))),
       enviosPendientes: (e.regalos ?? []).filter((g) => g.para === jugadorId),
+      vistasAliados: Object.fromEntries(
+        Object.entries(e.jugadores)
+          .filter(([id, o]) => id !== jugadorId && o.vivo && esAliado(e, jugadorId, id))
+          .map(([id, o]) => [id, { box: o.box, lanzaderas: o.lanzaderas }])
+      ),
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
       teToca: e.orden[e.turnoIdx] === jugadorId,
@@ -883,7 +888,9 @@ function tramoDestino(luna) {
    avistamiento de rastreadores (es el suelo del mazo) pero nunca al revés:
    un coloso no aparece en la luna 1. */
 function cartaDeTramo(carta, tramo) {
-  return !carta?.tramo || carta.tramo <= tramo;
+  if (carta?.tramo && carta.tramo > tramo) return false;
+  if (carta?.tramoMax && carta.tramoMax < tramo) return false;
+  return true;
 }
 
 function cartaDestinoDelCiclo(e, evs) {
@@ -1161,6 +1168,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
     /* El envío ya cubre la petición de quien lo recibe: se retira de la mesa. */
     e.peticiones = (e.peticiones ?? []).filter((p) => p.de !== para.id);
     evs.push({ tipo: "envio", texto: `${j.nombre} envía a ${para.nombre}: ${monedas} monedas, ${decretos} decretos y ${monstruos.length} monstruo(s).`, a: para.id });
+    if (j.accionesRestantes <= 0 || legalesAcciones(e, jugadorId).length <= 1) e.fase = "descartar";
     return { estado: e, eventos: evs };
   }
 
@@ -2015,7 +2023,7 @@ function objetivoDe(e, j, efecto, accion) {
     }
     case "convertir_aliado": {
       const f = fichaEn(e, j.id, o.sendero, o.posicion);
-      return f?.tipo === "atacante" && f.nivel <= 5 ? { ficha: f } : null;
+      return f?.tipo === "atacante" && f.nivel <= 5 ? { ficha: f, sendero: o.sendero, posicion: o.posicion } : null;
     }
     case "evolucionar_torreta": {
       const t = j.bunker.torres?.[(o.posicion ?? 0) - 1];
@@ -2056,7 +2064,7 @@ function subirRecursos(j, evs) {
   j.bunker.extra = { monedas: 0, monjes: 0, ...(j.bunker.extra ?? {}) };
   j.bunker.extra.monedas += 1;
   j.bunker.extra.monjes  += 1;
-  evs.push({ tipo: "mejora", texto: `${j.nombre} sube unos recursos: +1 moneda y +1 monje por turno.` });
+  evs.push({ tipo: "mejora", texto: `${j.nombre} sube unos recursos: +1 moneda y +1 decreto por turno.` });
   return true;
 }
 
@@ -2093,9 +2101,17 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
     case "convertir_aliado": {
       const nivel = o.ficha.nivel;
       o.ficha.tipo = "monstruo";
-      /* Gira la ficha: pasa a ser un monstruo del jugador que la convierte. */
       o.ficha.dueno = j.id;
       evs.push({ tipo: "convertir", texto: `Un atacante ${nivel} de ${j.nombre} se convierte en aliado.` });
+      if (o.posicion === 0) {
+        const s = j.senderos.find(s => s.id === o.sendero);
+        const i = lanzaderaDeSendero(j, o.sendero);
+        if (s && i !== null && !j.lanzaderas[i]) {
+          j.lanzaderas[i] = s.posiciones[0];
+          s.posiciones[0] = null;
+          evs.push({ tipo: "a_lanzadera", texto: `El monstruo convertido alcanza la lanzadera ${i + 1} de ${j.nombre}.` });
+        }
+      }
       return true;
     }
     case "evolucionar_torreta": {

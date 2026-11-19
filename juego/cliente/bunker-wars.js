@@ -83,9 +83,9 @@ export function pintar(contenedor, opciones) {
   const lanzaderaMovidas = (lanzaderasMesa ?? []).flatMap((m, i) => {
     if (!m?.id) return [];
     const boxIdx = boxAntes.findIndex((x) => x?.id === m.id);
-    return boxIdx >= 0 && boxIdx < 4
-      ? [{ id: m.id, nivel: m.nivel, boxIdx, lanzadera: i }]
-      : [];
+    if (boxIdx >= 0 && boxIdx < 4) return [{ id: m.id, nivel: m.nivel, boxIdx, lanzadera: i }];
+    const prevPos = fichasPrevias.get(m.id);
+    return prevPos ? [{ id: m.id, nivel: m.nivel, lanzadera: i, desdePath: prevPos }] : [];
   });
   energiaMesa = privada?.energia ?? 0;
   accionesRestantesMesa = privada?.accionesRestantes ?? 0;
@@ -169,7 +169,7 @@ export function pintar(contenedor, opciones) {
 
   /* Modo visita: la fortaleza de otro jugador, en su estado y sin controles. */
   if (viendoJugador && publica.jugadores?.[viendoJugador]) {
-    pintarVistaRival(contenedor, publica, viendoJugador);
+    pintarVistaRival(contenedor, publica, viendoJugador, privada);
     return;
   }
   viendoJugador = null;
@@ -722,22 +722,34 @@ function animarFichas(raiz, { diferir = true } = {}) {
   });
 
   const reproducirLista = (lista, retardoBase = 0) => {
-    lista.forEach(({ el, ol, ot, finL, finT }, i) => {
+    lista.forEach(({ el, ol, ot, finL, finT, entra }, i) => {
       const retardo = retardoBase + i * (MS_FICHA + MS_PAUSA);
       const mover = () => {
         /* La ficha se queda en la casilla anterior hasta su turno; solo
            entonces se le pone el destino y se lanza el deslizamiento. Con
            delay + fill, iOS la pintaba directamente en el destino y se veía
-           el «ploc» en vez del movimiento. */
-        el.style.left = finL;
-        el.style.top = finT;
-        el.animate?.(
+           el «ploc» en vez del movimiento.
+           Para las entradas desde la niebla NO se cambia el estilo antes del
+           animate: evita el salto visual de niebla→pos1 que ocurría porque el
+           navegador pintaba un frame con el estilo final antes de que la
+           animación tomara el control. */
+        if (!entra) {
+          el.style.left = finL;
+          el.style.top = finT;
+        }
+        const anim = el.animate?.(
           [{ left: `${ol}%`, top: `${ot}%` }, { left: finL, top: finT }],
           {
             duration: MS_FICHA,
             easing: "cubic-bezier(.45,.05,.3,1)",
+            ...(entra ? { fill: "forwards" } : {}),
           }
         );
+        if (entra && anim) anim.onfinish = () => {
+          el.style.left = finL;
+          el.style.top = finT;
+          anim.cancel();
+        };
       };
       if (retardo > 0) setTimeout(mover, retardo);
       else mover();
@@ -828,13 +840,44 @@ function animarEntradaLanzadera(raiz, movidas) {
     for (const m of movidas) {
       const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${m.lanzadera + 1}"]`);
       if (!destino) continue;
-      /* La lámina y su pastilla de nivel: las dos entran apagándose desde cero. */
-      destino.querySelectorAll(".lanzadera-img, .lanzadera-nv").forEach((el) => {
-        el.animate?.(
-          [{ opacity: 0 }, { opacity: 1 }],
-          { duration: MS_FUNDIDO_LANZADERA, easing: "ease-out", fill: "backwards" },
-        );
-      });
+      const fadeInLanzadera = (retardo = 0) => {
+        destino.querySelectorAll(".lanzadera-img, .lanzadera-nv").forEach((el) => {
+          el.animate?.(
+            [{ opacity: 0 }, { opacity: 1 }],
+            { duration: MS_FUNDIDO_LANZADERA, delay: retardo, easing: "ease-out", fill: "backwards" },
+          );
+        });
+      };
+      if (!m.desdePath) { fadeInLanzadera(); continue; }
+
+      /* Viene de un paso del sendero: animamos el tramo final hasta el paso 0
+         (la boca de la lanzadera), fade-out allí, y luego fade-in en la lanzadera. */
+      const { calle, paso } = m.desdePath;
+      const origen = LOSAS[calle]?.[paso];
+      const llegada = LOSAS[calle]?.[0];
+      if (!origen || !llegada || paso === 0) { fadeInLanzadera(); continue; }
+
+      const fichas = raiz.querySelector(".bw-fichas");
+      if (!fichas) { fadeInLanzadera(); continue; }
+
+      const phantom = document.createElement("div");
+      phantom.className = "ficha mia";
+      phantom.style.cssText = `left:${llegada.l}%;top:${llegada.t}%;position:absolute;z-index:5;pointer-events:none`;
+      phantom.innerHTML = `<img src="${imgMonstruo(m.nivel, false)}" alt="" class="ficha-img"/><b class="ficha-nv">${m.nivel}</b>`;
+      fichas.append(phantom);
+
+      /* Paso 1: deslizamiento origen → llegada (pos 0) */
+      phantom.animate?.(
+        [{ left: `${origen.l}%`, top: `${origen.t}%` }, { left: `${llegada.l}%`, top: `${llegada.t}%` }],
+        { duration: MS_FICHA, easing: "cubic-bezier(.45,.05,.3,1)" },
+      );
+
+      /* Paso 2: fade-out en pos 0, luego fade-in en lanzadera */
+      setTimeout(() => {
+        phantom.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-in", fill: "forwards" })
+          ?.addEventListener("finish", () => phantom.remove(), { once: true });
+        fadeInLanzadera();
+      }, MS_FICHA + 60);
     }
   });
 }
@@ -1922,7 +1965,7 @@ function tituloDestino(d) {
     case "amenaza_triple":    return "La horda avanza";
     case "amenaza_doble":     return "Dos sombras en la nieve";
     case "amenaza_rival":     return "Nadie queda a salvo";
-    case "calma":             return "Calma";
+    case "calma":             return "La montaña calla";
     case "aniquilar_entrada": return "El viento purga";
     case "aniquilar_nivel":   return "Los débiles caen";
     case "matar_mayor":       return "Los más fuertes";
@@ -3205,7 +3248,7 @@ function textoDestino(d) {
     case "amenaza_triple":  return `3 ${pluralMonstruo(n)}, uno por escalera${nota}`;
     case "amenaza_doble":   return `2 ${pluralMonstruo(n)} en 2 escaleras${nota}`;
     case "amenaza_rival":   return `1 ${nombreMonstruo(n)} en una escalera de cada fortaleza${nota}`;
-    case "calma":           return "Calma… no hay monstruos nuevos en el horizonte";
+    case "calma":           return "La montaña calla… no hay monstruos nuevos en el horizonte";
     case "buscar_bunker":   return "Busca en el mazo una carta de búnker que necesites y colócala";
     case "aniquilar_entrada": return "Todos los atacantes de la entrada son aniquilados";
     case "aniquilar_nivel": return "Todos los monstruos de nivel 3 o inferiores de los caminos mueren. Quítalos de las escaleras";
@@ -4220,7 +4263,7 @@ function abrirMonstruo({ sendero, posicion, id, nivel }) {
 
 /* La fortaleza de otro jugador, con la misma escena y su estado público. Las
    monedas y los decretos propios no se ven: se pintan como «—». */
-function pintarVistaRival(contenedor, publica, id) {
+function pintarVistaRival(contenedor, publica, id, miPrivada) {
   const rival = publica.jugadores?.[id];
   if (!rival) { viendoJugador = null; return; }
 
@@ -4253,6 +4296,7 @@ function pintarVistaRival(contenedor, publica, id) {
   vistaRival = true;
 
   const esAliadoRival = modoMesa === "equipos" && (rival?.equipo ?? 0) === miEquipoMesa;
+  const datosAliado = esAliadoRival ? (miPrivada?.vistasAliados?.[id] ?? null) : null;
   contenedor.classList.toggle("vista-rival-aliado", esAliadoRival);
   contenedor.classList.toggle("vista-rival-enemigo", !esAliadoRival);
   contenedor.innerHTML = `
@@ -4263,8 +4307,8 @@ function pintarVistaRival(contenedor, publica, id) {
       energia: null,
       accionesRestantes: null,
       mano: [],
-      box: [],
-      lanzaderas: rival.lanzaderas ?? [],
+      box: datosAliado?.box ?? [],
+      lanzaderas: datosAliado?.lanzaderas ?? rival.lanzaderas ?? [],
       teToca: false,
     }, publica.fase, { sinLuchas: true })}`;
 
@@ -5375,6 +5419,12 @@ function css() {
     }
     .bw-lz-cuadro.bz-def.lleno .bw-lz-punto {
       border:1.5px solid #f0a094; background:#b03a2c; color:#fff;
+    }
+    .bw-mapa-rival.aliado .bw-lz-cuadro.bz-at.lleno .bw-lz-punto {
+      border:1.5px solid #f0a094; background:#b03a2c; color:#fff;
+    }
+    .bw-mapa-rival.aliado .bw-lz-cuadro.bz-def.lleno .bw-lz-punto {
+      border:1.5px solid #7be5e5; background:#179494; color:#fff;
     }
     /* El botón de lanzar, cuadrado y debajo de cada calle. */
     .bw-lz-lanzar {
