@@ -1,4 +1,5 @@
 import { h, esc, avatarSVG, aviso } from "../ui.js";
+import { precargar } from "./juego.js";
 
 export function pintar(raiz, { usuario, sala = null, juegos = [], juegoInicial = null, alCrear, alUnirse, alVolver, alSalir }) {
   let juegoActivo = null;
@@ -11,6 +12,9 @@ export function pintar(raiz, { usuario, sala = null, juegos = [], juegoInicial =
 
   function mostrarJuego(j) {
     juegoActivo = j;
+    /* Al entrar al juego desde el hall, se descargan todas sus imágenes de una
+       vez: al abrir la partida ya están en caché y no se bajan a mitad. */
+    precargar(j.id, j.imagenes);
     renderizar();
   }
 
@@ -144,7 +148,7 @@ export function pintar(raiz, { usuario, sala = null, juegos = [], juegoInicial =
 
   if (juegoInicial) {
     const j = juegos.find(x => x.id === juegoInicial);
-    if (j) juegoActivo = j;
+    if (j) { juegoActivo = j; precargar(j.id, j.imagenes); }
   }
   renderizar();
   return nodo;

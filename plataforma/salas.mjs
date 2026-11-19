@@ -244,6 +244,10 @@ export class Mesas {
       this.juegoDe(sala)?.revivir?.(sala.datos.estado);
     }
     if (this.salas.size) console.log(`[mesas] ${this.salas.size} mesa(s) recuperadas`);
+    /* Las mesas que se quedaron con el turno de un bot las arranca el reloj de
+       `empujarBots` en cuanto el servidor esté en pie. */
+    this.relojBots = setInterval(() => this.empujarBots(), 1500);
+    this.relojBots.unref?.();
   }
 
   guardar(sala) {
@@ -552,6 +556,10 @@ export class Mesas {
 
   accion(usuarioId, accion) {
     const sala = this.deUsuario(usuarioId);
+    const quien = sala?.datos?.jugadores?.find((j) => j.id === usuarioId)?.nombre ?? usuarioId;
+    const faseAntes = sala?.datos?.estado?.fase;
+    const lunaAntes = sala?.datos?.estado?.luna;
+    if (sala) console.log(`[mesa ${sala.codigo}] ${quien} → ${accion?.tipo ?? "?"} (fase ${faseAntes}, luna ${lunaAntes})`);
     if (!sala) return { error: "No estás en ninguna madriguera." };
     if (sala.fase !== "jugando") return { error: "La partida no está en marcha." };
 
@@ -570,7 +578,10 @@ export class Mesas {
        campo: buscar solo por tipo hacía que jugar una carta acabara jugando
        la primera de la mano, o que crear un monstruo nivel 5 creara el 1. */
     const legal = emparejarLegal(legales, pedida);
-    if (!legal) return { error: "Esa jugada no está permitida." };
+    if (!legal) {
+      console.log(`[mesa ${sala.codigo}] ${quien}: ${accion?.tipo ?? "?"} NO legal (fase ${faseAntes}, luna ${lunaAntes})`);
+      return { error: "Esa jugada no está permitida." };
+    }
 
     let salida;
     try {
@@ -582,6 +593,7 @@ export class Mesas {
     }
 
     sala.datos.estado = salida.estado ?? estado;
+    console.log(`[mesa ${sala.codigo}] ${quien}: ${legal.tipo} · fase ${faseAntes} → ${sala.datos.estado?.fase} · luna ${sala.datos.estado?.luna} · turno ${sala.datos.estado?.orden?.[sala.datos.estado?.turnoIdx]}`);
     for (const ev of salida.eventos ?? []) this.anotar(sala, ev.texto, ev.tipo);
 
     const fin = juego.terminada(sala.datos.estado);
@@ -639,9 +651,15 @@ export class Mesas {
     if (!juego?.bot || sala.fase !== "jugando") return res;
     let sigBot = juego.turno(sala.datos.estado);
     let guard = 0;
-    while (sigBot && sala.datos.jugadores.find((j) => j.id === sigBot)?.esBot && guard++ < 50) {
+    /* 50 llegaba para un turno suelto, pero con tres bots una ronda entera
+       pasa de esa cifra: al agotarse el margen la mesa se quedaba a medias,
+       con el turno en un bot y nadie que lo moviera («Esperando a Bot 1…»).
+       Ahora se juega por tandas y, si queda turno de bot, lo sigue empujando
+       `empujarBots` cada poco: así ninguna mesa se queda parada. */
+    let sinJugada = false;
+    while (sigBot && sala.datos.jugadores.find((j) => j.id === sigBot)?.esBot && guard++ < 80) {
       const accionBot = juego.bot(sala.datos.estado, sigBot);
-      if (!accionBot) break;
+      if (!accionBot) { sinJugada = true; break; }
       res.jugó = true;
       const salidaBot = juego.aplicar(sala.datos.estado, sigBot, accionBot);
       sala.datos.estado = salidaBot.estado ?? sala.datos.estado;
@@ -656,7 +674,32 @@ export class Mesas {
       }
       sigBot = juego.turno(sala.datos.estado);
     }
+    if (sinJugada) console.log(`[mesa ${sala.codigo}] ${sigBot} no tiene jugada legal en ${sala.datos.estado?.fase}`);
     return res;
+  }
+
+  /* El turno de un bot solo avanza si alguien lo empuja: lo hace la acción de
+     una persona, el abandono de una mesa o este reloj. Sin él, una mesa donde
+     queda el turno de un bot —porque la persona murió y se fue, porque el
+     servidor se reinició a media ronda o porque solo quedan bots— se quedaba
+     «Esperando a Bot 1…» para siempre. */
+  empujarBots() {
+    for (const sala of this.salas.values()) {
+      if (sala.fase !== "jugando" || !sala.datos.estado) continue;
+      const juego = this.juegoDe(sala);
+      if (!juego?.bot) continue;
+      const toca = juego.turno(sala.datos.estado);
+      if (!sala.datos.jugadores.find((j) => j.id === toca)?.esBot) continue;
+      try {
+        const bots = this.jugarBots(sala, juego);
+        if (bots.jugó) {
+          this.guardar(sala);
+          this.difundir(sala);
+        }
+      } catch (err) {
+        console.log(`[mesa ${sala.codigo}] el bot falló: ${err?.message ?? err}`);
+      }
+    }
   }
 
   revancha(usuarioId) {
@@ -705,6 +748,11 @@ export class Mesas {
         sala.datos.final = { puestos: fin.puestos, cuando: Date.now() };
         this.anotar(sala, "Se acabó la partida.", "fin");
       }
+
+      /* Al irse, su turno pasa al siguiente vivo y, si es un bot, hay que
+         jugarlo aquí mismo: nadie más va a mandar una acción que lo despierte
+         y la mesa se quedaba esperando a un bot que nunca jugaba. */
+      if (!sala.datos.final && sala.fase === "jugando") this.jugarBots(sala, juego);
 
       this.guardar(sala);
       this.difundir(sala);

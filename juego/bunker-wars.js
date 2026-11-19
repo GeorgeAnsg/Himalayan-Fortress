@@ -112,6 +112,13 @@ const PLANTILLAS_DESTINO = [
    se repartieron antes de que los eventos lo tuvieran. */
 const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null]));
 
+/* Apertura fija de las cuatro primeras lunas: rastreador, calma, dos
+   rastreadores y calma. El arranque es el momento más frágil de la partida y
+   una carta fea en la luna 1 la decidía; así todas las mesas empiezan igual.
+   Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
+   sigue exactamente como estaba. */
+const APERTURA_DESTINO = { 1: "a01", 2: "d21", 3: "a03", 4: "d21" };
+
 function crearMazoDestino(nJugadores, e) {
   return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
 }
@@ -518,6 +525,10 @@ const bunkerWars = {
       regalos: [],
       peticiones: [],
       final: null,
+      /* Quién ha caído y en qué luna, en orden. El primero de la lista es el
+         último de la mesa; sirve para el puesto de cada uno en el final y para
+         la pantalla de «has caído» de quien cae a media partida. */
+      eliminados: [],
     };
     for (const [i, j] of jugadores.entries()) {
       const equipo = modo === "equipos"
@@ -618,6 +629,8 @@ const bunkerWars = {
           boxOcupados: j.box.filter(Boolean).length,
         }])
       ),
+      /* Caídos en orden: el cliente saca de aquí el puesto de cada uno. */
+      eliminados: (e.eliminados ?? []).map((x) => ({ ...x })),
     };
   },
 
@@ -701,6 +714,7 @@ function faseAvance(e, jugadorId, evs) {
       evs.push({ tipo: "entrada", texto: `¡Monstruo ${f.nivel} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
       if (j.puntosMonsters > 20) {
         j.vivo = false;
+        marcarEliminado(e, jugadorId);
         evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
       }
     }
@@ -762,6 +776,7 @@ function faseLanzar(e, jugadorId, accion, evs) {
       s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId };
       evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
       j.lanzaderas[i] = null;
+      console.log(`[lanzar] ${j.nombre} → ${rival.nombre} · escalera ${accion.sendero} · nv ${mon.nivel} · luna ${e.luna}`);
     }
     /* Con dos lanzaderas la fase sigue abierta mientras quede otra ficha y
        algún camino rival libre: cada lanzadera se manda por separado. */
@@ -874,6 +889,19 @@ function cartaDeTramo(carta, tramo) {
 function cartaDestinoDelCiclo(e, evs) {
   if (e.destinoCiclo?.luna === e.luna) return e.destinoCiclo.carta ?? null;
 
+  /* Las cuatro primeras lunas van escritas (ver APERTURA_DESTINO). Si una
+     mesa vieja ya tiene su carta fijada para esa luna, manda la de arriba. */
+  const forzada = APERTURA_DESTINO[e.luna];
+  if (forzada) {
+    const plantilla = PLANTILLAS_DESTINO.find(p => p.id === forzada);
+    if (plantilla) {
+      const carta = { ...plantilla, uid: uid("dc") };
+      e.destinoPrevio = { tipo: carta.tipo, luna: e.luna };
+      e.destinoCiclo = { luna: e.luna, carta, globalResuelto: false };
+      return carta;
+    }
+  }
+
   const tramo = tramoDestino(e.luna);
   const sacar = (filtro = null) => {
     const i = e.mazoDestino.findIndex(c => cartaDeTramo(c, tramo) && (!filtro || filtro(c)));
@@ -913,6 +941,7 @@ function cartaDestinoDelCiclo(e, evs) {
 
 function faseCarta(e, jugadorId, evs) {
   const carta = cartaDestinoDelCiclo(e, evs);
+  console.log(`[carta] luna ${e.luna} · ${carta?.id ?? "-"} ${carta?.tipo ?? "-"}${carta?.nivel ? " nv" + carta.nivel : ""} · para ${e.jugadores[jugadorId]?.nombre}`);
   if (carta) {
     /* La carta queda a la vista en la mesa durante todo el turno. */
     /* La descripción se calcula con las escaleras que hay libres ahora mismo
@@ -1049,6 +1078,7 @@ function entregarRegalos(e, jugadorId, evs) {
         calles,
         sobran: sobran.map((m) => m.nivel),
       }];
+      console.log(`[regalo] ${j.nombre} recibe de ${g.deNombre ?? g.de}: ${recibidos.length} en jaulas, ${calles.length} en calles, ${sobran.length} sin hueco`);
       evs.push({
         tipo: "regalo",
         texto: `${g.deNombre ?? "Un aliado"} envía a ${j.nombre}: ${g.monedas ?? 0} monedas, ${g.decretos ?? 0} decretos y ${recibidos.length + calles.length} monstruo(s).`
@@ -2137,6 +2167,18 @@ function esRival(e, a, b) {
     && ((e.modo ?? "todos") !== "equipos" || e.jugadores[a]?.equipo !== e.jugadores[b]?.equipo);
 }
 
+/* Un jugador que cae deja su sitio en la clasificación: el primero que cae es
+   el último de la mesa y el siguiente, el penúltimo. Se apunta una sola vez. */
+function marcarEliminado(e, jugadorId) {
+  if (!Array.isArray(e.eliminados)) e.eliminados = [];
+  if (e.eliminados.some((x) => x.jugadorId === jugadorId)) return;
+  e.eliminados.push({
+    jugadorId,
+    luna: e.luna,
+    puntos: e.jugadores[jugadorId]?.puntosMonsters ?? 0,
+  });
+}
+
 function avanzarTurno(e) {
   const n = e.orden.length;
   let sig = (e.turnoIdx + 1) % n;
@@ -2381,6 +2423,7 @@ function resolverDestino(e, jugadorId, carta) {
         evs.push({ tipo: "entrada", texto: `¡Monstruo ${enLaPuerta.nivel} entra en el búnker de ${j.nombre}! (+${enLaPuerta.nivel} pts)` });
         if (j.puntosMonsters > 20) {
           j.vivo = false;
+          marcarEliminado(e, jugadorId);
           evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
         }
       }

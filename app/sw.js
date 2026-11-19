@@ -179,7 +179,11 @@ self.addEventListener("notificationclick", (ev) => {
 /* ── Red ───────────────────────────────────────────────────────────────── */
 
 function esArte(url) {
-  return /\/arte\/.*\.(svg|png|webp|jpg|jpeg|gif|woff2?)(\?|$)/i.test(url);
+  /* El arte clásico vive en /arte/; las imágenes de los juegos
+     (/app/juegos/<id>/img/…) se tratan igual: caché primero, para que no se
+     vuelvan a bajar cada vez que se entra a una partida. */
+  return /\/arte\/.*\.(svg|png|webp|jpg|jpeg|gif|woff2?)(\?|$)/i.test(url)
+      || /\/juegos\/[^/]+\/img\/.*\.(svg|png|webp|jpg|jpeg|gif|woff2?)(\?|$)/i.test(url);
 }
 
 self.addEventListener("fetch", (ev) => {

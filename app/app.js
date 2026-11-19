@@ -201,6 +201,13 @@ function alSinMesa(juegoId = null) {
    acción, un empujón de la mesa) devolvía la vista al principio. */
 let scrollRecordado = 0;
 
+/* Pantalla de caído: se espera un momento a que acabe la animación de la
+   entrada en el búnker (el humo y el «-N» explican por qué has caído) y, a
+   partir de ahí, cada difusión de la mesa repinta la clasificación. */
+let caidoEspera = null;
+let caidoListo = false;
+const MS_CAIDO = 2600;
+
 function limpiar() {
   const p = $pantalla();
   scrollRecordado = p.scrollTop || 0;
@@ -257,7 +264,8 @@ function pintarVestibulo() {
   vistaJuego.limpiar();
   limpiar();
   $barra().hidden = false;
-  vistaJuego.precargar(estado.mesa.juego?.id);
+  const juegoActual = estado.juegos.find((j) => j.id === estado.mesa.juego?.id);
+  vistaJuego.precargar(estado.mesa.juego?.id, juegoActual?.imagenes);
 
   const props = {
     mesa: estado.mesa,
@@ -291,8 +299,12 @@ function pintarVestibulo() {
 }
 
 function pintarMesa() {
+  if (!estado.mesa) return;
   $barra().hidden = false;
   if (estado.mesa.fase === "final") {
+    clearTimeout(caidoEspera);
+    caidoEspera = null;
+    caidoListo = false;
     vistaJuego.limpiar();
     limpiar();
     pintarCon(vistaFinal, {
@@ -302,6 +314,29 @@ function pintarMesa() {
     });
     return;
   }
+
+  /* Búnker destruido y la mesa sigue: pantalla de caído con el fondo del
+     vestíbulo, tu puesto y la gente que va cayendo. */
+  const miJugador = estado.mesa.publica?.jugadores?.[estado.usuario?.id];
+  const caido = estado.mesa.fase === "jugando" && miJugador && miJugador.vivo === false;
+  if (!caido) {
+    clearTimeout(caidoEspera);
+    caidoEspera = null;
+    caidoListo = false;
+  } else if (!caidoListo && !caidoEspera) {
+    caidoEspera = setTimeout(() => {
+      caidoEspera = null;
+      caidoListo = true;
+      pintarMesa();
+    }, MS_CAIDO);
+  }
+  if (caido && caidoListo) {
+    vistaJuego.limpiar();
+    limpiar();
+    vistaFinal.pintarCaido($pantalla(), { mesa: estado.mesa, alSalir: salirDeMesa });
+    return;
+  }
+
   limpiar();
   pintarCon(vistaJuego, {
     mesa: estado.mesa,

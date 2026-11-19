@@ -47,6 +47,19 @@ function huella(dirs) {
   return h.digest("hex").slice(0, 10);
 }
 
+/* Las carpetas de arte: la común y la `img` de cada juego. Así cambiar un
+   dibujo de cualquier juego invalida su caché sin listar los juegos a mano. */
+function dirsArte() {
+  const salida = ["app/arte"];
+  try {
+    const base = path.join(RAIZ, "app", "juegos");
+    for (const e of fs.readdirSync(base, { withFileTypes: true })) {
+      if (e.isDirectory()) salida.push(`app/juegos/${e.name}/img`);
+    }
+  } catch { /* sin juegos instalados */ }
+  return salida;
+}
+
 /* Lo último que se tocó en esos directorios. Si cambia, se vuelve a calcular
    la huella: así la app se entera de una actualización sin reiniciar el
    servidor (antes la versión se quedaba clavada en el arranque y, si se
@@ -73,7 +86,7 @@ export function versiones() {
        falta recargar la pestaña; si cambia la app, sí. */
     sello = {
       version: huella(["app", "juego"]),
-      arte: huella(["app/arte"]),
+      arte: huella(dirsArte()),
       /* La huella completa incluye la plataforma: cambia con cualquier
          despliegue, aunque la app sea igual. Sirve para el log, no para el
          modal. */

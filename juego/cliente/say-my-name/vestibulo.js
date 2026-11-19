@@ -375,3 +375,4 @@ function abrirAjustesMesa(raiz, deps) {
   raiz.append(hoja);
   requestAnimationFrame(() => hoja.classList.add("abierta"));
 }
+

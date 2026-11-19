@@ -49,6 +49,28 @@ console.log(`[madrigueras] versión ${VERSION} · arte ${ARTE} · ${os.hostname(
 
 /* ── Utilidades HTTP ───────────────────────────────────────────────────── */
 
+/* Imágenes de un juego. Se listan al vuelo desde su carpeta `img` para que el
+   hall pueda precargarlas sin mantener una lista a mano: cualquier imagen
+   nueva entra sola. */
+const EXT_IMG = new Set([".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg"]);
+function imagenesDeJuego(id) {
+  const salida = [];
+  const base = path.join(RAIZ, "app", "juegos", id, "img");
+  const andar = (dir) => {
+    let entradas;
+    try { entradas = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entradas) {
+      if (e.name.startsWith(".")) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { andar(p); continue; }
+      if (!EXT_IMG.has(path.extname(p).toLowerCase())) continue;
+      salida.push("/" + path.relative(RAIZ, p).split(path.sep).join("/"));
+    }
+  };
+  andar(base);
+  return salida.sort();
+}
+
 const TIPOS = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -59,6 +81,12 @@ const TIPOS = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".webp": "image/webp",
+  /* Audio del juego (la banda sonora de Bunker Wars). Sin estos tipos el
+     archivo se servía como octet-stream y el <audio> no lo tocaba. */
+  ".m4a": "audio/mp4",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
 };
@@ -318,7 +346,8 @@ const httpServidor = http.createServer(async (req, res) => {
   }
 
   if (ruta === "/api/juegos") {
-    return json(res, 200, { juegos: listaJuegos() });
+    const juegos = listaJuegos().map((j) => ({ ...j, imagenes: imagenesDeJuego(j.id) }));
+    return json(res, 200, { juegos });
   }
 
   if (ruta === "/api/push") {
@@ -441,6 +470,7 @@ const httpServidor = http.createServer(async (req, res) => {
      juego (las reglas) no sale del servidor. */
   const permitido = rel.startsWith("app/") || rel.startsWith("juego/cliente/");
   if (!permitido) {
+    console.log(`[estático] 404 (ruta no permitida) · ${req.url}`);
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     return res.end("no está");
   }
@@ -453,6 +483,7 @@ const httpServidor = http.createServer(async (req, res) => {
   }
   fs.readFile(archivo, (err, datos) => {
     if (err) {
+      console.log(`[estático] 404 · ${req.url}`);
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       return res.end("no está");
     }

@@ -13,10 +13,29 @@ import { h, esc, avatarSVG, modal, aviso } from "../ui.js";
    tacada, sin que llegue a verse el hueco negro entre una cosa y otra. */
 const tableros = new Map();
 
+/* Imágenes ya pedidas por juego: el hall, el vestíbulo y la mesa pueden pedir
+   la misma precarga y solo se lanza una vez. Se guardan las Image() para que
+   el navegador no las suelte antes de descargarlas. */
+const imagenesPedidas = new Set();
+const imagenesEnMemoria = [];
+export function precargarImagenes(urls, clave = "") {
+  if (!Array.isArray(urls) || !urls.length) return;
+  if (clave) {
+    if (imagenesPedidas.has(clave)) return;
+    imagenesPedidas.add(clave);
+  }
+  for (const u of urls) {
+    const img = new Image();
+    img.src = u;
+    imagenesEnMemoria.push(img);
+  }
+}
+
 /* Descarga el tablero antes de entrar a la mesa. Así el primer pintado de la
    partida ya lo tiene en memoria y es síncrono: no se ve el hueco negro entre
    el vestíbulo y el juego. */
-export function precargar(id) {
+export function precargar(id, imagenes) {
+  precargarImagenes(imagenes, id ? `img:${id}` : "");
   if (!id || tableros.has(id)) return;
   import(new URL(`../juego/cliente/${encodeURIComponent(id)}.js`, document.baseURI).href)
     .then((mod) => { if (typeof mod.pintar === "function") tableros.set(id, mod); })
@@ -42,8 +61,13 @@ export function esperarVestibulo(id) {
    modales. Al salir de la mesa o al volver al vestíbulo hay que retirarlos:
    vaciar #pantalla no se los lleva, y se quedaban encima del inicio. */
 export function limpiar() {
+  /* La música del juego se para ANTES de quitar el nodo: un <audio> sacado del
+     documento sigue sonando. */
+  document.querySelectorAll("body > #bw-musica-audio").forEach((a) => a.pause?.());
   document.querySelectorAll([
     "body > #bw-nav-global",
+    "#barra #bw-sonido",
+    "body > #bw-musica-audio",
     "body > .bw-mano-wrap",
     "body > .bw-panel",
     "body > .bw-panel-overlay",
