@@ -71,6 +71,16 @@ function imagenesDeJuego(id) {
   return salida.sort();
 }
 
+/* Lo único que el estático sirve. `app/` se sirve entero, así que la lista
+   evita publicar lo que se cuele ahí sin querer: un .md, un .map, un .bak o el
+   .DS_Store del Mac. Lo que no esté, 404. */
+const EXT_PERMITIDAS = new Set([
+  ".html", ".js", ".mjs", ".css", ".json", ".webmanifest",
+  ".png", ".webp", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+  ".woff2", ".woff", ".ttf",
+  ".m4a", ".mp3", ".ogg", ".wav",
+]);
+
 const TIPOS = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -81,6 +91,9 @@ const TIPOS = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".webp": "image/webp",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
   /* Audio del juego (la banda sonora de Bunker Wars). Sin estos tipos el
      archivo se servía como octet-stream y el <audio> no lo tocaba. */
   ".m4a": "audio/mp4",
@@ -89,6 +102,8 @@ const TIPOS = {
   ".wav": "audio/wav",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
 };
 
 function json(res, estado, cuerpo) {
@@ -308,16 +323,28 @@ const httpServidor = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", "http://local");
   const ruta = decodeURIComponent(url.pathname);
 
-  /* Cabeceras para todos. La CSP deja pasar el cliente de socket.io (mismo
-     origen) y nada de terceros. */
+  /* Cabeceras para todos. La CSP solo deja pasar lo del propio origen: los
+     sockets van nombrados con el host de esta petición, no con el comodín
+     `ws:`, que autorizaba a conectarse a cualquier servidor de fuera. */
+  const anfitrion = String(req.headers.host ?? "").replace(/[^a-zA-Z0-9.:[\]-]/g, "");
+  const sockets = anfitrion ? `ws://${anfitrion} wss://${anfitrion}` : "";
   res.setHeader("x-content-type-options", "nosniff");
   res.setHeader("referrer-policy", "same-origin");
   res.setHeader("x-frame-options", "DENY");
   res.setHeader(
+    "permissions-policy",
+    "camera=(), microphone=(), geolocation=(), usb=(), serial=(), interest-cohort=()"
+  );
+  /* HSTS solo cuando la petición viene por HTTPS; en claro los navegadores la
+     ignoran y no tiene sentido anunciarla. */
+  const porHTTPS = !!req.socket.encrypted
+    || String(req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim() === "https";
+  if (porHTTPS) res.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
+  res.setHeader(
     "content-security-policy",
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-      "script-src 'self'; connect-src 'self' ws: wss:; manifest-src 'self'; " +
-      "base-uri 'none'; form-action 'self'"
+      `script-src 'self'; connect-src 'self' ${sockets}; manifest-src 'self'; ` +
+      "base-uri 'none'; form-action 'self'; object-src 'none'"
   );
 
   /* ── API ── */
@@ -484,13 +511,18 @@ const httpServidor = http.createServer(async (req, res) => {
     res.writeHead(403);
     return res.end("fuera");
   }
+  const ext = path.extname(archivo).toLowerCase();
+  if (!EXT_PERMITIDAS.has(ext)) {
+    console.log(`[estático] 404 (extensión no servida) · ${req.url}`);
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    return res.end("no está");
+  }
   fs.stat(archivo, (err, st) => {
     if (err || !st.isFile()) {
       console.log(`[estático] 404 · ${req.url}`);
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       return res.end("no está");
     }
-    const ext = path.extname(archivo);
     const total = st.size;
     const esAudio = /\.(m4a|mp3|ogg|wav)$/i.test(ext);
 
