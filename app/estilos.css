@@ -81,7 +81,7 @@
   --btn-alto: 48px;
   --btn-radio: var(--radio-chico);
   --btn-pad: 0 var(--e-4);
-  --btn-fuente: 650 var(--t-l) / 1 inherit;
+  /* Ya no hay atajo `font` para los botones: ver `.boton`. */
   --btn-fondo: linear-gradient(180deg, #f4f7f9, #c2cbd3 55%, #a9b3bc);
   --btn-texto: #12161a;
   --btn-borde: 1px solid rgba(255, 255, 255, 0.22);
@@ -410,7 +410,11 @@ input[type="text"], input[type="password"] {
   border: 1px solid var(--borde-fuerte);
   background: rgba(0, 0, 0, 0.25);
   color: var(--tinta);
-  font: 16px/1.2 inherit;
+  /* El atajo `font` no admite `inherit` en la familia: con `font: 16px/1.2
+     inherit` el navegador tiraba la línea y el texto salía a 13 px. */
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.2;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -432,7 +436,13 @@ input::placeholder { color: var(--tinta-tenue); }
   border-radius: var(--btn-radio);
   background: var(--btn-fondo);
   color: var(--btn-texto);
-  font: var(--btn-fuente);
+  /* Nada de `font: 650 16px/1 inherit`: el atajo no admite `inherit` como
+     familia, así que el navegador tiraba la regla entera y los botones se
+     quedaban con la letra del sistema a 13 px. */
+  font-family: inherit;
+  font-size: var(--t-l);
+  font-weight: 650;
+  line-height: 1;
   letter-spacing: 0.01em;
   cursor: pointer;
   transition: transform 0.08s, filter 0.15s, opacity 0.15s;
@@ -480,6 +490,26 @@ input::placeholder { color: var(--tinta-tenue); }
 .entrada > .entrada-titulo { text-align: center; }
 .entrada > .entrada-titulo { padding-bottom: 50px; }
 
+/* El icono de la app (el mismo de la instalación) encima de «Juegos por
+   turnos». Cuadrado y con las esquinas como las del icono del móvil. */
+.entrada-icono {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 16px;
+  border-radius: 24px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+
+/* La letra de la entrada, dos puntos más grande: las pestañas, las etiquetas,
+   lo que se escribe en los campos y el botón. Solo aquí, para no mover el
+   tamaño del resto de la app. */
+.entrada .pestanas button { font-size: 16px; font-weight: 600; }
+.entrada .campo label { font-size: 14px; }
+.entrada input[type="text"],
+.entrada input[type="password"] { font-size: 18px; }
+.entrada .boton { font-size: 18px; }
+
 .pestanas {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -496,7 +526,9 @@ input::placeholder { color: var(--tinta-tenue); }
   border-radius: 10px;
   background: transparent;
   color: var(--tinta-tenue);
-  font: 600 14px inherit;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 .pestanas button.on { background: var(--panel-2); color: var(--tinta); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset; }
@@ -904,7 +936,10 @@ input::placeholder { color: var(--tinta-tenue); }
   border: 0;
   background: none;
   color: var(--plata);
-  font: 600 12px/1.2 inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
   letter-spacing: 0.03em;
   text-decoration: none;
   cursor: pointer;
@@ -996,7 +1031,9 @@ input::placeholder { color: var(--tinta-tenue); }
   border: 1px solid var(--borde-fuerte);
   background: var(--panel-2);
   color: var(--tinta);
-  font: 600 15px inherit;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
@@ -1196,7 +1233,10 @@ input::placeholder { color: var(--tinta-tenue); }
   border: var(--btn-borde);
   background: var(--btn-fondo);
   color: var(--btn-texto);
-  font: 700 17px/1 inherit;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
 }
 

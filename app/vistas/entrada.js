@@ -10,6 +10,8 @@ export function pintar(raiz, { alEnviar, codigo = null, error = null }) {
 
   const nodo = h(`
     <section class="entrada">
+      <!-- El icono de la app, el mismo que se instala, encima del título. -->
+      <img class="entrada-icono" src="arte/icono-192.png" alt="" width="96" height="96" />
       <p class="subtitulo">Juegos por turnos</p>
       <h1 class="entrada-titulo">PYMALS</h1>
 
