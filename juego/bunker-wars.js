@@ -104,7 +104,6 @@ const PLANTILLAS_DESTINO = [
   { id:"d26", tipo:"convertir_aliado", tramo:2 },
   { id:"d30", tipo:"bajar_monstruos", nivelMin:2, tramo:2 },
   { id:"d23", tipo:"aniquilar_nivel", nivelMax:3, tramo:2 },
-  { id:"d32", tipo:"colocar_monstruos", nivel:2, cantidad:2, tramo:2 },
   { id:"d24", tipo:"matar_mayor", tramo:3 },
   { id:"d33", tipo:"desercion", tramo:3 },
   { id:"d29", tipo:"subir_monstruos", nivelMax:5, tramo:3 },
