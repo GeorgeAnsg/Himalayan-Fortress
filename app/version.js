@@ -37,14 +37,32 @@ async function recargar() {
   };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
-    if (reg?.waiting) {
-      navigator.serviceWorker.addEventListener("controllerchange", unaVez, { once: true });
-      reg.waiting.postMessage({ tipo: "actualizar" });
-    } else if (reg) {
-      await reg.update();
+    if (!reg) { setTimeout(unaVez, 300); return; }
+
+    navigator.serviceWorker.addEventListener("controllerchange", unaVez, { once: true });
+
+    const activar = (sw) => sw.postMessage({ tipo: "actualizar" });
+
+    if (reg.waiting) {
+      activar(reg.waiting);
+    } else {
+      /* El SW todavía está instalando: esperar a que pase a "installed"
+         (= waiting) y entonces pedirle que tome el mando. */
+      const esperarWaiting = (sw) => {
+        sw.addEventListener("statechange", function h() {
+          if (this.state === "installed") {
+            sw.removeEventListener("statechange", h);
+            if (reg.waiting) activar(reg.waiting);
+          }
+        });
+      };
+      if (reg.installing) esperarWaiting(reg.installing);
+      reg.update()
+        .then(() => { if (reg.waiting) activar(reg.waiting); })
+        .catch(() => {});
     }
   } catch { /* se recarga igual */ }
-  setTimeout(unaVez, 1200);
+  setTimeout(unaVez, 4000);
 }
 
 export function avisarNueva(versionServidor) {
