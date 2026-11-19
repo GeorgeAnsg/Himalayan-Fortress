@@ -55,8 +55,11 @@ const PLANTILLAS_DESTINO = [
     titulo:"Un rastreador",
     descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
   { id:"a03", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
-    titulo:"Dos rastreadores",
+    titulo:"Se han avistado 2 rastreadores",
     descripcion:"Dos rastreadores salen de la ventisca." },
+  { id:"a03b", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
+    titulo:"2 rastreadores avistados",
+    descripcion:"Dos rastreadores aparecen en el comienzo de tus escaleras." },
   { id:"a04", tipo:"amenaza", nivel:1, cantidad:3, prio:[1,2,3], tramo:1, tramoMax:1,
     titulo:"Tres rastreadores",
     descripcion:"Tres rastreadores emergen de la nieve." },
@@ -117,7 +120,7 @@ const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null
    una carta fea en la luna 1 la decidía; así todas las mesas empiezan igual.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
-const APERTURA_DESTINO = { 1: "a01", 2: "d21", 3: "a04", 4: "d21" };
+const APERTURA_DESTINO = { 1: "a01", 2: "a03", 3: "d21", 4: "a03b" };
 
 function crearMazoDestino(nJugadores, e) {
   return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
