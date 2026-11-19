@@ -175,7 +175,7 @@ function alMesa(vista) {
   /* Avisos que salen de la mesa, no de la jugada: turno, empieza, final. */
   if (antes) {
     if (vista.fase === "jugando" && antes.fase !== "jugando") {
-      avisos.avisarLocal("Empieza la partida", `Madriguera ${vista.codigo}`, `empieza-${vista.codigo}`);
+      avisos.avisarLocal("Empieza la partida", `Himalayan Fortress · ${vista.codigo}`, `empieza-${vista.codigo}`);
     }
     if (vista.fase === "final" && antes.fase !== "final") {
       avisos.avisarLocal("Se acabó", "Ya están los resultados.", `fin-${vista.codigo}`);
