@@ -3541,26 +3541,35 @@ function montarMusica() {
   };
 
   /* play() devuelve promesa en los navegadores modernos; si la rechaza (falta
-     gesto) no se hace nada: el listener de gesto lo reintenta. */
+     gesto, o iOS al volver de segundo plano) no se hace nada: los listeners de
+     gesto siguen puestos y lo reintentan en el siguiente toque. */
   const arrancar = () => {
-    if (!suena) return;
+    if (!suena || document.hidden || !audio.isConnected) return;
     const p = audio.play();
-    if (p?.then) p.then(() => soltarGesto()).catch(() => {});
+    if (p?.then) p.catch(() => {});
   };
 
   /* Cualquier gesto vale, y se escuchan varios porque iOS no siempre manda
      `pointerdown` en la PWA instalada: ahí el toque llega como `touchend`. */
   const conGesto = () => arrancar();
-  const GESTOS = ["pointerdown", "touchend", "click", "keydown"];
-  const soltarGesto = () => {
-    for (const g of GESTOS) removeEventListener(g, conGesto, true);
-  };
-  for (const g of GESTOS) addEventListener(g, conGesto, true);
+  for (const g of ["pointerdown", "touchend", "click", "keydown"]) {
+    addEventListener(g, conGesto, true);
+  }
+
+  /* La música es de la app abierta: al cambiar a otra app o apagar la pantalla
+     se pausa, y al volver sigue donde estaba. `pagehide`/`pageshow` cubren a
+     iOS, que no siempre manda `visibilitychange` antes de congelar la PWA. */
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) audio.pause();
+    else arrancar();
+  });
+  addEventListener("pagehide", () => audio.pause());
+  addEventListener("pageshow", () => arrancar());
 
   boton.addEventListener("click", () => {
     suena = !suena;
     try { localStorage.setItem(CLAVE_MUSICA, suena ? "1" : "0"); } catch {}
-    if (suena) arrancar(); else { audio.pause(); soltarGesto(); }
+    if (suena) arrancar(); else audio.pause();
     pintaBoton();
     registro("música", suena ? "encendida" : "apagada");
   });
