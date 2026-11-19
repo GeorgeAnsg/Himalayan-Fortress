@@ -125,10 +125,12 @@ function crearMazoDestino(nJugadores, e) {
 
 // ── Cartas de búnker ──────────────────────────────────────────────────────
 const PLANTILLAS_BUNKER = [
-  { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Te permite generar 1 moneda extra al comienzo de cada turno" },
-  { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 decreto extra cada turno." },
-  { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 decreto extra cada turno." },
-  { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 decreto extra cada turno." },
+  { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Genera 1 moneda extra al comienzo de cada turno." },
+  { tipo:"decreto",     nivel:1, coste:2, titulo: "DECRETO 1",  descripcion: "Genera 1 decreto extra al comienzo de cada turno." },
+  { tipo:"decreto",     nivel:1, coste:2, titulo: "DECRETO 1",  descripcion: "Genera 1 decreto extra al comienzo de cada turno." },
+  { tipo:"recursos",    nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 decreto extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
   { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
@@ -161,7 +163,7 @@ const TOPE_RECURSOS = 4;
 
 // Una copia de cada carta — mazo sin duplicados
 const COPIAS_BUNKER = {
-  recursos: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
+  recursos: 1, decreto: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
 };
 
 /* Cartas que todavía le sirven al jugador: recursos mientras quede hueco en el
@@ -172,6 +174,7 @@ function cartasUtiles(j) {
     const n = COPIAS_BUNKER[p.tipo] ?? 1;
     if (!n) continue;
     if (p.tipo === "recursos" && (j.bunker.recursos?.length ?? 0) >= 4) continue;
+    if (p.tipo === "decreto"  && (j.bunker.decretos?.length ?? 0) >= 2) continue;
     if (p.tipo === "armeria" && p.nivel <= (j.bunker.armeria ?? 0)) continue;
     if (p.tipo === "laboratorio" && p.nivel <= (j.bunker.laboratorio ?? 0)) continue;
     if (p.tipo === "ciencia" && tieneCiencia(j, p.efecto)) continue;
@@ -221,9 +224,9 @@ function energiaTotal(j) {
 }
 
 function accionesTotal(j) {
-  return 2 + (j.bunker.extra?.monjes ?? 0) + j.bunker.recursos.reduce((s, c) => {
-    return s + (c.nivel >= 4 ? 2 : c.nivel >= 2 ? 1 : 0);
-  }, 0);
+  return 2 + (j.bunker.extra?.monjes ?? 0)
+    + j.bunker.recursos.reduce((s, c) => s + (c.nivel >= 4 ? 2 : c.nivel >= 2 ? 1 : 0), 0)
+    + (j.bunker.decretos?.length ?? 0);
 }
 
 /* Nivel máximo de monstruo que permite crear el criadero:
@@ -484,7 +487,7 @@ function costeDisparo(j, senderoId, daño) {
 
 // ── Inicialización de jugador ─────────────────────────────────────────────
 function jugadorInicial(info, e) {
-  const bunker = { armeria: 1, laboratorio: 1, recursos: [], ciencia: [], torres: [null, null, null],
+  const bunker = { armeria: 1, laboratorio: 1, recursos: [], decretos: [], ciencia: [], torres: [null, null, null],
     extra: { monedas: 0, monjes: 0 } };
   const mazo = crearMazoBunker(e, { bunker });
   const mano = mazo.splice(0, 4);
@@ -1913,6 +1916,9 @@ function puedeJugarCarta(j, carta) {
   if (carta.tipo === "recursos") {
     return j.bunker.recursos.length < 4;
   }
+  if (carta.tipo === "decreto") {
+    return (j.bunker.decretos?.length ?? 0) < 2;
+  }
   if (carta.tipo === "ciencia") {
     /* Con los dos huecos ocupados sigue siendo jugable: al instalarla se elige
        cuál de las dos sale (lo comprueba faseAcciones). */
@@ -2149,6 +2155,7 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
    "Laboratorio o armería". */
 function aplicarMejoraBunker(j, carta, e, evs, reemplazo, accion) {
   if (carta.tipo === "recursos")    { j.bunker.recursos.push(carta); return; }
+  if (carta.tipo === "decreto")     { j.bunker.decretos.push(carta); return; }
   if (carta.tipo === "armeria")     { j.bunker.armeria     = carta.nivel; return; }
   if (carta.tipo === "laboratorio") { j.bunker.laboratorio = carta.nivel; return; }
   if (carta.tipo === "ciencia") {
