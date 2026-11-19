@@ -126,8 +126,8 @@ function crearMazoDestino(nJugadores, e) {
 // ── Cartas de búnker ──────────────────────────────────────────────────────
 const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Te permite generar 1 moneda extra al comienzo de cada turno" },
-  { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 acción extra cada turno." },
-  { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 acción extra cada turno." },
+  { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 decreto extra cada turno." },
+  { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 decreto extra cada turno." },
   { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 decretos extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
@@ -150,7 +150,7 @@ const PLANTILLAS_BUNKER = [
      atajo. */
   { tipo:"ciencia_i",   efecto:"subir_armeria",      coste:3, titulo: "Subir armería", descripcion: "Aumenta un nivel la armería." },
   { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir criadero", descripcion: "Aumenta un nivel el criadero." },
-  { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Suma 1 moneda y 1 monje por turno a tu búnker." },
+  { tipo:"ciencia_i",   efecto:"subir_recursos",     coste:4, titulo: "Subir recursos", descripcion: "Suma 1 moneda y 1 decreto por turno a tu búnker." },
   { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Criadero o armería", descripcion: "Aumenta un nivel el criadero o la armería." },
 ];
 
