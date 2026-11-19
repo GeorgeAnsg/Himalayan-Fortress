@@ -584,9 +584,16 @@ const bunkerWars = {
     const evs = [];
     let r;
     /* El pase directo no depende de la fase: cierra el turno en el momento en
-       que el jugador lo pide, aunque le queden acciones o cartas. */
+       que el jugador lo pide, aunque le queden acciones o cartas.
+       Excepción: desde "acciones" o "lanzar" hay que pasar por "descartar"
+       para que el jugador pueda elegir qué carta quitar de la mano. */
     if (accion?.tipo === "saltar_turno") {
-      r = cerrarTurnoYAvanzar(e, jugadorId, evs);
+      if (e.fase === "acciones" || e.fase === "lanzar") {
+        e.fase = "descartar";
+        r = { estado: e, eventos: evs };
+      } else {
+        r = cerrarTurnoYAvanzar(e, jugadorId, evs);
+      }
     } else switch (e.fase) {
       case "lanzar":    r = faseLanzar(e, jugadorId, accion, evs); break;
       case "avance":    r = faseAvance(e, jugadorId, evs); break;
