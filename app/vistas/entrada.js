@@ -39,10 +39,6 @@ export function pintar(raiz, { alEnviar, codigo = null, error = null }) {
         <button class="boton" type="submit">Entrar</button>
       </form>
 
-      <p class="sello">
-        <span>◔</span>
-        <span>Tu cuenta y tus mesas viven en este servidor, no en el móvil.</span>
-      </p>
     </section>
   `);
 
