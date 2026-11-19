@@ -193,6 +193,11 @@ self.addEventListener("fetch", (ev) => {
   if (req.url.includes("/sw.js")) return;
   if (req.url.includes("/socket.io/")) return;
 
+  /* Audio y vídeo, directos a la red: Safari los pide por trozos y, si los
+     sirve el service worker, el <audio> se queda sin sonar (sobre todo en
+     iOS). El navegador ya los cachea por su cuenta. */
+  if (/\.(m4a|mp3|ogg|wav|mp4|webm)(\?|$)/i.test(req.url)) return;
+
   /* Arte: primero la caché; si no está, se baja y se guarda. */
   if (esArte(req.url)) {
     ev.respondWith((async () => {

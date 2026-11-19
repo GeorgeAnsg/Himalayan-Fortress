@@ -3548,13 +3548,14 @@ function montarMusica() {
     if (p?.then) p.then(() => soltarGesto()).catch(() => {});
   };
 
+  /* Cualquier gesto vale, y se escuchan varios porque iOS no siempre manda
+     `pointerdown` en la PWA instalada: ahí el toque llega como `touchend`. */
   const conGesto = () => arrancar();
+  const GESTOS = ["pointerdown", "touchend", "click", "keydown"];
   const soltarGesto = () => {
-    removeEventListener("pointerdown", conGesto, true);
-    removeEventListener("keydown", conGesto, true);
+    for (const g of GESTOS) removeEventListener(g, conGesto, true);
   };
-  addEventListener("pointerdown", conGesto, true);
-  addEventListener("keydown", conGesto, true);
+  for (const g of GESTOS) addEventListener(g, conGesto, true);
 
   boton.addEventListener("click", () => {
     suena = !suena;

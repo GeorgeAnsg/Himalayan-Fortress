@@ -484,21 +484,58 @@ const httpServidor = http.createServer(async (req, res) => {
     res.writeHead(403);
     return res.end("fuera");
   }
-  fs.readFile(archivo, (err, datos) => {
-    if (err) {
+  fs.stat(archivo, (err, st) => {
+    if (err || !st.isFile()) {
       console.log(`[estático] 404 · ${req.url}`);
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       return res.end("no está");
     }
     const ext = path.extname(archivo);
-    res.writeHead(200, {
+    const total = st.size;
+    const esAudio = /\.(m4a|mp3|ogg|wav)$/i.test(ext);
+
+    const cabeceras = {
       "content-type": TIPOS[ext] || "application/octet-stream",
-      /* Nada de caché del navegador: el service worker es quien decide, y así
-         una recarga normal no se queda con un JS viejo. */
-      "cache-control": "no-store",
+      /* Nada de caché del navegador para el código: el service worker es quien
+         decide, y así una recarga normal no se queda con un JS viejo. El audio
+         sí se guarda: son 3 MB que no tienen por qué bajar en cada entrada. */
+      "cache-control": esAudio ? "public, max-age=86400" : "no-store",
       "service-worker-allowed": "/",
-    });
-    res.end(datos);
+      /* Safari —sobre todo el de iOS— pide el audio y el vídeo por trozos: sin
+         `accept-ranges` y sin responder 206 con la parte pedida, el <audio> se
+         queda cargando y no suena nunca. */
+      "accept-ranges": "bytes",
+    };
+
+    /* ── Petición por trozos (Range) ── */
+    const pedido = String(req.headers.range ?? "").trim();
+    const m = /^bytes=(\d*)-(\d*)$/.exec(pedido);
+    if (m && (m[1] || m[2])) {
+      let inicio = m[1] === "" ? null : Number(m[1]);
+      let fin = m[2] === "" ? null : Number(m[2]);
+      if (inicio === null) {
+        /* «bytes=-500»: los últimos 500 bytes. */
+        fin = total - 1;
+        inicio = Math.max(0, total - Number(m[2]));
+      } else if (fin === null || fin >= total) {
+        fin = total - 1;
+      }
+      if (inicio >= total || fin < inicio) {
+        res.writeHead(416, { ...cabeceras, "content-range": `bytes */${total}` });
+        return res.end();
+      }
+      res.writeHead(206, {
+        ...cabeceras,
+        "content-range": `bytes ${inicio}-${fin}/${total}`,
+        "content-length": String(fin - inicio + 1),
+      });
+      if (req.method === "HEAD") return res.end();
+      return fs.createReadStream(archivo, { start: inicio, end: fin }).pipe(res);
+    }
+
+    res.writeHead(200, { ...cabeceras, "content-length": String(total) });
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(archivo).pipe(res);
   });
 });
 
