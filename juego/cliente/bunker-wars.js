@@ -2212,7 +2212,10 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
          que aún no tienen arte caen en la del nivel 1. */
       const img = imgMonstruo(nivelDe(f), esAtacante);
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      /* Monstruo recién llegado que aún no ha sido anunciado: se esconde hasta
+         que animarLlegadaEnviados lo haga emerger de la niebla en el avance. */
+      const ocultoHastaAvance = entra && f.id && !llegadasAnunciadas.has(f.id);
+      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
