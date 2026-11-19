@@ -1173,7 +1173,11 @@ function animarLlegadaEnviados() {
     if (!desde) return;
     llegadasAnunciadas.add(el.dataset.fid);
     const retardo = i * (MS_FICHA + MS_PAUSA);
-    const fin = { l: el.style.left, t: el.style.top };
+    /* LOSAS[calle][0] es la pos 0 real: animarFichas puede haber movido el
+       elemento a ENTRADA antes de que lleguemos aquí, así que no leemos
+       el.style.left sino la casilla directamente. */
+    const losa0 = LOSAS[calle]?.[0];
+    const fin = losa0 ? { l: `${losa0.l}%`, t: `${losa0.t}%` } : { l: el.style.left, t: el.style.top };
     el.style.left = `${desde.l}%`;
     el.style.top = `${desde.t}%`;
     /* Nace apagado en la bruma y sube hasta su casilla; el relleno «both»
