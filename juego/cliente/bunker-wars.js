@@ -1144,7 +1144,11 @@ function iniciarFase(anim) {
     });
     if (!anim.movidas && !anim.entradas) { verEfecto(); return; }
     bloquearPorAvance(true);
-    bajarAlTablero().then(verEfecto);
+    bajarAlTablero().then(() => {
+      const llegada = animarLlegadaEnviados();
+      if (llegada) setTimeout(verEfecto, llegada + MS_ESPERA_BAJADA);
+      else verEfecto();
+    });
   }
 }
 
