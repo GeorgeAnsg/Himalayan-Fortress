@@ -2138,6 +2138,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   const box  = priv?.box ?? [];
   privadaMesa = priv ?? null;
   const lanzaderas = priv?.lanzaderas ?? [null, null];
+  const colaLanzaderas = priv?.colaLanzaderas ?? [];
   /* Las entradas en el búnker se detectan abajo y se animan al final del
      pintado, con la nube de la pelea en la puerta. */
   entradasPendientes = [];
@@ -2317,14 +2318,17 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* Lanzaderas */
   const lanzHtml = [{l:"37.1",t:"77.7"},{l:"63.3",t:"77.9"}].map((pos, i) => {
     const l = lanzaderas[i];
-    /* Con monstruo dentro se ve como en el tablero: la lámina de frente y la
-       pastilla con su fuerza, entrando desde la escalera. Antes era un texto
-       oscuro sobre un círculo transparente, o sea, nada. */
     const dentro = l
       ? `<img src="${imgMonstruo(nivelDe(l), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
       : "";
     return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
-  }).join("");
+  }).join("")
+  /* Cola de lanzadera: hasta 2 monstruos en espera, en los mismos ejes X pero
+     algo más abajo. Solo se muestran si hay alguno. */
+  + (colaLanzaderas.length ? [{l:"37.1",t:"91.5"},{l:"63.3",t:"91.5"}].slice(0, colaLanzaderas.length).map((pos, i) => {
+    const c = colaLanzaderas[i];
+    return `<div class="lanzadera lanzadera-llena lanzadera-cola" title="En espera de lanzadera" style="left:${pos.l}%;top:${pos.t}%;opacity:.8"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
+  }).join("") : "");
 
   /* Losas */
   const losasHtml = LOSAS.flatMap(calles => calles.map(pos =>
@@ -4314,6 +4318,7 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
       mano: [],
       box: datosAliado?.box ?? rival.box ?? [],
       lanzaderas: datosAliado?.lanzaderas ?? rival.lanzaderas ?? [],
+      colaLanzaderas: datosAliado?.colaLanzaderas ?? rival.colaLanzaderas ?? [],
       teToca: false,
     }, publica.fase, { sinLuchas: true })}`;
 

@@ -285,6 +285,25 @@ function normalizarLanzaderas(j) {
   }
   while (j.lanzaderas.length < LANZADERAS) j.lanzaderas.push(null);
   j.lanzaderas.length = LANZADERAS;
+  if (!Array.isArray(j.colaLanzaderas)) j.colaLanzaderas = [];
+  if (j.colaLanzaderas.length > 2) j.colaLanzaderas.length = 2;
+}
+
+/* Mueve el monstruo de pos 0 de un sendero a la lanzadera libre; si no hay,
+   lo pone en la cola (hasta 2 monstruos en espera). */
+function aLanzaderaOCola(j, s, evs) {
+  const mon = s.posiciones[0];
+  if (!mon) return;
+  const i = lanzaderaDeSendero(j, s.id);
+  if (i !== null) {
+    j.lanzaderas[i] = mon;
+    s.posiciones[0] = null;
+    evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
+  } else if (j.colaLanzaderas.length < 2) {
+    j.colaLanzaderas.push(mon);
+    s.posiciones[0] = null;
+    evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} queda en espera de lanzadera.` });
+  }
 }
 
 /* Lanzadera que toca a cada camino: el 1 tiene al lado la 1, el 3 la 2, y el
@@ -632,6 +651,7 @@ const bunkerWars = {
           bunker: j.bunker,
           senderos: j.senderos,
           lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor" } : null)),
+          colaLanzaderas: (j.colaLanzaderas ?? []).map(m => ({ nivel: m.nivel, tipo: m.tipo ?? "defensor" })),
           box: j.box.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor", id: m.id } : null)),
         }])
       ),
@@ -650,6 +670,7 @@ const bunkerWars = {
       mano: j.mano,
       box: j.box,
       lanzaderas: j.lanzaderas,
+      colaLanzaderas: j.colaLanzaderas ?? [],
       regalos: j.regalos ?? [],
       peticiones: (e.peticiones ?? []).filter((p) =>
         e.jugadores[p.de]?.vivo
@@ -658,7 +679,7 @@ const bunkerWars = {
       vistasAliados: Object.fromEntries(
         Object.entries(e.jugadores)
           .filter(([id, o]) => id !== jugadorId && o.vivo && esAliado(e, jugadorId, id))
-          .map(([id, o]) => [id, { box: o.box, lanzaderas: o.lanzaderas }])
+          .map(([id, o]) => [id, { box: o.box, lanzaderas: o.lanzaderas, colaLanzaderas: o.colaLanzaderas ?? [] }])
       ),
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
@@ -786,7 +807,7 @@ function faseLanzar(e, jugadorId, accion, evs) {
     if (mon && s && !s.posiciones[0] && rival.vivo) {
       s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId };
       evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
-      j.lanzaderas[i] = null;
+      j.lanzaderas[i] = j.colaLanzaderas.length > 0 ? j.colaLanzaderas.shift() : null;
       console.log(`[lanzar] ${j.nombre} → ${rival.nombre} · escalera ${accion.sendero} · nv ${mon.nivel} · luna ${e.luna}`);
     }
     /* Con dos lanzaderas la fase sigue abierta mientras quede otra ficha y
@@ -831,15 +852,8 @@ function avanzarMonstruosPropios(j, evs) {
       s.posiciones[pos] = f;
       evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
     }
-    // Al llegar a la casilla 1 pasa a la lanzadera que tiene al lado
-    if (s.posiciones[0]?.tipo === "monstruo") {
-      const i = lanzaderaDeSendero(j, s.id);
-      if (i !== null) {
-        j.lanzaderas[i] = s.posiciones[0];
-        s.posiciones[0] = null;
-        evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
-      }
-    }
+    // Al llegar a la casilla 1 pasa a la lanzadera que tiene al lado (o a la cola)
+    if (s.posiciones[0]?.tipo === "monstruo") aLanzaderaOCola(j, s, evs);
   }
 }
 
@@ -1340,29 +1354,15 @@ function faseAcciones(e, jugadorId, accion, evs) {
         evs.push(enemigoMuere
           ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId }
           : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
-        // Si el monstruo llega a pos 0, pasa a la lanzadera de al lado
-        if (posDest === 0 && monstruoSobrevive) {
-          const i = lanzaderaDeSendero(j, s.id);
-          if (i !== null) {
-            j.lanzaderas[i] = s.posiciones[0];
-            s.posiciones[0] = null;
-            evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
-          }
-        }
+        // Si el monstruo llega a pos 0, pasa a la lanzadera (o cola)
+        if (posDest === 0 && monstruoSobrevive) aLanzaderaOCola(j, s, evs);
       } else if (!ocupante) {
         j.energia--;
         j.accionesRestantes--;
         s.posiciones[posDest] = { ...mMon };
         s.posiciones[posOrigen] = null;
         evs.push({ tipo: "avance_monstruo", texto: `${j.nombre} avanza el monstruo ${mMon.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
-        if (posDest === 0) {
-          const i = lanzaderaDeSendero(j, s.id);
-          if (i !== null) {
-            j.lanzaderas[i] = s.posiciones[0];
-            s.posiciones[0] = null;
-            evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
-          }
-        }
+        if (posDest === 0) aLanzaderaOCola(j, s, evs);
       }
       break;
     }
