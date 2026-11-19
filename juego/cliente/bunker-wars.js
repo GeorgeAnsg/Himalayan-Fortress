@@ -1164,7 +1164,7 @@ const llegadasAnunciadas = new Set();
 function animarLlegadaEnviados() {
   const tablero = document.querySelector(".tablero");
   if (!tablero) return 0;
-  const fichas = [...tablero.querySelectorAll('.ficha.ajena[data-pos="0"]')]
+  const fichas = [...tablero.querySelectorAll('.ficha.ajena[data-pos="0"], .ficha.atacante[data-pos="0"]')]
     .filter((el) => el.dataset.fid && !llegadasAnunciadas.has(el.dataset.fid) && el.animate);
   let total = 0;
   fichas.forEach((el, i) => {
@@ -3670,11 +3670,13 @@ const SLOTS_CIENCIA = 2;
 
 function defsCarta(c) {
   const defs = {
-    recursos:    { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`, cls: "recursos",    costo: c.coste },
-    armeria:     { emoji: "🔧", label: c.titulo ?? `Armería nv${c.nivel ?? ""}`,  cls: "armeria",     costo: c.coste },
-    laboratorio: { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`, cls: "laboratorio", costo: c.coste },
-    ciencia:     { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia", cls: "ciencia", costo: c.coste },
-    ciencia_i:   { emoji: "⚗️", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Inmediata", cls: "ciencia_i", costo: c.coste },
+    recursos:      { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`,  cls: "recursos",      costo: c.coste },
+    decreto:       { emoji: "📜", label: c.titulo ?? `Decreto nv${c.nivel ?? ""}`,   cls: "decreto",       costo: c.coste },
+    recursos_mix:  { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`,  cls: "recursos_mix",  costo: c.coste },
+    armeria:       { emoji: "🔧", label: c.titulo ?? `Armería nv${c.nivel ?? ""}`,   cls: "armeria",       costo: c.coste },
+    laboratorio:   { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`,  cls: "laboratorio",   costo: c.coste },
+    ciencia:       { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia",    cls: "ciencia",    costo: c.coste },
+    ciencia_i:     { emoji: "⚗️", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Inmediata",  cls: "ciencia_i",  costo: c.coste },
   };
   const def = defs[c.tipo] ?? { emoji: "?", label: c.tipo ?? "Carta", cls: "", costo: c.coste ?? 0 };
   return { ...def, label: tituloCarta(c, def.label) };
@@ -3687,7 +3689,7 @@ const ROMANOS = ["", "I", "II", "III", "IV", "V", "VI", "VII"];
    el nivel en palitos, como se lee en las cartas de papel. */
 function tituloCarta(c, fallback) {
   let label = String(c?.titulo ?? fallback ?? "");
-  if (!["laboratorio", "armeria", "recursos"].includes(c?.tipo)) return label;
+  if (!["laboratorio", "armeria", "recursos", "decreto", "recursos_mix"].includes(c?.tipo)) return label;
   const m = label.match(/(\d+)\s*$/);
   const n = c?.nivel ?? (m ? Number(m[1]) : 0);
   label = label.replace(/\s*(nv\.?|nivel)?\s*\d+\s*$/i, "").trim().toLowerCase();
@@ -3697,11 +3699,13 @@ function tituloCarta(c, fallback) {
 
 function imgCarta(tipo, nivel) {
   const mapa = {
-    recursos:    "recursos",
-    armeria:     "armeria",
-    laboratorio: "laboratorio",
-    ciencia:     "ciencia",
-    ciencia_i:   "ciencia",
+    recursos:     "recursos",
+    decreto:      "energia",
+    recursos_mix: "recursos",
+    armeria:      "armeria",
+    laboratorio:  "laboratorio",
+    ciencia:      "ciencia",
+    ciencia_i:    "ciencia",
   };
   const nombre = mapa[tipo] ?? tipo;
   return `${BASE_IMG}/cartas/${nombre}.png`;
@@ -3711,7 +3715,9 @@ function cartaValida(c, bunker) {
   if (!bunker) return true;
   if (c.tipo === "armeria")     return c.nivel === (bunker.armeria ?? 0) + 1;
   if (c.tipo === "laboratorio") return c.nivel === (bunker.laboratorio ?? 0) + 1;
-  if (c.tipo === "recursos")    return (bunker.recursos?.length ?? 0) < 4;
+  if (c.tipo === "recursos")    return true;
+  if (c.tipo === "decreto")     return true;
+  if (c.tipo === "recursos_mix") return true;
   if (c.tipo === "ciencia")     return !(bunker.ciencia ?? []).some(x => x.efecto === c.efecto);
   if (c.tipo === "ciencia_i") {
     if (c.efecto === "subir_armeria")     return (bunker.armeria ?? 0) < 3;
