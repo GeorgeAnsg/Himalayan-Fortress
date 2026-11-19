@@ -1566,7 +1566,7 @@ function legalesAcciones(e, jugadorId) {
         });
       }
     } else if (carta.efecto === "bombardear") {
-      e.jugadores.forEach(enemigo => {
+      Object.values(e.jugadores).forEach(enemigo => {
         if (enemigo.id === j.id) return;
         normalizarTorres(enemigo);
         enemigo.bunker.torres.forEach((t, i) => {
@@ -2063,7 +2063,7 @@ function objetivoDe(e, j, efecto, accion) {
       return { torre: t ?? null, pos };
     }
     case "bombardear": {
-      const enemigo = e.jugadores.find(p => p.id === o.enemigoId);
+      const enemigo = Object.values(e.jugadores).find(p => p.id === o.enemigoId);
       if (!enemigo) return null;
       const pos = o.posicion;
       const t = enemigo.bunker.torres?.[(pos ?? 0) - 1];
