@@ -128,7 +128,7 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos",    nivel:1, coste:1, titulo: "RECURSOS 1", descripcion: "Te permite generar 1 moneda extra al comienzo de cada turno" },
   { tipo:"recursos",    nivel:2, coste:2, titulo: "RECURSOS 2", descripcion: "Generas 2 monedas y 1 decreto extra cada turno." },
   { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 decreto extra cada turno." },
-  { tipo:"recursos",    nivel:4, coste:4, titulo: "RECURSOS 4", descripcion: "Generas 4 monedas y 2 decretos extra cada turno." },
+  { tipo:"recursos",    nivel:3, coste:3, titulo: "RECURSOS 3", descripcion: "Generas 3 monedas y 1 decreto extra cada turno." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
   { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
@@ -138,12 +138,11 @@ const PLANTILLAS_BUNKER = [
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
   { tipo:"ciencia",     efecto:"torreta_universal", coste:8, titulo: "Torres universales", descripcion: "Tus torres hacen el daño correspondiente a su nivel en cualquier escalera." },
-  { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los peldaños 3 y 4 de tus escaleras, tanto los tuyos como los atacantes." },
+  { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los 2 peldaños más cercanos a tu fortaleza, tanto los tuyos como los atacantes." },
   { tipo:"ciencia_i",   efecto:"subir_rango",       coste:2, titulo: "Subir rango", descripcion: "Sube un rango el nivel de un monstruo hasta nivel 5 como máximo." },
-  { tipo:"ciencia_i",   efecto:"convertir_aliado",  coste:2, titulo: "Convertir aliado", descripcion: "Convierte en aliado un monstruo que ataque tu búnker, de nivel 5 como máximo." },
   { tipo:"ciencia_i",   efecto:"bajar_nivel_enemigo",coste:2, titulo: "Bajar rango", descripcion: "Baja un rango el nivel de un monstruo enemigo que esté atacando tu búnker." },
   { tipo:"ciencia_i",   efecto:"evolucionar_torreta",coste:2, titulo: "Evolucionar torre", descripcion: "Evoluciona una torre al siguiente nivel." },
-  { tipo:"ciencia_i",   efecto:"torreta2_gratis",    coste:3, titulo: "Torre de nivel 2", descripcion: "Construye una torre de nivel 2 en tu búnker sin necesidad de tener ARMERÍA 3." },
+  { tipo:"ciencia_i",   efecto:"torreta2_gratis",    coste:3, titulo: "Torre de nivel 2", descripcion: "Construye una torre de nivel 2 en tu búnker sin necesidad de tener ARMERÍA 2." },
   { tipo:"ciencia_i",   efecto:"monstruo3_gratis",   coste:3, titulo: "Monstruo de nivel 3", descripcion: "Crea un monstruo de nivel 3 (**yeti**) en un box sin necesidad de tener CRIADERO 3." },
   /* Estas cuatro suben el nivel al momento: no se busca ninguna carta en el
      mazo ni se baraja, el sobreprecio respecto a la carta de búnker es el
