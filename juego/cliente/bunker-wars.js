@@ -439,21 +439,21 @@ export function pintar(contenedor, opciones) {
       ],
     });
     if (r !== "salir") return;
+    const res = await salirMesa();
+    if (res?.error) aviso(res.error, { error: true });
     document.getElementById("bw-cielo-global")?.remove();
     document.getElementById("bw-nav-global")?.remove();
     document.querySelector("body > .bw-mano-wrap")?.remove();
     document.querySelector("body > .bw-panel.box-panel")?.remove();
-  document.querySelector("body > .bw-panel.acciones-panel")?.remove();
-      document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
-      document.querySelector("body > .bw-panel.torres-panel")?.remove();
-  document.querySelector("body > .bw-panel.mapa-panel")?.remove();
-  document.querySelector("body > .bw-panel.aliados-panel")?.remove();
-  document.querySelector("body > .bw-panel.disparo-panel")?.remove();
-  document.querySelector("body > .bw-panel-overlay")?.remove();
-  disparoPanel = null;
+    document.querySelector("body > .bw-panel.acciones-panel")?.remove();
+    document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
+    document.querySelector("body > .bw-panel.torres-panel")?.remove();
+    document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+    document.querySelector("body > .bw-panel.aliados-panel")?.remove();
+    document.querySelector("body > .bw-panel.disparo-panel")?.remove();
+    document.querySelector("body > .bw-panel-overlay")?.remove();
+    disparoPanel = null;
     document.body.classList.remove("bw-himalaya", "mapa-himalaya");
-    const res = await salirMesa();
-    if (res?.error) aviso(res.error, { error: true });
   });
 
   /* Ciencia del HUD: al tocarla, sus cartas instaladas. */

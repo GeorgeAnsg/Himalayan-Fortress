@@ -407,7 +407,7 @@ async function salirDeMesa() {
   const juegoId = estado.mesa?.juego?.id ?? null;
   const r = await estado.conexion.salir();
   if (r?.error) aviso(r.error, { error: true });
-  else alSinMesa(juegoId);
+  alSinMesa(juegoId);
 }
 
 async function cerrarSesion() {
