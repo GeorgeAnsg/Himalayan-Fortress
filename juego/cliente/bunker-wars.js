@@ -1239,11 +1239,12 @@ function confirmarFase(ms = 0) {
     if (!enviarAccion) return;
     if (claveAlPedir !== `${lunaMesa}:${turnoMesa}:${faseMesa}`) {
       registro("confirmar descartado · la fase ya cambió ·", claveAlPedir);
-      bloquearPorAvance(false);
       return;
     }
     registro("confirmar", faseMesa, "en", ms, "ms");
-    bloquearPorAvance(false);
+    /* El bloqueo sigue puesto: se suelta cuando la jornada llega a una fase en
+       la que el jugador decide. Soltarlo aquí dejaba un hueco entre el final
+       del movimiento y la fase siguiente en el que se podía tocar una jaula. */
     const r = await enviarAccion({ tipo: "confirmar" });
     if (r?.error) aviso(r.error, { error: true });
   }, ms);
@@ -1260,6 +1261,11 @@ function animarYConfirmar(anim, fn, n, { antes = 0, despues = MS_ESPERA_FIN } = 
 
 function iniciarFase(anim) {
   if (!tocaMesa || viendoJugador) return;
+  /* Jornada terminada: la mesa ya pide una decisión (lanzar, decretos o
+     descarte), así que se devuelve el control. */
+  if (faseMesa === "lanzar" || faseMesa === "acciones" || faseMesa === "descartar") {
+    bloquearPorAvance(false);
+  }
   if (faseMesa === "lanzar") {
     registro("fase lanzar · se abre la lanzadera si toca");
     abrirLanzarSiToca();
@@ -1922,7 +1928,11 @@ function abrirLanzar(ops) {
        a pintar con la que queda. */
     const nvLanzado = lanzaderasModal[accion.lanzadera]?.nivel ?? null;
     lanzaderasModal = lanzaderasModal.map((m, i) => (i === accion.lanzadera ? null : m));
-    opsModal = opsModal.filter(a => a.lanzadera !== accion.lanzadera);
+    /* Lo que vale ahora es lo legal en la mesa: si has llenado el único hueco
+       que quedaba, la otra lanzadera se queda sin destino y la hoja se cierra. */
+    opsModal = (accionesMesa ?? []).filter(a => a.tipo === "lanzar"
+      && a.lanzadera !== accion.lanzadera
+      && !(a.rivalId === accion.rivalId && a.sendero === accion.sendero));
     /* La que acaba de salir se queda a la vista en la calle donde la has
        dejado: con la segunda en la mano se ve dónde fue la primera. */
     marcarLanzado(accion.sendero, nvLanzado);
