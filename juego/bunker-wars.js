@@ -52,6 +52,9 @@ const PLANTILLAS_DESTINO = [
   { id:"a01", tipo:"amenaza", nivel:1, cantidad:1, prio:[1,2,3], tramo:1, tramoMax:1,
     titulo:"Se ha avistado un rastreador",
     descripcion:"Un rastreador se arrastra desde la nieve." },
+  { id:"a01v", tipo:"amenaza", nivel:"volador", cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
+    titulo:"Aves de bruma avistadas",
+    descripcion:"Unas aves de bruma surcan el cielo por el camino de la derecha." },
   { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
     titulo:"Un rastreador",
     descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
@@ -132,7 +135,7 @@ const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null
    que el comienzo no sea una cuesta plana.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
-const APERTURA_DESTINO = { 1: "a01", 2: "a03", 3: "d21", 4: "a03b" };
+const APERTURA_DESTINO = { 1: "a01", 2: "a01v", 3: "d21", 4: "a03b" };
 
 function crearMazoDestino(nJugadores, e) {
   return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
@@ -2685,7 +2688,8 @@ function describirMixta(puestos) {
 function colocarAtacante(senderos, senderoId, nivel) {
   const s = senderos.find(s => s.id === senderoId);
   if (s && !s.posiciones[0]) {
-    s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel };
+    const vuela = nivel === "volador";
+    s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: vuela ? 1 : nivel, ...(vuela ? { vuela: true } : {}) };
     return true;
   }
   return false;

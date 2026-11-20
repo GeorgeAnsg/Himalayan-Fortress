@@ -1134,12 +1134,12 @@ function animarEntradaBunker(raiz, entradas) {
   };
   requestAnimationFrame(seguir);
 
-  entradas.forEach(({ l, t, nivel }, i) => {
+  entradas.forEach(({ l, t, nivel, vuela }, i) => {
     const ficha = document.createElement("div");
     ficha.className = "ficha atacante bw-entrando";
     ficha.style.left = `${l}%`;
     ficha.style.top = `${t}%`;
-    ficha.innerHTML = `<img src="${imgMonstruo(nivel, true)}" alt="" class="ficha-img"><b class="ficha-nv">${nivel}</b>`;
+    ficha.innerHTML = `<img src="${imgMonstruo(vuela ? "volador" : nivel, true)}" alt="" class="ficha-img"><b class="ficha-nv">${nivel}</b>`;
     const nube = document.createElement("div");
     nube.className = "bw-nube bw-nube-puerta";
     nube.style.left = `${l}%`;
@@ -2774,7 +2774,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Al abrir la app a media partida no se repiten las que ya pasaron. */
       if (entradasPrimerPintado) continue;
       const puerta = (LOSAS[en.calle - 1] ?? LOSAS[0])[3];
-      entradas.push({ l: puerta.l, t: puerta.t, nivel: en.nivel });
+      entradas.push({ l: puerta.l, t: puerta.t, nivel: en.nivel, vuela: en.vuela });
     }
     entradasPrimerPintado = false;
     /* El registro de ids no crece sin fin: si se llena, se empieza de cero. */
