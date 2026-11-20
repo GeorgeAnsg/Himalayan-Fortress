@@ -163,9 +163,9 @@ const PLANTILLAS_BUNKER = [
      descartar. Cada una lleva su propio `efecto` porque la clave con la que se
      refrescan los textos guardados no distingue dos cartas iguales. */
   { tipo:"dicho", efecto:"dicho_yak",      coste:0, titulo: "El yak prudente",   descripcion: "No cruces el puente antes de saber cuánto pesa el yak. No hace nada: solo se puede descartar." },
-  { tipo:"dicho", efecto:"dicho_te",       coste:0, titulo: "El té del monje",   descripcion: "El té que se enfría discutiendo no se calienta solo. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_te",       coste:0, titulo: "100 carroñeros",    descripcion: "Más vale 10 carroñeros en mano que 100 volando. No hace nada: solo se puede descartar." },
   { tipo:"dicho", efecto:"dicho_montana",  coste:0, titulo: "La montaña",        descripcion: "La montaña no sube a verte. Ni piensa hacerlo. No hace nada: solo se puede descartar." },
-  { tipo:"dicho", efecto:"dicho_escalera", coste:0, titulo: "Barrer dos veces",  descripcion: "Quien barre dos veces la misma escalera está barriendo la de otro. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_escalera", coste:0, titulo: "Barrer dos veces",  descripcion: "Quien barre 2 veces la misma escalera está barriendo la del otro. No hace nada: solo se puede descartar." },
   { tipo:"dicho", efecto:"dicho_cuerda",   coste:0, titulo: "La cuerda del yeti", descripcion: "Nunca preguntes al yeti si la cuerda aguanta: él ya lo sabe. No hace nada: solo se puede descartar." },
 ];
 
