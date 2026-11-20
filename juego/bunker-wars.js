@@ -888,47 +888,38 @@ const bunkerWars = {
 };
 
 // ── Fase AVANCE ───────────────────────────────────────────────────────────
-function faseAvance(e, jugadorId, evs) {
-  const j = e.jugadores[jugadorId];
 
-  // Monstruos en pos 3 entran al búnker
+/* Procesa los atacantes en pos 3: entran al búnker. */
+function entrarAlBunker(j, e, evs) {
   for (const s of j.senderos) {
     const f = s.posiciones[3];
-    if (f?.tipo === "atacante") {
-      j.puntosMonsters += f.nivel;
-      s.posiciones[3] = null;
-      j.entradasBunker = [...(j.entradasBunker ?? []),
-        { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
-      evs.push({ tipo: "entrada", texto: `¡Monstruo ${f.nivel} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
-      if (j.puntosMonsters > 20) {
-        j.vivo = false;
-        marcarEliminado(e, jugadorId);
-        evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
-      }
+    if (f?.tipo !== "atacante") continue;
+    j.puntosMonsters += f.nivel;
+    s.posiciones[3] = null;
+    j.entradasBunker = [...(j.entradasBunker ?? []),
+      { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
+    evs.push({ tipo: "entrada", texto: `¡${f.vuela ? "Aves de bruma" : `Monstruo ${f.nivel}`} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+    if (j.puntosMonsters > 20) {
+      j.vivo = false;
+      marcarEliminado(e, j.id);
+      evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
     }
   }
+}
 
-  /* Avanzar atacantes: de pos 2→3, 1→2, 0→1. Si en la casilla de delante hay
-     un monstruo tuyo que le defiende, el atacante ataca con las mismas reglas
-     de combate: el que llega ataca y gana los empates. Antes se quedaba quieto
-     al lado del defensor y parecía que la mesa se había olvidado del choque.
-     Los voladores (vuela:true) saltan defensores y avanzan 2 casillas. */
+/* Un paso de avance para todos los atacantes (o solo los voladores si soloVuela). */
+function avanzarAtacantes(j, evs, soloVuela = false) {
   for (const s of j.senderos) {
     for (let pos = 3; pos > 0; pos--) {
       const f = s.posiciones[pos - 1];
       if (f?.tipo !== "atacante") continue;
+      if (soloVuela && !f.vuela) continue;
       if (f.vuela) {
-        /* Volador: salta defensores, avanza 2 casillas si puede, 1 si no. */
-        const dest2 = pos + 1; // 2 pasos adelante (pos es la siguiente)
-        const dest1 = pos;
-        if (dest2 <= 3 && !s.posiciones[dest2]) {
-          s.posiciones[dest2] = f;
-          s.posiciones[pos - 1] = null;
-        } else if (!s.posiciones[dest1]) {
-          s.posiciones[dest1] = f;
+        /* Volador: salta defensores, avanza 1 casilla. */
+        if (!s.posiciones[pos]) {
+          s.posiciones[pos] = f;
           s.posiciones[pos - 1] = null;
         }
-          /* Si ambas están ocupadas, no avanza. */
         continue;
       }
       const defensor = s.posiciones[pos];
@@ -941,31 +932,26 @@ function faseAvance(e, jugadorId, evs) {
       if (f.nivel >= defensor.nivel) {
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel} destruye al monstruo ${defensor.nivel} de ${j.nombre} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel} destruye al monstruo ${defensor.nivel} de ${j.nombre} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
       } else {
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
       }
     }
   }
+}
 
-  /* Segunda pasada: voladores que llegaron a pos 3 en este mismo avance
-     entran al búnker ahora, igual que los que ya estaban al empezar. */
-  for (const s of j.senderos) {
-    const f = s.posiciones[3];
-    if (f?.tipo === "atacante" && f.vuela) {
-      j.puntosMonsters += f.nivel;
-      s.posiciones[3] = null;
-      j.entradasBunker = [...(j.entradasBunker ?? []),
-        { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
-      evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
-      if (j.puntosMonsters > 20) {
-        j.vivo = false;
-        marcarEliminado(e, jugadorId);
-        evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
-      }
-    }
-  }
+function faseAvance(e, jugadorId, evs) {
+  const j = e.jugadores[jugadorId];
+
+  /* Paso 1: atacantes en pos 3 entran al búnker. */
+  entrarAlBunker(j, e, evs);
+  /* Paso 2: todos avanzan 1 casilla. */
+  avanzarAtacantes(j, evs);
+  /* Paso 3 (voladores): segundo avance + entrada si llegan a pos 3. */
+  entrarAlBunker(j, e, evs);
+  avanzarAtacantes(j, evs, true);
+  entrarAlBunker(j, e, evs);
 
   e.fase = "defensores";
   comprobarFin(e);
