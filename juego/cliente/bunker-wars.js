@@ -2367,6 +2367,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   const cien = (j.bunker?.ciencia ?? []).length;
   const box  = priv?.box ?? [];
   privadaMesa = priv ?? null;
+  avisarLanzaderaSinHueco(priv);
   const lanzaderas = priv?.lanzaderas ?? [null, null];
   const colaLanzaderas = priv?.colaLanzaderas ?? [];
   /* Las entradas en el búnker se detectan abajo y se animan al final del
@@ -4715,7 +4716,18 @@ function aviso(mensaje, opciones = {}) {
     border-radius: 6px; z-index: 9999; max-width: min(84vw, 360px); font-size: 14px;`;
   avisoEl.textContent = mensaje;
   document.body.appendChild(avisoEl);
-  setTimeout(() => avisoEl.remove(), 3000);
+  setTimeout(() => avisoEl.remove(), opciones.ms ?? 3000);
+}
+
+/* La fase de lanzaderas se pasa sola cuando no queda un hueco libre en ningún
+   camino enemigo. Antes se pasaba en silencio y parecía que la mesa se había
+   olvidado de los monstruos: ahora se dice una vez por turno. */
+let avisoLanzarVisto = null;
+function avisarLanzaderaSinHueco(priv) {
+  const avisoMesa = priv?.avisoLanzar ?? null;
+  if (!avisoMesa?.texto || avisoMesa.clave === avisoLanzarVisto) return;
+  avisoLanzarVisto = avisoMesa.clave;
+  aviso(avisoMesa.texto, { ms: 5000 });
 }
 
 function labelFase(fase) {

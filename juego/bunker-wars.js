@@ -822,6 +822,11 @@ const bunkerWars = {
           .filter(([id, o]) => id !== jugadorId && o.vivo && esAliado(e, jugadorId, id))
           .map(([id, o]) => [id, { box: o.box, lanzaderas: o.lanzaderas, colaLanzaderas: o.colaLanzaderas ?? [] }])
       ),
+      /* Aviso de un solo uso: la fase de lanzaderas se pasó sola porque no
+         quedaba hueco en ningún camino enemigo. */
+      avisoLanzar: e.avisoLanzar?.de === jugadorId
+        ? { clave: e.avisoLanzar.clave, texto: e.avisoLanzar.texto }
+        : null,
       cartaDestino: e.ultimoDestino ?? null,
       mazoDestino: e.mazoDestino.length,
       teToca: e.orden[e.turnoIdx] === jugadorId,
@@ -941,6 +946,7 @@ function faseDefensores(e, jugadorId, evs) {
    queda cerrada hasta el turno siguiente, para no encadenar dos lanzamientos
    con el mismo hueco. */
 const claveLanzar = (e) => `${e.luna}:${e.orden[e.turnoIdx]}`;
+const SIN_HUECO_LANZAR = "No hay huecos disponibles para lanzar a nadie: todos los caminos enemigos están ocupados.";
 
 function faseLanzar(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
@@ -974,6 +980,14 @@ function faseLanzar(e, jugadorId, accion, evs) {
 /* ¿Queda alguna lanzadera con monstruo y algún hueco donde mandarlo? */
 function hayLanzamientos(e, jugadorId) {
   return legalesLanzar(e, jugadorId).some(a => a.tipo === "lanzar");
+}
+
+/* Lanzaderas con monstruo que se pueden lanzar en este turno (la que acaba de
+   entrar de la cola sigue cerrada hasta el siguiente). */
+function lanzaderasCargadas(e, jugadorId) {
+  const j = e.jugadores[jugadorId];
+  const turno = claveLanzar(e);
+  return (j?.lanzaderas ?? []).filter(m => m && m.bloqueadaEn !== turno);
 }
 
 /* Tus monstruos de los caminos avanzan una casilla hacia la lanzadera en cada
@@ -1028,6 +1042,11 @@ function resolverAutomaticas(e, evs) {
       /* Solo hay decisión si hay una lanzadera con monstruo y algún camino
          rival libre donde soltarlo. Si no, las lanzaderas se pasan de largo. */
       if (hayLanzamientos(e, id)) break;
+      /* Si tenía monstruos esperando, que sepa por qué se pasa de largo: sin
+         un hueco libre en ningún camino enemigo no hay dónde soltarlos. */
+      if (lanzaderasCargadas(e, id).length) {
+        e.avisoLanzar = { de: id, clave: claveLanzar(e), texto: SIN_HUECO_LANZAR };
+      }
       faseLanzar(e, id, { tipo: "no_lanzar" }, evs);
       continue;
     }
@@ -1635,7 +1654,10 @@ function legalesLanzar(e, jugadorId) {
       }
     }
   }
-  acc.push({ tipo: "no_lanzar", texto: "No lanzar" });
+  /* Con lanzaderas cargadas se lanza siempre: los monstruos no se pueden
+     quedar ahí, así que no hay «No lanzar». Solo aparece cuando de verdad no
+     queda un hueco libre en ningún camino enemigo. */
+  if (!acc.length) acc.push({ tipo: "no_lanzar", texto: SIN_HUECO_LANZAR });
   return acc;
 }
 
@@ -2462,6 +2484,9 @@ function marcarEliminado(e, jugadorId) {
 }
 
 function avanzarTurno(e) {
+  /* El aviso de «sin huecos» es del turno que acaba: no tiene que reaparecer
+     al recargar la app con el turno ya pasado. */
+  delete e.avisoLanzar;
   const n = e.orden.length;
   let sig = (e.turnoIdx + 1) % n;
   let vueltas = 0;
