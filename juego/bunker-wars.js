@@ -181,18 +181,54 @@ const COPIAS_BUNKER = {
   dicho: 1,
 };
 
-/* Cartas que todavía le sirven al jugador: recursos mientras quede hueco en el
-   búnker y armería/laboratorio por encima del nivel que ya tiene. */
-function cartasUtiles(j) {
-  const cartas = [];
-  for (const p of PLANTILLAS_BUNKER) {
-    const n = COPIAS_BUNKER[p.tipo] ?? 1;
-    if (!n) continue;
-    if (p.tipo === "armeria" && p.nivel <= (j.bunker.armeria ?? 0)) continue;
-    if (p.tipo === "laboratorio" && p.nivel <= (j.bunker.laboratorio ?? 0)) continue;
-    if (p.tipo === "ciencia" && tieneCiencia(j, p.efecto)) continue;
-    for (let i = 0; i < n; i++) cartas.push({ ...p, uid: uid("cb") });
+/* Cartas que el jugador ya ha gastado: no vuelven al mazo nunca. La carta
+   guarda el índice de su plantilla (`plantilla`) para poder reconocerla aunque
+   haya varias copias del mismo tipo. El mazo sigue siendo infinito con lo que
+   queda sin usar; lo que se juega desaparece. */
+function cartasUsadas(j) {
+  if (!Array.isArray(j.usadas)) j.usadas = [];
+  return j.usadas;
+}
+
+/* Mesas empezadas antes de esta cuenta: lo que ya está instalado en el búnker
+   se marca como usado una sola vez, para que no se reponga. */
+function sembrarUsadas(j) {
+  if (j.usadasSembradas) return;
+  j.usadasSembradas = true;
+  const usadas = cartasUsadas(j);
+  const ya = new Set(usadas);
+  const instaladas = [
+    ...(j.bunker?.recursos ?? []),
+    ...(j.bunker?.decretos ?? []),
+    ...(j.bunker?.recursos_mix ?? []),
+    ...(j.bunker?.ciencia ?? []),
+  ];
+  for (const c of instaladas) {
+    const i = PLANTILLAS_BUNKER.findIndex((p, idx) => !ya.has(idx)
+      && p.tipo === c.tipo
+      && (p.nivel ?? null) === (c.nivel ?? null)
+      && (p.efecto ?? "") === (c.efecto ?? ""));
+    if (i < 0) continue;
+    ya.add(i);
+    usadas.push(i);
   }
+}
+
+/* Cartas que todavía le sirven al jugador: las que no se han gastado, más
+   armería/laboratorio por encima del nivel que ya tiene. */
+function cartasUtiles(j) {
+  sembrarUsadas(j);
+  const ya = new Set(cartasUsadas(j));
+  const cartas = [];
+  PLANTILLAS_BUNKER.forEach((p, i) => {
+    if (ya.has(i)) return;
+    const n = COPIAS_BUNKER[p.tipo] ?? 1;
+    if (!n) return;
+    if (p.tipo === "armeria" && p.nivel <= (j.bunker.armeria ?? 0)) return;
+    if (p.tipo === "laboratorio" && p.nivel <= (j.bunker.laboratorio ?? 0)) return;
+    if (p.tipo === "ciencia" && tieneCiencia(j, p.efecto)) return;
+    for (let k = 0; k < n; k++) cartas.push({ ...p, plantilla: i, uid: uid("cb") });
+  });
   return cartas;
 }
 
@@ -217,10 +253,17 @@ function reponerMazoBunker(j, e) {
    una copia de cada una al mazo (una sola vez: luego ya existen). */
 function reponerCiencias(j, e) {
   const todas = [...(j.mano ?? []), ...(j.mazoBunker ?? []), ...(j.descarteBunker ?? []), ...(j.bunker?.ciencia ?? [])];
-  const faltan = PLANTILLAS_BUNKER.filter(p => (p.tipo === "ciencia" || p.tipo === "ciencia_i")
-    && !todas.some(c => c.efecto === p.efecto));
+  const ya = new Set(cartasUsadas(j));
+  const faltan = [];
+  PLANTILLAS_BUNKER.forEach((p, i) => {
+    if (p.tipo !== "ciencia" && p.tipo !== "ciencia_i") return;
+    /* Una ciencia jugada no se repone: ya está gastada. */
+    if (ya.has(i)) return;
+    if (todas.some(c => c.tipo === p.tipo && c.efecto === p.efecto)) return;
+    faltan.push({ ...p, plantilla: i, uid: uid("cb") });
+  });
   if (!faltan.length) return;
-  j.mazoBunker = barajar([...(j.mazoBunker ?? []), ...faltan.map(p => ({ ...p, uid: uid("cb") }))], e);
+  j.mazoBunker = barajar([...(j.mazoBunker ?? []), ...faltan], e);
 }
 
 /* Los dichos llegaron después: una mesa empezada no los tiene en el mazo. Si
@@ -1273,6 +1316,8 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.accionesRestantes--;
       j.mano = j.mano.filter(c => c.uid !== accion.cartaId);
       j.cartasJugadasEsteTurno++;
+      /* Carta gastada: se apunta la plantilla para que no vuelva al mazo. */
+      if (Number.isInteger(carta.plantilla)) cartasUsadas(j).push(carta.plantilla);
       aplicarMejoraBunker(j, carta, e, evs, accion.reemplazo, accion);
       /* Las inmediatas ya cuentan lo que han hecho (subir tal o cual nivel),
          así que no se duplica el aviso. */
@@ -2239,15 +2284,15 @@ function aplicarMejoraBunker(j, carta, e, evs, reemplazo, accion) {
       const fuera = j.bunker.ciencia.find(c => c.efecto === reemplazo);
       if (!fuera) return; // sin elección válida no se instala nada
       j.bunker.ciencia = j.bunker.ciencia.filter(c => c !== fuera);
-      j.descarteBunker.push(fuera);
-      evs.push({ tipo: "ciencia", texto: `${j.nombre} descarta la ciencia ${fuera.titulo ?? fuera.efecto}.` });
+      evs.push({ tipo: "ciencia", texto: `${j.nombre} retira la ciencia ${fuera.titulo ?? fuera.efecto}.` });
     }
     j.bunker.ciencia.push(carta);
     return;
   }
   if (carta.tipo === "ciencia_i") {
-    /* Inmediata: hace su efecto y va al descarte, sin tocar el mazo. */
-    if (aplicarCienciaInmediata(j, carta, evs, accion, e)) j.descarteBunker.push(carta);
+    /* Inmediata: hace su efecto y desaparece. No va al descarte, así que no
+       puede volver en un barajado. */
+    aplicarCienciaInmediata(j, carta, evs, accion, e);
     return;
   }
 }
