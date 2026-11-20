@@ -213,6 +213,10 @@ function alSinMesa(juegoId = null) {
    vuelve a pintar en la misma tacada; sin esto, cualquier repintado (una
    acción, un empujón de la mesa) devolvía la vista al principio. */
 let scrollRecordado = 0;
+/* Y si al vaciar la pantalla el jugador estaba pegado al final. Al repintar,
+   el contenido suele crecer (una acción nueva, un panel) y devolverle el píxel
+   de antes le subía la vista para bajarla otra vez. */
+let scrollAlFinal = false;
 
 /* Pantalla de caído: se espera un momento a que acabe la animación de la
    entrada en el búnker (el humo y el «-N» explican por qué has caído) y, a
@@ -224,6 +228,8 @@ const MS_CAIDO = 2600;
 function limpiar() {
   const p = $pantalla();
   scrollRecordado = p.scrollTop || 0;
+  scrollAlFinal = scrollRecordado > 0
+    && scrollRecordado + p.clientHeight >= p.scrollHeight - 4;
   p.innerHTML = "";
 }
 
@@ -361,7 +367,7 @@ function pintarMesa() {
 
 function pintarCon(modulo, props) {
   /* El juego recibe dónde estaba la vista para devolverla tras repintar. */
-  modulo.pintar($pantalla(), { ...props, scroll: scrollRecordado });
+  modulo.pintar($pantalla(), { ...props, scroll: scrollRecordado, alFinal: scrollAlFinal });
 }
 
 /* ── Acciones de cuenta y mesa ─────────────────────────────────────────── */

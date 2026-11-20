@@ -375,7 +375,8 @@ rival se lanza (o "No lanzar").
       hueco libre: 1 decreto + las monedas del nivel (0, 1, 2 o 3).
    c) construir_torreta: torre nivel 1 en una posición de torre del búnker
       (1 decreto, 1 moneda).
-   d) evolucionar_torreta: subir nivel de una torre (pagar diferencia de coste).
+   d) evolucionar_torreta: subir nivel de una torre (1 decreto, 2 monedas por cada
+      nivel que sube: nivel II y nivel III).
    e) avanzar_monstruo: 1 decreto + 1 moneda, mueve el monstruo las casillas
       deseadas (ataca si el destino es un atacante).
    f) atacar_monstruo: disparar con las torres del búnker a un atacante de

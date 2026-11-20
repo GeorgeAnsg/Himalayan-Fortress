@@ -32,7 +32,7 @@ export function pintar(contenedor, opciones) {
   /* La música es de este juego y vive fuera de #pantalla: se monta una vez y
      sobrevive a los repintados del turno. */
   montarMusica();
-  const { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll } = opciones;
+  const { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll, alFinal } = opciones;
   if (!publica) { contenedor.innerHTML = "Cargando…"; return; }
   /* Se guarda la última vista para poder volver desde la fortaleza de un
      rival sin pedirle nada a la app. */
@@ -201,10 +201,19 @@ export function pintar(contenedor, opciones) {
   if (lanzaderaMovidas.length) animarEntradaLanzadera(contenedor, lanzaderaMovidas);
   if (entradasPendientes.length) animarEntradaBunker(contenedor, entradasPendientes);
   if (aniquiladasPendientes.length) animarAniquiladas(contenedor, aniquiladasPendientes);
-  if (!estrenaTurno && scrollPrevio > 0 && pantallaScroll) {
-    requestAnimationFrame(() => {
-      if (pantallaScroll.isConnected) pantallaScroll.scrollTop = scrollPrevio;
-    });
+  /* Si el jugador ya estaba abajo del todo se queda abajo: el repintado suele
+     traer contenido nuevo (una acción más, el panel de decretos) y devolverle
+     el píxel de antes le subía la vista para bajarla otra vez. */
+  if (!estrenaTurno && pantallaScroll) {
+    if (alFinal === true) {
+      requestAnimationFrame(() => {
+        if (pantallaScroll.isConnected) pantallaScroll.scrollTop = pantallaScroll.scrollHeight;
+      });
+    } else if (scrollPrevio > 0) {
+      requestAnimationFrame(() => {
+        if (pantallaScroll.isConnected) pantallaScroll.scrollTop = scrollPrevio;
+      });
+    }
   }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */
@@ -1631,7 +1640,9 @@ function abrirTorre(posicion) {
   const faltaArmeria = !esNueva && !alTope && siguiente > armeria;
   const enDecretos = tocaMesa && faseMesa === "acciones";
   const sinDecretos = accionesRestantesMesa <= 0;
-  const sinMoneda = energiaMesa < 1;
+  /* Construir una torre cuesta 1 moneda; subirla de nivel (II y III), 2. */
+  const coste = esNueva ? 1 : 2;
+  const sinMoneda = energiaMesa < coste;
   const puede = enDecretos && !sinDecretos && !sinMoneda
     && (esNueva || (!alTope && !faltaArmeria));
 
@@ -1649,7 +1660,7 @@ function abrirTorre(posicion) {
   } else if (faltaArmeria) {
     problema = `Para subir al nivel ${torreEnRomano(siguiente)} necesitas armería ${siguiente} (tienes ${armeria}).`;
   } else if (!esNueva && sinMoneda) {
-    problema = "Subir de nivel cuesta 1 moneda.";
+    problema = "Subir de nivel cuesta 2 monedas.";
   }
 
   const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
@@ -1661,7 +1672,7 @@ function abrirTorre(posicion) {
         <span class="bw-disparo-n">${esNueva ? "hueco libre" : `nivel ${torreEnRomano(nv)}`}</span>
         <b class="bw-disparo-d">${esNueva ? "—" : torreEnRomano(nv)}</b>
       </div>
-      <div class="bw-disparo-total"><span>Coste</span><b>1 moneda + 1 decreto</b></div>
+      <div class="bw-disparo-total"><span>Coste</span><b>${coste} ${coste === 1 ? "moneda" : "monedas"} + 1 decreto</b></div>
       ${!esNueva ? `<div class="bw-disparo-coste"><span>Daño</span><b>${nv} en su escalera</b></div>` : ""}
       ${problema ? `<div class="bw-disparo-aviso">${problema}</div>` : ""}
     </div>`;
@@ -1676,7 +1687,7 @@ function abrirTorre(posicion) {
       <button class="bw-panel-x" type="button" data-cerrar-torre aria-label="Cerrar">×</button>
     </div>
     ${html}
-    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-torre-accion>${esNueva ? "Construir" : `Subir a nivel ${torreEnRomano(siguiente)}`} · 1 moneda</button></div>` : ""}`;
+    ${puede ? `<div class="bw-disparo-botones"><button type="button" class="bw-modal-usar bw-disparo-matar" data-torre-accion>${esNueva ? "Construir" : `Subir a nivel ${torreEnRomano(siguiente)}`} · ${coste} ${coste === 1 ? "moneda" : "monedas"}</button></div>` : ""}`;
   document.body.appendChild(panel);
   disparoPanel = panel;
   actualizarOverlayPaneles();
@@ -3263,7 +3274,7 @@ function pintarManuscritos() {
       ${fila("Armería 1", "torres Nv 1", "")}
       ${fila("Armería 2", "torres Nv 2", "2 mon.")}
       ${fila("Armería 3", "torres Nv 3", "2 mon.")}
-      ${parrafo("Las tres torres se construyen en la peana del búnker, una por escalera, y cuestan 1, 2 y 3 monedas según su nivel.")}
+      ${parrafo("Las tres torres se construyen en la peana del búnker, una por escalera: 1 moneda construirlas y 2 más por cada subida de nivel (nivel II, 3 en total; nivel III, 5).")}
     `)}
 
     ${seccion("Disparar con las torres", `

@@ -89,7 +89,7 @@ export function limpiar() {
   document.documentElement.style.removeProperty("--alto-barra");
 }
 
-export function pintar(raiz, { mesa, alAccion, alCuaderno, alSalir, scroll }) {
+export function pintar(raiz, { mesa, alAccion, alCuaderno, alSalir, scroll, alFinal }) {
   const turno = mesa.jugadores.find((j) => j.id === mesa.turno);
   const ronda = mesa.publica?.ronda;
   const maxRondas = mesa.publica?.maxRondas;
@@ -112,7 +112,7 @@ export function pintar(raiz, { mesa, alAccion, alCuaderno, alSalir, scroll }) {
   const contenedor = nodo.querySelector("#tablero");
   /* El registro de la mesa (con su jornada) viaja al tablero: el juego lo usa
      para la crónica. */
-  const opciones = { alAccion, alCuaderno, alSalir, scroll, log: mesa.log ?? [], ranking: mesa.ranking ?? [] };
+  const opciones = { alAccion, alCuaderno, alSalir, scroll, alFinal, log: mesa.log ?? [], ranking: mesa.ranking ?? [] };
   const cache = tableros.get(mesa.juego?.id);
   raiz.append(nodo);
   /* El nodo ya cuelga del documento antes de pintar el tablero: el juego mide
@@ -122,7 +122,7 @@ export function pintar(raiz, { mesa, alAccion, alCuaderno, alSalir, scroll }) {
   return nodo;
 }
 
-function pintarTablero(mod, contenedor, mesa, { alAccion, alCuaderno, alSalir, scroll, log, ranking }) {
+function pintarTablero(mod, contenedor, mesa, { alAccion, alCuaderno, alSalir, scroll, alFinal, log, ranking }) {
   contenedor.innerHTML = "";
   mod.pintar(contenedor, {
     publica: mesa.publica,
@@ -135,6 +135,7 @@ function pintarTablero(mod, contenedor, mesa, { alAccion, alCuaderno, alSalir, s
     alCuaderno,
     alSalir,
     scroll,
+    alFinal,
     log: log ?? mesa.log ?? [],
   });
 }

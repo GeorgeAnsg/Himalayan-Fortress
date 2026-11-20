@@ -1382,7 +1382,8 @@ function faseAcciones(e, jugadorId, accion, evs) {
       const t = j.bunker.torres[pos - 1];
       if (!t || t.nivel >= 3) break;
       if (t.nivel + 1 > j.bunker.armeria) break;
-      const diff = 1; // coste del nivel nuevo (nivel+1) menos el actual (nivel)
+      /* Construir cuesta 1 moneda; cada subida de nivel (II y III), 2. */
+      const diff = 2;
       if (j.energia < diff) break;
       j.energia -= diff;
       j.accionesRestantes--;
@@ -1727,10 +1728,10 @@ function legalesAcciones(e, jugadorId) {
   j.bunker.torres.forEach((t, i) => {
     const pos = i + 1;
     if (!t && j.energia >= 1) {
-      acc.push({ tipo: "construir_torreta", posicion: pos, texto: `Torre en posición ${pos} (escalera ${pos})` });
+      acc.push({ tipo: "construir_torreta", posicion: pos, texto: `Torre en posición ${pos} (escalera ${pos}) · 1 moneda` });
     }
-    if (t && t.nivel < 3 && t.nivel + 1 <= j.bunker.armeria && j.energia >= 1) {
-      acc.push({ tipo: "evolucionar_torreta", posicion: pos, texto: `Evolucionar torre ${pos} a nivel ${t.nivel + 1}` });
+    if (t && t.nivel < 3 && t.nivel + 1 <= j.bunker.armeria && j.energia >= 2) {
+      acc.push({ tipo: "evolucionar_torreta", posicion: pos, texto: `Evolucionar torre ${pos} a nivel ${t.nivel + 1} · 2 monedas` });
     }
   });
   /* Disparar: las torres del búnker pueden parar a un atacante de cualquier
