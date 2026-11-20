@@ -3752,6 +3752,8 @@ function defsCarta(c) {
     recursos:      { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`,  cls: "recursos",      costo: c.coste },
     decreto:       { emoji: "📜", label: c.titulo ?? `Decreto nv${c.nivel ?? ""}`,   cls: "decreto",       costo: c.coste },
     recursos_mix:  { emoji: "⚡", label: c.titulo ?? `Recursos nv${c.nivel ?? ""}`,  cls: "recursos_mix",  costo: c.coste },
+    /* Monedas al momento: pagan su coste y devuelven el doble. */
+    recursos_i:    { emoji: "⚡", label: c.titulo ?? "Monedas",  cls: "recursos",  costo: c.coste },
     armeria:       { emoji: "🔧", label: c.titulo ?? `Armería nv${c.nivel ?? ""}`,   cls: "armeria",       costo: c.coste },
     laboratorio:   { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`,  cls: "laboratorio",   costo: c.coste },
     ciencia:       { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia",    cls: "ciencia",    costo: c.coste },
@@ -3783,6 +3785,7 @@ function imgCarta(tipo, nivel) {
     recursos:     "recursos",
     decreto:      "energia",
     recursos_mix: "recursos",
+    recursos_i:   "recursos",
     armeria:      "armeria",
     laboratorio:  "laboratorio",
     ciencia:      "ciencia",

@@ -137,6 +137,12 @@ const PLANTILLAS_BUNKER = [
   { tipo:"decreto",     nivel:1, coste:2, titulo: "DECRETO 1",  descripcion: "Genera 1 decreto extra al comienzo de cada turno." },
   { tipo:"recursos_mix", nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Genera 1 moneda y 1 decreto extra al comienzo de cada turno." },
   { tipo:"recursos_mix", nivel:2, coste:3, titulo: "RECURSOS 2", descripcion: "Genera 1 moneda y 1 decreto extra al comienzo de cada turno." },
+  /* Monedas al momento: pagas su coste y devuelven el doble, o sea 2 o 3
+     monedas de ganancia. No se instalan: la carta se gasta al jugarla. */
+  { tipo:"recursos_i", efecto:"monedas4", coste:2, ganancia:4, titulo: "Monedas 4", descripcion: "Paga 2 monedas y 1 decreto: recibes 4 monedas al momento (ganas 2)." },
+  { tipo:"recursos_i", efecto:"monedas4", coste:2, ganancia:4, titulo: "Monedas 4", descripcion: "Paga 2 monedas y 1 decreto: recibes 4 monedas al momento (ganas 2)." },
+  { tipo:"recursos_i", efecto:"monedas6", coste:3, ganancia:6, titulo: "Monedas 6", descripcion: "Paga 3 monedas y 1 decreto: recibes 6 monedas al momento (ganas 3)." },
+  { tipo:"recursos_i", efecto:"monedas6", coste:3, ganancia:6, titulo: "Monedas 6", descripcion: "Paga 3 monedas y 1 decreto: recibes 6 monedas al momento (ganas 3)." },
   { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
   { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
@@ -177,8 +183,8 @@ const TOPE_RECURSOS = 4;
 
 // Una copia de cada carta — mazo sin duplicados
 const COPIAS_BUNKER = {
-  recursos: 1, decreto: 1, recursos_mix: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
-  dicho: 1,
+  recursos: 1, decreto: 1, recursos_mix: 1, recursos_i: 1,
+  armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1, dicho: 1,
 };
 
 /* Cartas que el jugador ya ha gastado: no vuelven al mazo nunca. La carta
@@ -1840,6 +1846,7 @@ function botValorCarta(c) {
   /* Un dicho no vale nada: es la primera carta que el bot tira al descartar. */
   if (c.tipo === "dicho") return 0;
   if (c.tipo === "recursos") return 100;
+  if (c.tipo === "recursos_i") return 88;
   if (c.tipo === "armeria") return 96;
   if (c.tipo === "laboratorio") return 72;
   if (c.efecto === "subir_recursos") return 98;
@@ -2282,6 +2289,16 @@ function aplicarMejoraBunker(j, carta, e, evs, reemplazo, accion) {
   if (carta.tipo === "recursos")     { j.bunker.recursos.push(carta); return; }
   if (carta.tipo === "decreto")      { j.bunker.decretos.push(carta); return; }
   if (carta.tipo === "recursos_mix") { j.bunker.recursos_mix.push(carta); return; }
+  if (carta.tipo === "recursos_i") {
+    /* Monedas al momento: el coste ya se ha pagado al jugarla, así que aquí
+       solo entra la ganancia. */
+    j.energia += carta.ganancia ?? 0;
+    evs.push({
+      tipo: "recursos", a: j.id,
+      texto: `${j.nombre} cambia ${carta.coste} moneda${carta.coste === 1 ? "" : "s"} por ${carta.ganancia}.`,
+    });
+    return;
+  }
   if (carta.tipo === "armeria")     { j.bunker.armeria     = carta.nivel; return; }
   if (carta.tipo === "laboratorio") { j.bunker.laboratorio = carta.nivel; return; }
   if (carta.tipo === "ciencia") {
