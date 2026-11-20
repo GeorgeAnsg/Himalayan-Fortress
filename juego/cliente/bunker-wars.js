@@ -1881,7 +1881,9 @@ function abrirLanzar(ops) {
   document.body.appendChild(fondo);
   document.body.classList.add("bw-lanzando");
 
+  let soltarGlobal = null;
   const cerrar = () => {
+    soltarGlobal?.();
     fondo.remove();
     document.body.classList.remove("bw-lanzando");
   };
@@ -1898,28 +1900,135 @@ function abrirLanzar(ops) {
     if (r?.error) aviso(r.error, { error: true });
   };
 
-  /* El botón de lanzar enseña el monstruo que va a salir, con su nivel y la
-     lanzadera de la que sale: con dos lanzaderas, «L1» y «L2» obligaban a
-     recordar qué había en cada una. */
-  const botonLanzar = (a) => {
-    const mon = lanzaderasMesa[a.lanzadera] ?? null;
-    const nv = mon?.nivel ?? null;
+  /* Las lanzaderas, abajo y fuera de las calles: el mismo cuadro de la ficha,
+     con el monstruo y su círculo de nivel. Se arrastran a la calle donde
+     quieras soltarlas. */
+  const chipLanzadera = (i) => {
+    const nv = lanzaderasMesa[i]?.nivel ?? null;
+    if (!nv) return "";
     const dos = lanzaderasMesa.filter(Boolean).length > 1;
-    const titulo = `Lanzar monstruo ${nv ?? "?"} (lanzadera ${a.lanzadera + 1}) por la escalera ${a.sendero} (la ${escaleraDe(a.sendero)})`;
-    return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="${esc(titulo)}" aria-label="${esc(titulo)}">${
-      nv ? `<img src="${imgMonstruo(nv, false, true)}" alt="" class="bw-lz-lanzar-img"><b class="bw-lz-lanzar-nv">${nv}</b>` : ""
-    }${dos ? `<span class="bw-lz-lanzar-l">L${a.lanzadera + 1}</span>` : ""}</button>`;
+    const titulo = `Monstruo ${nv} de la lanzadera ${i + 1}: arrástralo a una calle`;
+    return `<div class="bw-lz-mia" data-lanzadera="${i}" role="button" tabindex="0"
+                 aria-label="${esc(titulo)}" title="${esc(titulo)}"` +
+      `><img src="${imgMonstruo(nv, false, true)}" alt=""><b class="bw-lz-mia-nv">${nv}</b>` +
+      `${dos ? `<span class="bw-lz-mia-l">L${i + 1}</span>` : ""}</div>`;
   };
 
+  /* Arrastrar una lanzadera a una calle, o tocarla y tocar la calle. El
+     fantasma sigue al dedo y las calles donde se puede soltar se encienden. */
+  let rivalActual = null;
+  let elegida = null;
+  let arrastre = null;
+  const opDe = (lanzadera, calle) => ops.find(a => a.lanzadera === lanzadera
+    && a.rivalId === rivalActual && a.sendero === Number(calle)) ?? null;
+  const calles = () => [...fondo.querySelectorAll(".bw-torre[data-calle]")];
+  const calleBajo = (x, y) => document.elementFromPoint(x, y)?.closest?.(".bw-torre[data-calle]") ?? null;
+  const encenderCalles = (lanzadera) => {
+    for (const t of calles()) {
+      t.classList.toggle("bw-calle-suelta", lanzadera != null && !!opDe(lanzadera, t.dataset.calle));
+      t.classList.remove("bw-calle-encima");
+    }
+  };
+  const apagarCalles = () => {
+    for (const t of calles()) t.classList.remove("bw-calle-suelta", "bw-calle-encima");
+    for (const c of fondo.querySelectorAll(".bw-lz-mia")) c.classList.remove("bw-lz-mia-elegida");
+    elegida = null;
+  };
+
+  fondo.addEventListener("pointerdown", (ev) => {
+    const chip = ev.target.closest?.(".bw-lz-mia");
+    if (!chip) return;
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    ev.preventDefault();
+    arrastre = {
+      idx: Number(chip.dataset.lanzadera), id: ev.pointerId,
+      x0: ev.clientX, y0: ev.clientY, movido: false, fantasma: null, origen: chip,
+    };
+    try { chip.setPointerCapture(ev.pointerId); } catch { /* sin captura vale igual */ }
+    encenderCalles(arrastre.idx);
+  });
+
+  const alMover = (ev) => {
+    if (!arrastre || ev.pointerId !== arrastre.id) return;
+    /* El fantasma no aparece hasta que el dedo se mueve: un toque normal no
+       tiene por qué dejar un cuadro flotando. */
+    if (!arrastre.movido) {
+      if (Math.hypot(ev.clientX - arrastre.x0, ev.clientY - arrastre.y0) < 8) return;
+      arrastre.movido = true;
+      const r = arrastre.origen.getBoundingClientRect();
+      const fantasma = arrastre.origen.cloneNode(true);
+      fantasma.classList.add("bw-lz-fantasma");
+      fantasma.style.width = `${r.width}px`;
+      fantasma.style.height = `${r.height}px`;
+      document.body.appendChild(fantasma);
+      arrastre.fantasma = fantasma;
+    }
+    const f = arrastre.fantasma;
+    f.style.left = `${ev.clientX - f.offsetWidth / 2}px`;
+    f.style.top = `${ev.clientY - f.offsetHeight / 2}px`;
+    const t = calleBajo(ev.clientX, ev.clientY);
+    for (const c of calles()) {
+      c.classList.toggle("bw-calle-encima", c === t && c.classList.contains("bw-calle-suelta"));
+    }
+  };
+
+  const alSoltar = (ev) => {
+    if (!arrastre || ev.pointerId !== arrastre.id) return;
+    const { idx, movido, fantasma, origen } = arrastre;
+    arrastre = null;
+    fantasma?.remove();
+    const t = calleBajo(ev.clientX, ev.clientY);
+    const op = movido && t ? opDe(idx, t.dataset.calle) : null;
+    if (op) { enviar(op); return; }
+    if (movido) {
+      apagarCalles();
+      aviso("Esa calle no admite monstruos: su entrada ya está ocupada.", { error: true });
+      return;
+    }
+    /* Un toque sin arrastrar: se marca esa lanzadera para elegir la calle. */
+    const yaEstaba = elegida === idx;
+    apagarCalles();
+    if (yaEstaba) return;
+    elegida = idx;
+    origen.classList.add("bw-lz-mia-elegida");
+    encenderCalles(idx);
+  };
+
+  const alCancelar = () => {
+    arrastre?.fantasma?.remove();
+    arrastre = null;
+    apagarCalles();
+  };
+
+  /* En window: si el dedo se suelta fuera de la hoja, el arrastre termina
+     igual. `cerrar` se lleva los oyentes, así que no sobreviven al modal. */
+  window.addEventListener("pointermove", alMover);
+  window.addEventListener("pointerup", alSoltar);
+  window.addEventListener("pointercancel", alCancelar);
+  soltarGlobal = () => {
+    window.removeEventListener("pointermove", alMover);
+    window.removeEventListener("pointerup", alSoltar);
+    window.removeEventListener("pointercancel", alCancelar);
+    arrastre?.fantasma?.remove();
+    arrastre = null;
+  };
+
+  /* Segundo toque del modo sin arrastre: la calle elegida. */
+  fondo.addEventListener("click", (ev) => {
+    const t = ev.target.closest?.(".bw-torre[data-calle]");
+    if (!t || elegida == null) return;
+    const op = opDe(elegida, t.dataset.calle);
+    if (op) enviar(op);
+  });
+
   /* Cada calle enseña cinco huecos: arriba la torre y debajo sus cuatro
-     peldaños. En el detalle se añade un botón cuadrado de lanzar bajo cada
-     calle; en la lista de rivales solo se ve el resumen. */
-  const callesRival = (r, { rivalId = null, elegir = false, bloqueado = false } = {}) => {
+     peldaños. En la lista de rivales es solo el resumen; en el detalle, la
+     calle entera es la zona donde se suelta la lanzadera. */
+  const callesRival = (r, { bloqueado = false } = {}) => {
     const torres = r.bunker?.torres ?? [];
     const senderos = r.senderos ?? [];
 
-    return `<span class="bw-lz-calles${elegir ? " detalle" : ""}">${[0, 1, 2].map(i => {
-      const sid = senderos[i]?.id ?? i + 1;
+    return `<span class="bw-lz-calles">${[0, 1, 2].map(i => {
       const nTorre = Number(torres[i]?.nivel) || 0;
       const fichas = [3, 2, 1, 0].map(paso => {
         const f = senderos[i]?.posiciones?.[paso]
@@ -1935,42 +2044,20 @@ function abrirLanzar(ops) {
           `${atacante ? "Atacante" : "Defensor"} nivel ${n} en el peldaño ${paso + 1}`, entradaCerrada);
       }).join("");
 
-      const suyas = elegir && rivalId
-        ? ops.filter(a => a.rivalId === rivalId && a.sendero === sid)
-        : [];
-      const botones = elegir
-        ? (suyas.length
-          ? suyas.map(botonLanzar).join("")
-          : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`)
-        : "";
-
       return `<span class="bw-lz-calle">
         ${cuadroLz(nTorre, "bz-torre", `Torre ${i + 1}: ${nTorre ? `nivel ${nTorre}` : "vacía"}`)}
         ${fichas}
-        ${botones}
       </span>`;
     }).join("")}</span>`;
   };
 
   /* El detalle de lanzamiento es el mismo bloque grande que el panel de
      Torres, pero con el rival como protagonista: torre + cuatro peldaños por
-     calle y su botón de lanzar debajo. */
-  const tableroRival = (id, { elegir = false } = {}) => {
+     calle, y las lanzaderas se sueltan sobre la calle que quieras. */
+  const tableroRival = (id) => {
     const r = jugadoresMesa.find(x => x.id === id) ?? {};
-
-    const accionesDe = (sendero, i) => {
-      if (!elegir) return "";
-      const sid = sendero?.id ?? i + 1;
-      const suyas = ops.filter(a => a.rivalId === id && a.sendero === sid);
-      const botones = suyas.length
-        ? suyas.map(botonLanzar).join("")
-        : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`;
-      return `<div class="bw-torre-lanzar">${botones}</div>`;
-    };
-
     return `<div class="bw-lz-torres">${bloqueTorres(r.bunker?.torres ?? [], r.senderos ?? [], {
       interactivo: false,
-      lanzar: accionesDe,
     })}</div>`;
   };
 
@@ -1999,6 +2086,7 @@ function abrirLanzar(ops) {
 
   const pasoRivales = () => {
     rivalLanzarElegido = null;
+    apagarCalles();
     fondo.classList.remove("lz-detalle");
     fondo.classList.add("lz-inicial");
     fondo.innerHTML = `
@@ -2020,8 +2108,12 @@ function abrirLanzar(ops) {
 
   const pasoCaminos = (rivalId) => {
     rivalLanzarElegido = rivalId;
+    rivalActual = rivalId;
+    elegida = null;
     const rival = jugadoresMesa.find(x => x.id === rivalId) ?? {};
     const vida = Math.max(0, 20 - (rival.puntosMonsters ?? 0));
+    /* Solo las lanzaderas que de verdad pueden ir a esta fortaleza. */
+    const lanzaderasDe = [...new Set(ops.filter(a => a.rivalId === rivalId).map(a => a.lanzadera))].sort();
     /* El detalle sale desde abajo, con el mismo ribete de piedra que el panel
        de Torres: no es otro modal centrado. */
     fondo.classList.remove("lz-inicial");
@@ -2032,14 +2124,13 @@ function abrirLanzar(ops) {
           <b class="bw-lz-tit">Fortaleza de ${esc(nombreMesa(rival))}</b>
           <span class="bw-lz-vida">❤ ${vida} / 20</span>
         </div>
-        <div class="bw-lz-tablero">${tableroRival(rivalId, { elegir: true })}</div>
+        <div class="bw-lz-tablero">${tableroRival(rivalId)}</div>
+        <div class="bw-lz-mis${lanzaderasDe.length === 1 ? " sola" : ""}">${lanzaderasDe.map(chipLanzadera).join("")}</div>
+        <p class="bw-lz-ayuda">Arrastra un monstruo a una calle para lanzarlo. Si prefieres, tócalo y luego toca la calle.</p>
         <div class="bw-lz-pie">
           <button type="button" class="bw-modal-usar bw-lz-atras">Atrás</button>
         </div>
       </div>`;
-    for (const b of fondo.querySelectorAll(".bw-lz-lanzar[data-op]")) {
-      b.addEventListener("click", () => enviar(ops[Number(b.dataset.op)], b));
-    }
     fondo.querySelector(".bw-lz-atras").addEventListener("click", pasoRivales);
   };
 
@@ -3140,9 +3231,9 @@ function prepararAliados(panel, aliados) {
 /* ── Torres: un hueco por camino, con el nivel encima y el camino debajo ── */
 
 /* El bloque visual compartido por el panel de Torres y el detalle del rival.
-   En el panel propio las torres se pueden tocar; en el rival es solo lectura
-   y, si se pide, debajo de cada camino aparecen los botones de lanzamiento. */
-function bloqueTorres(torres, senderos = [], { interactivo = true, lanzar = null, marcar = null, huecoTorre = null } = {}) {
+   En el panel propio las torres se pueden tocar; en el rival es solo lectura,
+   y cada columna lleva `data-calle` para soltar allí la lanzadera. */
+function bloqueTorres(torres, senderos = [], { interactivo = true, marcar = null, huecoTorre = null } = {}) {
   const lista = Array.isArray(torres) ? torres : [];
   const caminos = ["Camino izquierdo", "Camino central", "Camino derecho"];
   const senderosLista = Array.isArray(senderos) ? senderos : [];
@@ -3189,13 +3280,13 @@ function bloqueTorres(torres, senderos = [], { interactivo = true, lanzar = null
     const attrsTorre = interactivo
       ? ` data-torre-pos="${i + 1}" title="${n ? `Torre nivel ${n}: toca para mejorar` : "Hueco libre: toca para construir"}"`
       : ` title="${n ? `Torre nivel ${n}` : "Torre vacía"}"`;
-    const lanzarHtml = lanzar ? lanzar(sendero, i) : "";
+    /* `data-calle` marca la columna entera: en el detalle del rival es la
+       zona donde se suelta la lanzadera, sin apuntar al peldaño exacto. */
     return `
-      <div class="bw-torre">
+      <div class="bw-torre" data-calle="${sendero?.id ?? i + 1}">
         <div class="bw-torre-camino">${caminos[i]}</div>
         <div class="bw-box-slot bw-torre-img ${n ? "lleno" : "vacio"}"${attrsTorre}>${dentro}${nivel}</div>
         <div class="bw-torre-slots">${[3, 2, 1, 0].map(hueco).join("")}</div>
-        ${lanzarHtml}
       </div>`;
   };
   return `<div class="bw-torres">${[0, 1, 2].map(torre).join("")}</div>`;
@@ -5713,12 +5804,6 @@ function css() {
       background:rgba(176,58,44,.95);
     }
     .bw-lz-torres .bw-box-slot.vacio { cursor:default; }
-    .bw-torre-lanzar { width:100%; display:flex; flex-direction:column; gap:4px; margin-top:8px; }
-    /* El botón ocupa el mismo ancho que la torre y los peldaños de su calle,
-       para que las tres columnas queden alineadas. */
-    .bw-lz-torres .bw-lz-lanzar {
-      width:min(72px, 22vw, 100%); height:42px; min-height:42px;
-    }
     .bw-lz-rival {
       display:block; width:100%; box-sizing:border-box; text-align:left;
       padding:20px; border-radius:9px; cursor:pointer; font:inherit;
@@ -5806,34 +5891,47 @@ function css() {
     .bw-mapa-rival.aliado .bw-lz-cuadro.bz-def.lleno .bw-lz-punto {
       border:1.5px solid #7be5e5; background:#179494; color:#fff;
     }
-    /* El botón de lanzar, cuadrado y debajo de cada calle. */
-    .bw-lz-lanzar {
-      position:relative; overflow:hidden;
-      width:42px; height:42px; min-height:42px; aspect-ratio:1;
-      margin:4px auto 0; padding:2px; border-radius:6px; border:none; cursor:pointer;
-      display:grid; place-items:center; box-sizing:border-box;
-      font:800 10px/1.05 ui-monospace,monospace;
-      background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
+    /* Las lanzaderas que vas a soltar, abajo y fuera de las calles: el mismo
+       cuadro de la ficha, con el monstruo y su círculo de nivel. Se arrastran
+       a la calle donde quieras mandarlas. */
+    /* Cada una bajo el hueco entre dos calles, como pedían: la de la
+       lanzadera 1 a un tercio del ancho y la 2 a dos tercios. */
+    .bw-lz-mis { display:grid; grid-template-columns:repeat(6,1fr);
+                 align-items:center; padding:8px 4px 2px; }
+    .bw-lz-mis .bw-lz-mia:nth-child(1) { grid-column:2 / span 2; justify-self:center; }
+    .bw-lz-mis .bw-lz-mia:nth-child(2) { grid-column:4 / span 2; justify-self:center; }
+    .bw-lz-mis.sola .bw-lz-mia:nth-child(1) { grid-column:1 / -1; justify-self:center; }
+    .bw-lz-mia {
+      position:relative; width:48px; height:48px; padding:4px; box-sizing:border-box;
+      border-radius:8px; border:1.5px solid rgba(244,236,221,.5);
+      background:rgba(0,0,0,.3); cursor:grab;
+      touch-action:none; user-select:none; -webkit-user-select:none;
     }
-    /* Dentro va el monstruo que va a salir: su vista de lanzadera, su nivel y
-       de qué lanzadera sale, para no tener que recordarlo. */
-    .bw-lz-lanzar-img { width:100%; height:100%; object-fit:contain; display:block; }
-    .bw-lz-lanzar-nv {
-      position:absolute; left:1px; bottom:0; padding:0 3px; border-radius:3px;
-      font:800 9px/1.3 ui-monospace,monospace; color:#12161a;
-      background:rgba(255,255,255,.82);
+    .bw-lz-mia img { width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; }
+    .bw-lz-mia-nv {
+      position:absolute; right:-5px; top:-5px; width:18px; height:18px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(var(--c-propio),.95); color:#fff; pointer-events:none;
+      font:700 10px/1 ui-monospace,monospace; box-shadow:0 0 0 1px rgba(255,255,255,.5);
     }
-    .bw-lz-lanzar-l {
-      position:absolute; right:1px; top:0; padding:0 3px; border-radius:3px;
-      font:800 9px/1.3 ui-monospace,monospace; color:#f4ecdd;
-      background:rgba(18,22,26,.8);
+    .bw-lz-mia-l {
+      position:absolute; left:-5px; bottom:-5px; padding:0 3px; border-radius:3px;
+      font:800 9px/1.35 ui-monospace,monospace; color:#f4ecdd; pointer-events:none;
+      background:rgba(18,22,26,.85);
     }
-    .bw-lz-calles.detalle .bw-lz-lanzar { width:46px; height:46px; min-height:46px; }
-    .bw-lz-lanzar.bloqueado,
-    .bw-lz-lanzar:disabled {
-      cursor:default; opacity:.42;
-      background:rgba(244,236,221,.12); color:#b7a992;
-      border:1px solid rgba(244,236,221,.25);
+    .bw-lz-mia-elegida { border-color:#7be5e5; box-shadow:0 0 0 2px rgba(123,229,229,.45); }
+    .bw-lz-fantasma {
+      position:fixed; z-index:99999; pointer-events:none; opacity:.9;
+      transform:scale(1.08); filter:drop-shadow(0 6px 10px rgba(0,0,0,.45));
+    }
+    .bw-lz-ayuda { margin:8px 0 10px; font-size:11px; line-height:1.35;
+                   color:#b7a992; text-align:center; }
+    /* Calles donde se puede soltar la lanzadera que llevas en la mano. */
+    .bw-lz-torres .bw-torre.bw-calle-suelta .bw-torre-slot:last-child {
+      border-color:#7be5e5; background:rgba(23,148,148,.28);
+    }
+    .bw-lz-torres .bw-torre.bw-calle-encima .bw-torre-slot:last-child {
+      border-color:#7be5e5; background:rgba(23,148,148,.55);
     }
     .bw-lz-vida { font-size:11px; color:#e0533f; }
     .bw-lz-pie { display:flex; justify-content:center; gap:10px; }
