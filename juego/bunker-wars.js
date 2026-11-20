@@ -1022,6 +1022,19 @@ function avanzarMonstruosPropios(j, evs) {
     for (let pos = 0; pos < 3; pos++) {
       const f = s.posiciones[pos + 1];
       if (f?.tipo !== "monstruo") continue;
+      if (f.vuela) {
+        /* Volador propio: avanza 2 peldaños hacia la lanzadera, salta atacantes. */
+        const dest2 = pos - 1;
+        const dest1 = pos;
+        if (dest2 >= 0 && !s.posiciones[dest2]) {
+          s.posiciones[dest2] = f;
+          s.posiciones[pos + 1] = null;
+        } else if (!s.posiciones[dest1]) {
+          s.posiciones[dest1] = f;
+          s.posiciones[pos + 1] = null;
+        }
+        continue;
+      }
       const delante = s.posiciones[pos];
       if (!delante) {
         s.posiciones[pos] = f;
@@ -1470,7 +1483,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.energia -= COSTE_MONSTRUO_VOLADOR;
       j.accionesRestantes--;
       j.box[boxIdx] = { id: uid("m"), tipo: "monstruo", nivel: 1, vuela: true, dueno: j.id };
-      evs.push({ tipo: "crear", texto: `${j.nombre} crea ave de la bruma en la jaula ${boxDeIndice(boxIdx) + 1} (${COSTE_MONSTRUO_VOLADOR} moneda).`, a: jugadorId });
+      evs.push({ tipo: "crear", texto: `${j.nombre} crea aves de bruma en la jaula ${boxDeIndice(boxIdx) + 1} (${COSTE_MONSTRUO_VOLADOR} moneda).`, a: jugadorId });
       break;
     }
 
@@ -1854,7 +1867,7 @@ function legalesAcciones(e, jugadorId) {
     }
     if (j.energia >= COSTE_MONSTRUO_VOLADOR) {
       acc.push({ tipo: "crear_volador", boxIdx,
-                 texto: `Crear ave de la bruma en la jaula ${boxIdx + 1} · ${COSTE_MONSTRUO_VOLADOR} moneda` });
+                 texto: `Crear aves de bruma en la jaula ${boxIdx + 1} · ${COSTE_MONSTRUO_VOLADOR} moneda` });
     }
   }
   normalizarTorres(j);

@@ -3024,7 +3024,7 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="${m.vuela ? "Ave de la bruma" : `Monstruo ${m.nivel}`} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.vuela ? "volador" : m.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo"><b class="bw-box-nv">${m.vuela ? "✦" : m.nivel}</b></div>`
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="${m.vuela ? "Aves de bruma" : `Monstruo ${m.nivel}`} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.vuela ? "volador" : m.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo"><b class="bw-box-nv">${m.vuela ? "✦" : m.nivel}</b></div>`
         : `<div class="bw-box-slot vacio" data-box="${b}" title="Jaula ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     /* La jaula 1 alimenta el camino izquierdo y el central; la 2, el central
@@ -3514,7 +3514,7 @@ function abrirModalAcciones() {
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
   { nivel: 1,        nombre: "Rastreador",       puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza",  stats: "1 de ataque · 1 de avance" },
-  { nivel: "volador",nombre: "Ave de la bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", stats: "1 de ataque · 2 de avance", vuela: true },
+  { nivel: "volador",nombre: "Aves de bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", stats: "1 de ataque · 2 de avance", vuela: true },
   { nivel: 2,        nombre: "Carroñero",        puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza",  stats: "2 de ataque · 1 de avance" },
   { nivel: 3,        nombre: "Yeti",             puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza",  stats: "3 de ataque · 1 de avance" },
   { nivel: 5,        nombre: "Coloso de hielo",  puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza",  stats: "5 de ataque · 1 de avance" },
@@ -3688,13 +3688,13 @@ function pintarManuscritos() {
 
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
-      ${fila("Ave de la bruma", "Volador", "1 pto · 1 mon. · avanza 2 · vuela sobre defensores · solo torres la destruyen")}
+      ${fila("Aves de bruma", "Volador", "1 pto · 1 mon. · avanza 2 · vuela sobre defensores · solo torres la destruyen")}
       ${fila("Carroñero", "Nv 2", "2 ptos · 1 mon.")}
       ${fila("Yeti", "Nv 3", "3 ptos · 2 mon.")}
       ${fila("Coloso de hielo", "Nv 5", "5 ptos · 3 mon.")}
       ${fila("Devorador de cumbres", "Nv 7", "7 ptos · no se crea")}
       ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
-      ${parrafo("El Ave de la bruma es especial: vuela sobre los monstruos defensores (no combate con ellos), avanza 2 peldaños por turno y solo puede ser destruida por las torres.")}
+      ${parrafo("El Aves de bruma es especial: vuela sobre los monstruos defensores (no combate con ellos), avanza 2 peldaños por turno y solo puede ser destruida por las torres.")}
     `)}
 
     ${seccion("Criadero", `
