@@ -937,6 +937,11 @@ function faseDefensores(e, jugadorId, evs) {
 }
 
 // ── Fase LANZAR ───────────────────────────────────────────────────────────
+/* Clave del turno de lanzamiento: la lanzadera que se rellena con la reserva
+   queda cerrada hasta el turno siguiente, para no encadenar dos lanzamientos
+   con el mismo hueco. */
+const claveLanzar = (e) => `${e.luna}:${e.orden[e.turnoIdx]}`;
+
 function faseLanzar(e, jugadorId, accion, evs) {
   const j = e.jugadores[jugadorId];
 
@@ -945,10 +950,14 @@ function faseLanzar(e, jugadorId, accion, evs) {
     const mon = j.lanzaderas[i];
     const rival = e.jugadores[accion.rivalId];
     const s = rival?.senderos.find(s => s.id === accion.sendero);
-    if (mon && s && !s.posiciones[0] && rival.vivo) {
+    if (mon && mon.bloqueadaEn !== claveLanzar(e) && s && !s.posiciones[0] && rival.vivo) {
       s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId };
       evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
-      j.lanzaderas[i] = j.colaLanzaderas.length > 0 ? j.colaLanzaderas.shift() : null;
+      /* La reserva entra en el hueco que ha quedado libre, pero no cuenta como
+         lanzadera cargada hasta el turno siguiente. */
+      const siguiente = j.colaLanzaderas.length > 0 ? j.colaLanzaderas.shift() : null;
+      if (siguiente) siguiente.bloqueadaEn = claveLanzar(e);
+      j.lanzaderas[i] = siguiente;
       console.log(`[lanzar] ${j.nombre} → ${rival.nombre} · escalera ${accion.sendero} · nv ${mon.nivel} · luna ${e.luna}`);
     }
     /* Con dos lanzaderas la fase sigue abierta mientras quede otra ficha y
@@ -1607,7 +1616,9 @@ function cerrarTurnoYAvanzar(e, jugadorId, evs) {
 // ── legales helpers ───────────────────────────────────────────────────────
 function legalesLanzar(e, jugadorId) {
   const j = e.jugadores[jugadorId];
-  const cargadas = j.lanzaderas.map((m, i) => ({ m, i })).filter(x => x.m);
+  const turno = claveLanzar(e);
+  const cargadas = j.lanzaderas.map((m, i) => ({ m, i }))
+    .filter(x => x.m && x.m.bloqueadaEn !== turno);
   if (!cargadas.length) return [{ tipo: "no_lanzar", texto: "Continuar (sin lanzadera)" }];
   const acc = [];
   for (const rivalId of e.orden) {
