@@ -5714,10 +5714,12 @@ function css() {
        la pantalla (la hoja acaba justo encima del menú). */
     #bw-modal-criadero .bw-modal {
       width:100%; gap:10px;
+      padding-bottom:20px;
       max-height:calc(100vh - var(--alto-nav, 34px) - 12px);
     }
-    /* 14 px + el gap dejan la línea del título 4 px por encima del toggle. */
-    #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:14px; }
+    /* La línea va 20 px por debajo del título; con 30 px de margen más el gap
+       de la rejilla, quedan otros 20 px de aire hasta los botones de jaula. */
+    #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:30px; }
     /* El botón de criar va debajo de los cuadrados; la nota, si está vacía,
        no ocupa ni el renglón ni su hueco. */
     .bw-criar-ok { min-width:170px; }
