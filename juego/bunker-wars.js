@@ -65,8 +65,8 @@ const PLANTILLAS_DESTINO = [
      carroñero entraría como rastreador. */
   { id:"a03", tipo:"amenaza_mixta", tramo:1, tramoMax:1, nivel:2,
     niveles:[1, 2, "volador"], nivelPropio:true,
-    titulo:"Un carroñero, un rastreador y aves de bruma",
-    descripcion:"Un rastreador por la izquierda, un carroñero por el centro y aves de bruma por la derecha." },
+    titulo:"Sombras en la niebla",
+    descripcion:"Algo se mueve en los tres caminos. Un rastreador acecha por la izquierda, un carroñero avanza por el centro y aves de bruma surcan la derecha." },
   { id:"a03b", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
     titulo:"2 rastreadores avistados",
     descripcion:"Dos rastreadores aparecen en el comienzo de tus escaleras." },
