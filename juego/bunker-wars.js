@@ -1061,15 +1061,30 @@ function avanzarMonstruosPropios(j, evs) {
       const f = s.posiciones[pos + 1];
       if (f?.tipo !== "monstruo") continue;
       if (f.vuela) {
-        /* Volador propio: avanza 2 peldaños hacia la lanzadera, salta atacantes. */
-        const dest2 = pos - 1;
-        const dest1 = pos;
-        if (dest2 >= 0 && !s.posiciones[dest2]) {
-          s.posiciones[dest2] = f;
-          s.posiciones[pos + 1] = null;
-        } else if (!s.posiciones[dest1]) {
-          s.posiciones[dest1] = f;
-          s.posiciones[pos + 1] = null;
+        /* Volador propio: 2 acciones iguales que el atacante volador.
+           Cada acción avanza 1 casilla hacia la entrada; si hay atacante, lucha. */
+        let posActual = pos + 1;
+        for (let accion = 0; accion < 2; accion++) {
+          if (posActual <= 0) break;
+          const delante = s.posiciones[posActual - 1];
+          if (!delante) {
+            s.posiciones[posActual - 1] = f;
+            s.posiciones[posActual] = null;
+            posActual--;
+          } else if (delante.tipo === "atacante" && !delante.vuela) {
+            const { enemigoMuere, monstruoSobrevive } = resolverCombate(f, delante);
+            s.posiciones[posActual] = null;
+            if (monstruoSobrevive) {
+              s.posiciones[posActual - 1] = f;
+              posActual--;
+              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel} en el peldaño ${posActual + 1} de la escalera ${s.id}.` });
+            } else {
+              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave muere al atacar al atacante ${delante.nivel} en el peldaño ${posActual} de la escalera ${s.id}.` });
+              break;
+            }
+          } else {
+            break; // bloqueado por otro monstruo propio o atacante volador
+          }
         }
         continue;
       }
