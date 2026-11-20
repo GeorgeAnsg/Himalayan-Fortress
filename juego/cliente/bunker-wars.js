@@ -691,13 +691,10 @@ let entradasPendientes = [];
 /* Fichas que una carta se ha llevado sin pelear (Purga y compañía): se les
    deja su humo en la casilla, como al que mata una torre pero sin bolas. */
 let aniquiladasPendientes = [];
-/* Vida (puntosMonsters) de mi búnker en el repintado anterior: el que entra
-   deja la casilla de la puerta vacía, pero una torre o una carta también, así
-   que solo se anima la entrada si la vida ha bajado lo que vale ese monstruo. */
-let puntosPreviosMio = null;
-/* ¿La última foto de fichas era la de mi tablero? Al volver de visitar la
-   fortaleza de otro jugador no se comparan fotos: no son las mismas fichas. */
-let fotoMia = true;
+/* Entradas ya animadas: el motor las manda (con id) y no se repiten aunque la
+   mesa se repinte varias veces con el mismo estado. */
+const entradasHechasBunker = new Set();
+let entradasPrimerPintado = true;
 /* Fichas de monstruos (ajenas o atacantes) que había en el tablero la última
    vez: si ahora hay más, es que acaban de aparecer. */
 let ajenasPrevias = null;
@@ -1925,7 +1922,7 @@ function abrirLanzar(ops) {
        a pintar con la que queda. */
     lanzaderasModal = lanzaderasModal.map((m, i) => (i === accion.lanzadera ? null : m));
     opsModal = opsModal.filter(a => a.lanzadera !== accion.lanzadera);
-    repintarPaso();
+    actualizarChips();
   };
 
   /* Lo que la hoja puede ofrecer ahora mismo. Va aparte porque la hoja ya no
@@ -1964,6 +1961,20 @@ function abrirLanzar(ops) {
     lanzaderasModal = lanzaderasMesa;
     if (enviando || firmaDe() === firmaVista) return;
     repintarPaso();
+  };
+
+  /* Tras lanzar solo cambia la fila de cuadros: repintar la hoja entera hacía
+     que se vieran desaparecer y volver el modal y la imagen de debajo. */
+  const actualizarChips = () => {
+    firmaVista = firmaDe();
+    apagarCalles();
+    if (!quedanLanzamientos().length) { cerrar(); return; }
+    const fila = fondo.querySelector(".bw-lz-mis");
+    if (!fila || rivalActual == null) { repintarPaso(); return; }
+    const indices = [...new Set(opsModal.filter(a => a.rivalId === rivalActual).map(a => a.lanzadera))].sort();
+    if (!indices.length) { rivalActual = null; pasoRivales(); return; }
+    fila.classList.toggle("sola", indices.length === 1);
+    fila.innerHTML = indices.map(chipLanzadera).join("");
   };
 
   /* Las lanzaderas, abajo y fuera de las calles: el mismo cuadro de la ficha,
@@ -2534,11 +2545,10 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   avisarLanzaderaSinHueco(priv);
   const lanzaderas = priv?.lanzaderas ?? [null, null];
   const colaLanzaderas = priv?.colaLanzaderas ?? [];
-  /* Las entradas en el búnker se detectan abajo y se animan al final del
+  /* Las entradas en el búnker las manda el motor y se animan al final del
      pintado, con la nube de la pelea en la puerta. */
   entradasPendientes = [];
   aniquiladasPendientes = [];
-  const puntosAntes = opciones.sinLuchas ? null : puntosPreviosMio;
   const s    = j?.senderos ?? [{}, {}, {}];
   const torres = j?.bunker?.torres ?? [null, null, null];
   /* Las dos cifras de la fortaleza son lo que te queda AHORA, no la producción
@@ -2606,7 +2616,9 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
           const movida = mismaCalle && antes.paso !== paso;
       const entra = !antes && paso === 0;
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
-      if (f.id) fichasPrevias.set(f.id, { calle: i, paso, nivel: nivelDe(f), tipo: f.tipo });
+      /* La foto es solo de tu tablero: una visita a otra fortaleza escribía
+         aquí sus monstruos y dejaba sin comparación el repintado siguiente. */
+      if (!opciones.sinLuchas && f.id) fichasPrevias.set(f.id, { calle: i, paso, nivel: nivelDe(f), tipo: f.tipo });
       /* `data-entra` marca las que aparecen por abajo: fuera de tu turno no
          hay jornada que las anime y se lanzan en el mismo repintado. */
       const desdeAttr = desde
@@ -2637,11 +2649,9 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
      encima de los dos sale la nube de la pelea. En la visita a otra fortaleza
      no se comparan fotos: los fantasmas de una visita no son tuyos. */
   const luchas = [];
-  /* Atacantes que este repintado han pisado la puerta del búnker. */
-  const puertaVacia = [];
   const entradas = [];
   const aniquiladas = [];
-  if (!opciones.sinLuchas && fotoMia) {
+  if (!opciones.sinLuchas) {
     const vivos = new Set();
     for (let i = 0; i < 3; i++) for (let paso = 0; paso < 4; paso++) {
       const f = fichaEn(s[i], paso);
@@ -2676,11 +2686,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
         });
         continue;
       }
-      /* Un atacante del último peldaño con la casilla vacía ha entrado en el
-         búnker: en el tablero no hay nadie que lo haya matado. */
-      if (esAtacante && paso === 3 && !suCasilla) {
-        puertaVacia.push({ calle: antes.calle, nivel: antes.nivel });
-      }
+
       /* Si su casilla la ocupa ahora un rival, ese ha ganado y se le ve entrar;
          si está vacía, murió al atacar la casilla de delante. */
       const destino = esRival(suCasilla) ? paso : (esRival(delante) ? paso + (esAtacante ? 1 : -1) : null);
@@ -2712,19 +2718,22 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
           : (ganador.tipo === "atacante" ? "atacantes" : "defensores"),
       });
     }
-    /* Solo las que de verdad han quitado vida: una torre o una carta dejan la
-       puerta vacía sin sumar puntos al búnker. */
-    if (puertaVacia.length && puntosAntes != null) {
-      let vidaBaja = Math.max(0, (j?.puntosMonsters ?? 0) - puntosAntes);
-      for (const p of puertaVacia) {
-        if (vidaBaja < p.nivel) continue;
-        vidaBaja -= p.nivel;
-        const puerta = LOSAS[p.calle][3];
-        entradas.push({ l: puerta.l, t: puerta.t, nivel: p.nivel });
-      }
+    /* Las entradas las manda el motor y cada una se anima una sola vez por su
+       id. Deducirlas de la foto del repintado anterior fallaba en cuanto había
+       otro repintado o una visita en medio: la vida subía de golpe y no se
+       veía ni la nube ni la pastilla subiendo. */
+    for (const en of j?.entradas ?? []) {
+      if (!en?.id || entradasHechasBunker.has(en.id)) continue;
+      entradasHechasBunker.add(en.id);
+      /* Al abrir la app a media partida no se repiten las que ya pasaron. */
+      if (entradasPrimerPintado) continue;
+      const puerta = (LOSAS[en.calle - 1] ?? LOSAS[0])[3];
+      entradas.push({ l: puerta.l, t: puerta.t, nivel: en.nivel });
     }
+    entradasPrimerPintado = false;
+    /* El registro de ids no crece sin fin: si se llena, se empieza de cero. */
+    if (entradasHechasBunker.size > 300) entradasHechasBunker.clear();
   }
-  fotoMia = !opciones.sinLuchas;
   const luchasHtml = luchas.map((l, k) => {
     const ini = LOSAS[l.calle][l.origen];
     const fin = LOSAS[l.calle][l.destino];
@@ -2801,10 +2810,9 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
     }</div>`;
   }).join("");
 
-  /* La vida de este pintado es la referencia del siguiente, y las entradas
-     detectadas se animan en cuanto el tablero esté en el documento. */
+  /* Las entradas detectadas se animan en cuanto el tablero esté en el
+     documento. */
   if (!opciones.sinLuchas) {
-    puntosPreviosMio = j?.puntosMonsters ?? 0;
     entradasPendientes = entradas;
     aniquiladasPendientes = aniquiladas;
   }

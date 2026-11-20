@@ -789,6 +789,10 @@ const bunkerWars = {
           puntosMonsters: j.puntosMonsters,
           bunker: j.bunker,
           muertesSinLucha: j.muertesSinLucha ?? [],
+          /* Monstruos que han entrado en el búnker: el cliente los anima en la
+             puerta y resta la vida ahí. Se mandan desde el motor porque
+             deducirlo comparando repintados fallaba a veces. */
+          entradas: (j.entradasBunker ?? []).slice(-8),
           senderos: j.senderos,
           lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor" } : null)),
           colaLanzaderas: (j.colaLanzaderas ?? []).map(m => ({ nivel: m.nivel, tipo: m.tipo ?? "defensor" })),
@@ -889,6 +893,8 @@ function faseAvance(e, jugadorId, evs) {
     if (f?.tipo === "atacante") {
       j.puntosMonsters += f.nivel;
       s.posiciones[3] = null;
+      j.entradasBunker = [...(j.entradasBunker ?? []),
+        { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
       evs.push({ tipo: "entrada", texto: `¡Monstruo ${f.nivel} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
       if (j.puntosMonsters > 20) {
         j.vivo = false;
