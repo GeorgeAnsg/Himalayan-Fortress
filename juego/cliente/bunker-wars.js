@@ -87,6 +87,15 @@ export function pintar(contenedor, opciones) {
     const prevPos = fichasPrevias.get(m.id);
     return prevPos ? [{ id: m.id, nivel: m.nivel, lanzadera: i, desdePath: prevPos }] : [];
   });
+  /* Los que ya estaban en el camino y este repintado salen hacia la lanzadera:
+     hacen el último tramo como una ficha más, en su turno, y solo después se
+     apagan para aparecer en la lanzadera (ver prepararSalidasLanzadera). */
+  const salidasLanzadera = lanzaderaMovidas.filter((m) => m.desdePath && m.desdePath.paso > 0);
+  /* Por calle, el que sale: hace falta en el tablero para saber que el
+     atacante de la casilla 1 ha caído contra él, no por una carta. */
+  const salen = new Map(salidasLanzadera.map((m) => [m.desdePath.calle, {
+    id: m.id, nivel: m.nivel, paso: m.desdePath.paso,
+  }]));
   energiaMesa = privada?.energia ?? 0;
   accionesRestantesMesa = privada?.accionesRestantes ?? 0;
   faseMesa = fase ?? null;
@@ -175,7 +184,7 @@ export function pintar(contenedor, opciones) {
   viendoJugador = null;
 
   contenedor.innerHTML = `
-    ${yo ? pintarMiBunker(yo, privada, fase) : ""}
+    ${yo ? pintarMiBunker(yo, privada, fase, { salen }) : ""}
 
   `;
   /* La jornada empieza por la lanzadera y sigue con el avance de atacantes,
@@ -190,6 +199,9 @@ export function pintar(contenedor, opciones) {
   const pantallaScroll = document.getElementById("pantalla");
   const scrollPrevio = Number.isFinite(scroll) ? scroll : (pantallaScroll?.scrollTop ?? 0);
 
+  /* La copia de los que salen se crea antes de animar: así entra en la cola de
+     su calle como cualquier otro defensor. La lanzadera espera apagada. */
+  if (salidasLanzadera.length) prepararSalidasLanzadera(contenedor, salidasLanzadera);
   const anim = animarFichas(contenedor);
   registro(`pintado · ${anim.movidas} movidas (${anim.ataques} atacantes, ${anim.defensores} defensores)`
     + ` · ${anim.entradas} entradas · ${anim.extraLuchas("atacantes") ? "pelea atacantes" : ""}`
@@ -198,7 +210,10 @@ export function pintar(contenedor, opciones) {
      queda en la casilla 1 y se le ve llegar al empezar tu turno, antes del
      avance (animarLlegadaEnviados). Primero aparecen los enviados, luego se
      mueven, y el Destino entra después con su carta. */
-  if (lanzaderaMovidas.length) animarEntradaLanzadera(contenedor, lanzaderaMovidas);
+  /* Las que nacen de una jaula se funden directamente en su lanzadera: solo
+     las que vienen del camino se ven viajar (prepararSalidasLanzadera). */
+  const lanzaderaDesdeCaja = lanzaderaMovidas.filter((m) => !m.desdePath);
+  if (lanzaderaDesdeCaja.length) animarEntradaLanzadera(contenedor, lanzaderaDesdeCaja);
   if (entradasPendientes.length) animarEntradaBunker(contenedor, entradasPendientes);
   if (aniquiladasPendientes.length) animarAniquiladas(contenedor, aniquiladasPendientes);
   /* Si el jugador ya estaba abajo del todo se queda abajo: el repintado suele
@@ -688,6 +703,13 @@ const MS_ESPERA_FIN = 300;      // margen después del último movimiento
 const MS_FICHA = MS_ATAQUE;
 const MS_FUNDIDO_LANZADERA = 320; // la ficha aparece en su lanzadera, sin viaje
 const MS_NUBE = 700;      // la nube del combate, del choque al humo
+/* El monstruo que sale del camino se queda un momento en la casilla 1 antes de
+   apagarse, para que se vea que ha llegado; si ha peleado, se queda hasta que
+   el humo se va del todo. Después se apaga y aparece en su lanzadera. */
+const MS_QUIETO_LANZADERA = 300;
+const MS_FUNDIDO_SALIDA = 240;
+const MS_HUMO_FIN_SALIDA = MS_NUBE + 420 - 160; // del humo abierto a retirado
+const MS_SALIDA_MAX = 4000; // red: la lanzadera nunca se queda vacía
 const MS_LUCHA = MS_FICHA + MS_NUBE + 420; // fantasma + nube + desvanecido
 const MS_VUELO_DISPARO = 420;  // las bolas, de la torre al monstruo
 const MS_DISPARO = MS_VUELO_DISPARO + 100 + 560 + 440; // bolas, nube y humo
@@ -734,18 +756,26 @@ function animarFichas(raiz, { diferir = true } = {}) {
     return a.atacante ? da - db : db - da;
   });
 
-  const reproducirLista = (lista, retardoBase = 0) => {
-    /* Nadie arranca antes de que el de delante suyo en la misma calle haya
-       terminado su tramo: con dos monstruos seguidos, el de atrás espera a
-       que el de delante acabe (antes podían solaparse y se veían avanzar a la
-       vez, como si la mesa se hubiera saltado el orden). */
+  /* Retardo real de cada ficha: nadie arranca antes de que el de delante suyo
+     en la misma calle haya terminado su tramo (con dos monstruos seguidos, el
+     de atrás espera a que el de delante acabe; antes podían solaparse y se
+     veían avanzar a la vez, como si la mesa se hubiera saltado el orden). */
+  const retrasosDe = (lista, retardoBase = 0) => {
     const finDeCalle = new Map();
-    lista.forEach(({ el, ol, ot, finL, finT, entra }, i) => {
-      const calle = el.dataset.sendero ?? "";
+    return lista.map((p, i) => {
+      const calle = p.el.dataset.sendero ?? "";
       const turno = retardoBase + i * (MS_FICHA + MS_PAUSA);
       const ocupada = finDeCalle.get(calle);
       const retardo = ocupada == null ? turno : Math.max(turno, ocupada);
       finDeCalle.set(calle, retardo + MS_FICHA + MS_PAUSA);
+      return retardo;
+    });
+  };
+
+  const reproducirLista = (lista, retardoBase = 0) => {
+    const retrasos = retrasosDe(lista, retardoBase);
+    lista.forEach(({ el, ol, ot, finL, finT, entra, pelea }, i) => {
+      const retardo = retrasos[i];
       const mover = () => {
         /* La ficha se queda en la casilla anterior hasta su turno; solo
            entonces se le pone el destino y se lanza el deslizamiento. Con
@@ -784,6 +814,13 @@ function animarFichas(raiz, { diferir = true } = {}) {
       };
       if (retardo > 0) setTimeout(mover, retardo);
       else mover();
+      /* El que sale hacia la lanzadera no desaparece al llegar: se queda un
+         momento en la casilla 1 o, si ha peleado, todo el humo; después se
+         apaga para encenderse ya en la lanzadera. */
+      if (el.dataset.sale != null) {
+        const espera = pelea ? MS_HUMO_FIN_SALIDA : MS_QUIETO_LANZADERA;
+        setTimeout(() => despedirALaLanzadera(raiz, el), retardo + MS_FICHA + espera);
+      }
     });
   };
 
@@ -793,6 +830,14 @@ function animarFichas(raiz, { diferir = true } = {}) {
      espera donde estaba y el ganador se le echa encima. Después sale la nube
      de polvo, se apaga y se queda el que ha ganado. */
   const fantasmas = [...raiz.querySelectorAll(".ficha.fantasma[data-lucha]")];
+  /* Las salidas a lanzadera que han ganado en la casilla 1 esperan a que el
+     humo del combate se vaya antes de despedirse. */
+  const ganadoresDefensa = new Set(
+    fantasmas.filter((g) => g.dataset.grupo === "defensores").map((g) => g.dataset.ganador),
+  );
+  for (const p of pendientes) {
+    if (p.el.dataset.sale != null) p.pelea = ganadoresDefensa.has(p.el.dataset.fid);
+  }
   /* `llegada`: cuánto tarda en llegar el que ataca a la casilla del otro. La
      nube entra con su fundido justo antes, así que se abre del todo cuando el
      que se acerca ya está encima. */
@@ -837,22 +882,44 @@ function animarFichas(raiz, { diferir = true } = {}) {
     return luchasG.length;
   };
 
-  const reproducir = (retardoBase = 0) => reproducirLista(pendientes, retardoBase);
+  const listaDe = (grupo) => grupo === "atacantes"
+    ? pendientes.filter(p => p.atacante)
+    : grupo === "defensores" ? pendientes.filter(p => !p.atacante) : pendientes;
+  /* Lo que se alarga el grupo por las despedidas, contado desde que acaba el
+     último tramo normal: la fase no se cierra hasta que la lanzadera se
+     enciende, o el repintado siguiente se llevaría la animación a medias. */
+  const colaSalidas = (grupo) => {
+    const lista = listaDe(grupo);
+    const retrasos = retrasosDe(lista, 0);
+    let fin = 0;
+    lista.forEach((p, i) => {
+      if (p.el.dataset.sale == null) return;
+      const espera = p.pelea ? MS_HUMO_FIN_SALIDA : MS_QUIETO_LANZADERA;
+      fin = Math.max(fin, retrasos[i] + MS_FICHA + espera + MS_FUNDIDO_SALIDA + MS_FUNDIDO_LANZADERA);
+    });
+    return Math.max(0, fin - duracionGrupo(lista.length));
+  };
+  const reproducir = (retardoBase = 0) => {
+    reproducirLista(pendientes, retardoBase);
+    return colaSalidas("todos");
+  };
   const reproducirAtacantes = (retardoBase = 0) => {
-    const lista = pendientes.filter(p => p.atacante);
+    const lista = listaDe("atacantes");
     reproducirLista(lista, retardoBase);
     reproducirLuchas("atacantes", retardoBase, lista);
+    return colaSalidas("atacantes");
   };
   const reproducirDefensores = (retardoBase = 0) => {
-    const lista = pendientes.filter(p => !p.atacante);
+    const lista = listaDe("defensores");
     reproducirLista(lista, retardoBase);
     reproducirLuchas("defensores", retardoBase, lista);
+    return colaSalidas("defensores");
   };
 
   if (!diferir) reproducir();
   const luchasDe = (grupo) => fantasmas.filter((g) => g.dataset.grupo === grupo).length;
   return {
-    movidas, ajenas, reproducir,
+    movidas, ajenas, reproducir, colaSalidas,
     entradas: pendientes.filter(p => p.entra).length,
     reproducirAtacantes, reproducirDefensores,
     ataques: pendientes.filter(p => p.atacante).length,
@@ -862,10 +929,11 @@ function animarFichas(raiz, { diferir = true } = {}) {
   };
 }
 
-/* Un monstruo que llega a su lanzadera ya no viaja desde la jaula: aparece
-   con un fundido corto y nada más. El vuelo de una copia por la pantalla se
-   comía la atención y, como el repintado reconstruye el tablero, la jaula de
-   origen ni siquiera estaba ya donde se suponía. */
+/* Un monstruo que llega a su lanzadera desde la jaula aparece con un fundido
+   corto y nada más. El vuelo de una copia por la pantalla se comía la
+   atención y, como el repintado reconstruye el tablero, la jaula de origen ni
+   siquiera estaba ya donde se suponía. Los que salen del camino sí viajan: se
+   animan con el resto de la jornada (prepararSalidasLanzadera). */
 function animarEntradaLanzadera(raiz, movidas) {
   requestAnimationFrame(() => {
     for (const m of movidas) {
@@ -879,38 +947,76 @@ function animarEntradaLanzadera(raiz, movidas) {
           );
         });
       };
-      if (!m.desdePath) { fadeInLanzadera(); continue; }
-
-      /* Viene de un paso del sendero: animamos el tramo final hasta el paso 0
-         (la boca de la lanzadera), fade-out allí, y luego fade-in en la lanzadera. */
-      const { calle, paso } = m.desdePath;
-      const origen = LOSAS[calle]?.[paso];
-      const llegada = LOSAS[calle]?.[0];
-      if (!origen || !llegada || paso === 0) { fadeInLanzadera(); continue; }
-
-      const fichas = raiz.querySelector(".bw-fichas");
-      if (!fichas) { fadeInLanzadera(); continue; }
-
-      const phantom = document.createElement("div");
-      phantom.className = "ficha mia";
-      phantom.style.cssText = `left:${llegada.l}%;top:${llegada.t}%;position:absolute;z-index:5;pointer-events:none`;
-      phantom.innerHTML = `<img src="${imgMonstruo(m.nivel, false)}" alt="" class="ficha-img"/><b class="ficha-nv">${m.nivel}</b>`;
-      fichas.append(phantom);
-
-      /* Paso 1: deslizamiento origen → llegada (pos 0) */
-      phantom.animate?.(
-        [{ left: `${origen.l}%`, top: `${origen.t}%` }, { left: `${llegada.l}%`, top: `${llegada.t}%` }],
-        { duration: MS_FICHA, easing: "cubic-bezier(.45,.05,.3,1)" },
-      );
-
-      /* Paso 2: fade-out en pos 0, luego fade-in en lanzadera */
-      setTimeout(() => {
-        phantom.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-in", fill: "forwards" })
-          ?.addEventListener("finish", () => phantom.remove(), { once: true });
-        fadeInLanzadera();
-      }, MS_FICHA + 60);
+      if (m.desdePath) continue; // los que salen del camino van con la jornada
+      fadeInLanzadera();
     }
   });
+}
+
+/* ── Salida del camino a la lanzadera ─────────────────────────────────────
+   El motor mueve al monstruo de la casilla 2 a la 1 y, en el mismo avance, lo
+   pasa a la lanzadera. Si solo se pintara el estado nuevo, la ficha
+   desaparecía del camino y aparecía ya en la lanzadera. Aquí se deja una
+   copia en su casilla de antes para que haga el último tramo con las demás
+   fichas, se quede un momento allí (o hasta que se va el humo, si ha peleado
+   con un atacante) y solo entonces se apague, para encenderse en la lanzadera. */
+
+function ocultarLanzadera(destino) {
+  if (!destino) return;
+  destino.dataset.llega = "0";
+  destino.querySelectorAll(".lanzadera-img, .lanzadera-nv").forEach((el) => { el.style.opacity = "0"; });
+}
+
+function mostrarLanzadera(destino) {
+  if (!destino || destino.dataset.llega === "1") return;
+  destino.dataset.llega = "1";
+  destino.querySelectorAll(".lanzadera-img, .lanzadera-nv").forEach((el) => {
+    el.style.opacity = "";
+    el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: MS_FUNDIDO_LANZADERA, easing: "ease-out" });
+  });
+}
+
+/* Se apaga en la casilla 1 y se enciende en la lanzadera: un cambio de sitio,
+   no una aparición. El relevo es en dos tiempos para que no se amontonen. */
+function despedirALaLanzadera(raiz, ficha) {
+  if (!ficha?.isConnected) return;
+  const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${Number(ficha.dataset.sale) + 1}"]`);
+  const irse = () => { ficha.remove(); mostrarLanzadera(destino); };
+  const fundido = ficha.animate?.([{ opacity: 1 }, { opacity: 0 }], {
+    duration: MS_FUNDIDO_SALIDA, easing: "ease-in", fill: "forwards",
+  });
+  if (fundido) setTimeout(irse, MS_FUNDIDO_SALIDA);
+  else irse();
+}
+
+function prepararSalidasLanzadera(raiz, movidas) {
+  if (!tocaMesa) return;
+  const fichas = raiz.querySelector(".bw-fichas");
+  if (!fichas) return;
+  for (const m of movidas) {
+    const { calle, paso } = m.desdePath ?? {};
+    const desde = LOSAS[calle]?.[paso];
+    const hasta = LOSAS[calle]?.[0];
+    const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${m.lanzadera + 1}"]`);
+    if (!desde || !hasta || !destino) continue;
+    /* La lanzadera enseña al monstruo cuando llega, no antes. */
+    ocultarLanzadera(destino);
+    setTimeout(() => { if (destino.dataset.llega === "0") mostrarLanzadera(destino); }, MS_SALIDA_MAX);
+    const ficha = document.createElement("div");
+    ficha.className = "ficha mia bw-sale";
+    ficha.dataset.sale = String(m.lanzadera);
+    ficha.dataset.fid = m.id;
+    ficha.dataset.sendero = String(calle + 1);
+    ficha.dataset.nivel = String(m.nivel);
+    /* Nace en la casilla de antes y ya lleva el destino: animarFichas la
+       desliza a la casilla 1 como a cualquier otro defensor. */
+    ficha.style.cssText = `left:${hasta.l}%;top:${hasta.t}%;z-index:4;pointer-events:none`;
+    ficha.dataset.ol = desde.l;
+    ficha.dataset.ot = desde.t;
+    ficha.innerHTML = `<img src="${imgMonstruo(m.nivel, false)}" alt="" class="ficha-img"><b class="ficha-nv">${m.nivel}</b>`;
+    fichas.append(ficha);
+    registro(`sale a lanzadera · E${calle + 1}·${paso + 1} · nv${m.nivel}`);
+  }
 }
 
 /* Una ficha que se lleva una carta (Purga, «aniquilar»…) no pelea con nadie:
@@ -1124,9 +1230,11 @@ function confirmarFase(ms = 0) {
 
 function animarYConfirmar(anim, fn, n, { antes = 0, despues = MS_ESPERA_FIN } = {}) {
   bloquearPorAvance(true);
-  /* Se llama siempre: sin fichas que mover puede haber una pelea que enseñar. */
-  if (fn) fn(antes);
-  confirmarFase(antes + duracionGrupo(n) + despues);
+  /* Se llama siempre: sin fichas que mover puede haber una pelea que enseñar.
+     Devuelve lo que la animación se alarga de más (la despedida en la
+     lanzadera), que se suma a la espera para no cortarla a mitad. */
+  const cola = (fn ? fn(antes) : 0) || 0;
+  confirmarFase(antes + duracionGrupo(n) + Math.max(despues, cola));
 }
 
 function iniciarFase(anim) {
@@ -1290,6 +1398,7 @@ function animarJugadaSuelta(anim) {
   const total = Math.max(
     duracionGrupo(anim.ataques) + peleaA,
     duracionGrupo(anim.defensores) + peleaD,
+    duracionGrupo(anim.defensores) + anim.colaSalidas("defensores"),
   ) + RETARDO_SUELTA + MS_ESPERA_FIN;
   descarteEspera = Math.max(descarteEspera, performance.now() + total);
   return total;
@@ -2285,6 +2394,9 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
      carta): su hueco se queda con humo y no se deslizan hacia el monstruo que
      tengan delante, que además sigue quieto en su casilla. */
   const sinLucha = new Set(j.muertesSinLucha ?? []);
+  /* Por calle, el monstruo que sale a la lanzadera en este repintado: no ha
+     muerto (lleva su copia en el camino) y es quien gana en la casilla 1. */
+  const salen = opciones.salen ?? null;
 
   /* Fichas reales */
   const fichasHtml = [0,1,2].flatMap(i =>
@@ -2351,6 +2463,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       if (vivos.has(id)) continue;
       /* La caída se enseña una sola vez: la ficha sale de la foto. */
       fichasPrevias.delete(id);
+      if (salen?.has(id)) continue;
       if (antes.calle == null) continue;
       const esAtacante = antes.tipo === "atacante";
       const esRival = (f) => f && (f.tipo === "atacante") !== esAtacante;
@@ -2360,6 +2473,19 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Muerte sin pelea: humo en su casilla y nada de deslizamiento. */
       if (sinLucha.has(id)) {
         aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
+        continue;
+      }
+      /* El atacante de la casilla 1 ha caído contra el monstruo que se va a la
+         lanzadera: la pelea la gana ese. Sin esto su muerte salía como humo
+         suelto y el humo se comía la salida del otro. */
+      const saliente = salen?.get(antes.calle);
+      if (esAtacante && paso === 0 && saliente?.paso === 1 && saliente.id !== id) {
+        luchas.push({
+          calle: antes.calle, origen: paso, destino: paso,
+          nivel: antes.nivel, esAtacante: true,
+          ganadorId: saliente.id,
+          grupo: "defensores",
+        });
         continue;
       }
       /* Un atacante del último peldaño con la casilla vacía ha entrado en el
