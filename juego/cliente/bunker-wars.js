@@ -2281,6 +2281,10 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* Foto de las fichas del repintado anterior, antes de sobrescribirla: de
      ahí salen los fantasmas de las que han caído en un combate. */
   const fotoPrevia = new Map(fichasPrevias);
+  /* Fichas que el motor ha quitado sin pelea (torre que dispara, Purga, una
+     carta): su hueco se queda con humo y no se deslizan hacia el monstruo que
+     tengan delante, que además sigue quieto en su casilla. */
+  const sinLucha = new Set(j.muertesSinLucha ?? []);
 
   /* Fichas reales */
   const fichasHtml = [0,1,2].flatMap(i =>
@@ -2353,6 +2357,11 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const paso = antes.paso;
       const suCasilla = fichaEn(s[antes.calle], paso);
       const delante = fichaEn(s[antes.calle], paso + (esAtacante ? 1 : -1));
+      /* Muerte sin pelea: humo en su casilla y nada de deslizamiento. */
+      if (sinLucha.has(id)) {
+        aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
+        continue;
+      }
       /* Un atacante del último peldaño con la casilla vacía ha entrado en el
          búnker: en el tablero no hay nadie que lo haya matado. */
       if (esAtacante && paso === 3 && !suCasilla) {

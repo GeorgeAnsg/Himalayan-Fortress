@@ -542,6 +542,18 @@ function retirarCartasViejas(e) {
    así que le faltan arrays enteros (`recursos_mix` nació después). Sin ellos,
    instalar una de esas cartas reventaba al hacer push y no se guardaba nada:
    ni las monedas, ni el decreto, ni la carta fuera de la mano. */
+/* Fichas que han muerto sin pelear (una torre que dispara, Purga, una carta
+   de Destino): el cliente les deja el humo en su propia casilla en vez de
+   inventarles un choque con el monstruo que tengan delante. Se guardan los
+   últimos ids porque la foto de fichas del cliente va un repintado por detrás. */
+const MAX_MUERTES_SIN_LUCHA = 12;
+function marcarMuerteSinLucha(j, ficha) {
+  if (!j || !ficha?.id) return;
+  const lista = (j.muertesSinLucha ??= []);
+  lista.push(ficha.id);
+  if (lista.length > MAX_MUERTES_SIN_LUCHA) lista.splice(0, lista.length - MAX_MUERTES_SIN_LUCHA);
+}
+
 /* Torres que te han tocado desde tu último turno: el cliente las enseña en el
    aviso de «Es tu turno», en la misma caja roja que los ataques. */
 function avisosTorre(j) {
@@ -768,6 +780,7 @@ const bunkerWars = {
           vivo: j.vivo,
           puntosMonsters: j.puntosMonsters,
           bunker: j.bunker,
+          muertesSinLucha: j.muertesSinLucha ?? [],
           senderos: j.senderos,
           lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor" } : null)),
           colaLanzaderas: (j.colaLanzaderas ?? []).map(m => ({ nivel: m.nivel, tipo: m.tipo ?? "defensor" })),
@@ -1501,6 +1514,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       if (costeTorr < 0 || j.energia < costeTorr) break;
       j.energia -= costeTorr;
       j.accionesRestantes--;
+      marcarMuerteSinLucha(j, f);
       s.posiciones[accion.posicion] = null;
       evs.push({ tipo: "destruir", texto: `${j.nombre} destruye atacante ${f.nivel} con torretas en la escalera ${accion.sendero}.`, a: jugadorId });
       break;
@@ -2123,7 +2137,7 @@ function aplicarPurga(j, evs) {
   let n = 0;
   for (const s of j.senderos) {
     for (const p of CASILLAS_PURGA) {
-      if (s.posiciones[p]) { s.posiciones[p] = null; n++; }
+      if (s.posiciones[p]) { marcarMuerteSinLucha(j, s.posiciones[p]); s.posiciones[p] = null; n++; }
     }
   }
   evs.push({ tipo: "aniquilar", texto: `Purga: ${n} monstruo(s) aniquilados en los peldaños 3 y 4 de las escaleras de ${j.nombre}.` });
@@ -2606,6 +2620,7 @@ function resolverDestino(e, jugadorId, carta) {
         const f = s.posiciones[0];
         if (f?.tipo === "atacante") {
           evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo en la entrada de la escalera ${s.id} de ${j.nombre}.` });
+          marcarMuerteSinLucha(j, f);
           s.posiciones[0] = null;
         }
       }
@@ -2620,6 +2635,7 @@ function resolverDestino(e, jugadorId, carta) {
             const f = s.posiciones[p];
             if ((f?.tipo === "atacante" || f?.tipo === "monstruo") && f.nivel <= carta.nivelMax) {
               evs.push({ tipo: "aniquilar", texto: `Aniquilado monstruo ${f.nivel} en la escalera ${s.id} de ${otro.nombre}.` });
+              marcarMuerteSinLucha(otro, f);
               s.posiciones[p] = null;
             }
           }
@@ -2645,7 +2661,7 @@ function resolverDestino(e, jugadorId, carta) {
           }
         }
       }
-      for (const o of objetivos) o.s.posiciones[o.p] = null;
+      for (const o of objetivos) { marcarMuerteSinLucha(o.otro, o.f); o.s.posiciones[o.p] = null; }
       if (objetivos.length) {
         evs.push({ tipo: "aniquilar", texto: `Caen los monstruos más fuertes (${mayor}) de los caminos: ${objetivos.length}.` });
       }
