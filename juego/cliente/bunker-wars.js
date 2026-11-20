@@ -229,16 +229,18 @@ export function pintar(contenedor, opciones) {
   /* Si el jugador ya estaba abajo del todo se queda abajo: el repintado suele
      traer contenido nuevo (una acción más, el panel de decretos) y devolverle
      el píxel de antes le subía la vista para bajarla otra vez. */
-  if (!estrenaTurno && pantallaScroll) {
-    if (alFinal === true) {
-      requestAnimationFrame(() => {
-        if (pantallaScroll.isConnected) pantallaScroll.scrollTop = pantallaScroll.scrollHeight;
-      });
-    } else if (scrollPrevio > 0) {
-      requestAnimationFrame(() => {
-        if (pantallaScroll.isConnected) pantallaScroll.scrollTop = scrollPrevio;
-      });
-    }
+  if (!estrenaTurno && pantallaScroll && (alFinal === true || scrollPrevio > 0)) {
+    /* Se devuelve el scroll ya, en el mismo tick del repintado. Pidiéndolo
+       para el siguiente frame, el navegador llegaba a pintar la pantalla con
+       el scroll a cero y luego volvía a bajar: ese era el salto que se veía
+       al entrar la carta de Destino con la vista abajo. El segundo intento
+       cubre lo que cambie de alto después. */
+    const volver = () => {
+      if (!pantallaScroll.isConnected) return;
+      pantallaScroll.scrollTop = alFinal === true ? pantallaScroll.scrollHeight : scrollPrevio;
+    };
+    volver();
+    requestAnimationFrame(volver);
   }
 
   /* Nav, mano y box al body para position:fixed real (no relativo a #pantalla) */
@@ -1857,11 +1859,25 @@ function abrirTorre(posicion) {
 
 /* ── Modal de lanzadera: elegir rival y camino ───────────────────────────── */
 
-/* Abre el modal de lanzadera si de verdad toca (fase, turno y opciones). El
-   repintado lo llama a menudo, así que devuelve false sin tocar nada cuando
-   no hay nada que preguntar o ya hay un modal encima. */
+/* Abre el modal de lanzadera si de verdad toca (fase, turno y opciones); si ya
+   está abierto, lo sincroniza en vez de cerrarlo y volver a abrirlo. El
+   repintado lo llama a menudo, así que devuelve false sin tocar nada cuando no
+   hay nada que preguntar o hay otro modal encima. */
+let lanzarUi = null;
+
 function abrirLanzarSiToca() {
   const ops = accionesMesa.filter(a => a.tipo === "lanzar");
+  /* Si la hoja sigue abierta, se queda y se actualiza con lo que sigue siendo
+     legal: cerrarla y volver a abrirla entre lanzadera y lanzadera era el
+     parpadeo que se veía al mandar dos monstruos. */
+  if (lanzarUi) {
+    if (!document.getElementById("bw-modal-lanzar")) lanzarUi = null;
+    else {
+      if (faseMesa !== "lanzar" || !tocaMesa) lanzarUi.cerrar();
+      else lanzarUi.sincronizar(ops);
+      return false;
+    }
+  }
   if (faseMesa !== "lanzar" || !tocaMesa || !ops.length) return false;
   if (document.querySelector(".bw-modal-fondo") || document.getElementById("bw-modal-lanzar")) return false;
 
@@ -1882,7 +1898,9 @@ function abrirLanzar(ops) {
   document.body.classList.add("bw-lanzando");
 
   let soltarGlobal = null;
+  let enviando = false;
   const cerrar = () => {
+    lanzarUi = null;
     soltarGlobal?.();
     fondo.remove();
     document.body.classList.remove("bw-lanzando");
@@ -1890,23 +1908,71 @@ function abrirLanzar(ops) {
   const noLanzar = accionesMesa.find(a => a.tipo === "no_lanzar") ?? null;
 
   const enviar = async (accion, boton) => {
-    if (!accion || !enviarAccion) return;
+    if (!accion || !enviarAccion || enviando) return;
     if (boton) boton.disabled = true;
-    if (accion.tipo === "no_lanzar") rivalLanzarElegido = null;
-    /* Se cierra antes de enviar: si queda la otra lanzadera, el repintado
-       vuelve a abrir el modal con la que falta. */
-    cerrar();
+    enviando = true;
+    fondo.classList.add("enviando");
     const r = await enviarAccion(accion);
-    if (r?.error) aviso(r.error, { error: true });
+    enviando = false;
+    fondo.classList.remove("enviando");
+    if (r?.error) {
+      aviso(r.error, { error: true });
+      if (boton) boton.disabled = false;
+      return;
+    }
+    if (accion.tipo !== "lanzar") { rivalLanzarElegido = null; cerrar(); return; }
+    /* La hoja no se cierra: pierde la lanzadera que acaba de salir y se vuelve
+       a pintar con la que queda. */
+    lanzaderasModal = lanzaderasModal.map((m, i) => (i === accion.lanzadera ? null : m));
+    opsModal = opsModal.filter(a => a.lanzadera !== accion.lanzadera);
+    repintarPaso();
+  };
+
+  /* Lo que la hoja puede ofrecer ahora mismo. Va aparte porque la hoja ya no
+     se cierra entre lanzadera y lanzadera. */
+  let opsModal = ops;
+  let lanzaderasModal = lanzaderasMesa;
+  let firmaVista = "";
+  const firmaDe = () => opsModal.filter(a => a.tipo === "lanzar")
+    .map(a => `${a.lanzadera}.${a.rivalId}.${a.sendero}`).join("|")
+    + "/" + lanzaderasModal.map(m => m?.nivel ?? "-").join(",");
+  const quedanLanzamientos = () => opsModal.filter(a => a.tipo === "lanzar");
+
+  /* Repinta el paso en el que está la hoja con lo que queda. */
+  const repintarPaso = () => {
+    firmaVista = firmaDe();
+    arrastre?.fantasma?.remove();
+    arrastre = null;
+    apagarCalles();
+    if (!quedanLanzamientos().length) { cerrar(); return; }
+    /* La hoja se repinta en su sitio: se le devuelve el scroll para que el
+       repintado no la suba de golpe. */
+    const scrollHoja = fondo.scrollTop;
+    if (rivalActual && quedanLanzamientos().some(a => a.rivalId === rivalActual)) {
+      pasoCaminos(rivalActual);
+    } else {
+      rivalActual = null;
+      pasoRivales();
+    }
+    fondo.scrollTop = scrollHoja;
+  };
+
+  /* Con cada repintado de la mesa: si lo legal ha cambiado (una calle ocupada
+     por otro, por ejemplo), la hoja se actualiza sin cerrarse. */
+  const sincronizar = (nuevas) => {
+    opsModal = nuevas ?? opsModal;
+    lanzaderasModal = lanzaderasMesa;
+    if (enviando || firmaDe() === firmaVista) return;
+    repintarPaso();
   };
 
   /* Las lanzaderas, abajo y fuera de las calles: el mismo cuadro de la ficha,
      con el monstruo y su círculo de nivel. Se arrastran a la calle donde
      quieras soltarlas. */
   const chipLanzadera = (i) => {
-    const nv = lanzaderasMesa[i]?.nivel ?? null;
+    const nv = lanzaderasModal[i]?.nivel ?? null;
     if (!nv) return "";
-    const dos = lanzaderasMesa.filter(Boolean).length > 1;
+    const dos = lanzaderasModal.filter(Boolean).length > 1;
     const titulo = `Monstruo ${nv} de la lanzadera ${i + 1}: arrástralo a una calle`;
     return `<div class="bw-lz-mia" data-lanzadera="${i}" role="button" tabindex="0"
                  aria-label="${esc(titulo)}" title="${esc(titulo)}"` +
@@ -1919,7 +1985,7 @@ function abrirLanzar(ops) {
   let rivalActual = null;
   let elegida = null;
   let arrastre = null;
-  const opDe = (lanzadera, calle) => ops.find(a => a.lanzadera === lanzadera
+  const opDe = (lanzadera, calle) => opsModal.find(a => a.lanzadera === lanzadera
     && a.rivalId === rivalActual && a.sendero === Number(calle)) ?? null;
   const calles = () => [...fondo.querySelectorAll(".bw-torre[data-calle]")];
   const calleBajo = (x, y) => document.elementFromPoint(x, y)?.closest?.(".bw-torre[data-calle]") ?? null;
@@ -1936,6 +2002,7 @@ function abrirLanzar(ops) {
   };
 
   fondo.addEventListener("pointerdown", (ev) => {
+    if (enviando) return;
     const chip = ev.target.closest?.(".bw-lz-mia");
     if (!chip) return;
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
@@ -2015,6 +2082,7 @@ function abrirLanzar(ops) {
 
   /* Segundo toque del modo sin arrastre: la calle elegida. */
   fondo.addEventListener("click", (ev) => {
+    if (enviando) return;
     const t = ev.target.closest?.(".bw-torre[data-calle]");
     if (!t || elegida == null) return;
     const op = opDe(elegida, t.dataset.calle);
@@ -2065,7 +2133,7 @@ function abrirLanzar(ops) {
     .filter(p => p.id !== yoMesa && !aliadosMesa.some(a => a.id === p.id))
     .map(r => {
       const id = r.id;
-      const suyas = ops.filter(a => a.rivalId === id);
+      const suyas = opsModal.filter(a => a.rivalId === id);
       const bloqueado = suyas.length === 0;
       const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
       /* Cuántos atacantes lleva encima: es lo que explica por qué sus entradas
@@ -2113,7 +2181,7 @@ function abrirLanzar(ops) {
     const rival = jugadoresMesa.find(x => x.id === rivalId) ?? {};
     const vida = Math.max(0, 20 - (rival.puntosMonsters ?? 0));
     /* Solo las lanzaderas que de verdad pueden ir a esta fortaleza. */
-    const lanzaderasDe = [...new Set(ops.filter(a => a.rivalId === rivalId).map(a => a.lanzadera))].sort();
+    const lanzaderasDe = [...new Set(opsModal.filter(a => a.rivalId === rivalId).map(a => a.lanzadera))].sort();
     /* El detalle sale desde abajo, con el mismo ribete de piedra que el panel
        de Torres: no es otro modal centrado. */
     fondo.classList.remove("lz-inicial");
@@ -2141,6 +2209,8 @@ function abrirLanzar(ops) {
     : null;
   if (rivalInicial) pasoCaminos(rivalInicial);
   else pasoRivales();
+  firmaVista = firmaDe();
+  lanzarUi = { sincronizar, cerrar };
 }
 
 /* ── Modal de descarte: la mano en 2×2, se marcan y se tiran ─────────────── */
@@ -3897,6 +3967,7 @@ async function cerrarParaVerEscaleras() {
    modales de la plataforma (versión, regalo, aviso de turno): esos no son
    `bw-modal-fondo` y el aviso de turno se abre después de este cierre. */
 function cerrarUiDeTurno() {
+  lanzarUi = null;
   /* El envío de aliado es ahora una hoja del juego: se cierra al cambiar el
      turno y hay que soltar el aviso, o no volvería a salir nunca más. */
   if (document.getElementById("bw-modal-regalo") || document.getElementById("bw-regalo-capa")) cerrarRegalo();
@@ -3912,6 +3983,7 @@ function cerrarUiDeTurno() {
    panel o modal del juego que hubiera debajo (torre, monstruo, disparo, una
    carta abierta…), sin llevarse por delante el propio descarte. */
 function cerrarDebajoDelDescarte() {
+  lanzarUi = null;
   if (document.getElementById("bw-modal-regalo") || document.getElementById("bw-regalo-capa")) cerrarRegalo();
   document.querySelectorAll(
     "body > .bw-modal-fondo:not(#bw-modal-descartar), body > .bw-panel, body > .bw-panel-overlay"
@@ -5920,6 +5992,10 @@ function css() {
       background:rgba(18,22,26,.85);
     }
     .bw-lz-mia-elegida { border-color:#7be5e5; box-shadow:0 0 0 2px rgba(123,229,229,.45); }
+    /* Mientras viaja la jugada la hoja se apaga: no hay envío doble. */
+    .bw-modal-fondo.enviando .bw-lz-hoja {
+      opacity:.65; transition:opacity .12s ease; pointer-events:none;
+    }
     .bw-lz-fantasma {
       position:fixed; z-index:99999; pointer-events:none; opacity:.9;
       transform:scale(1.08); filter:drop-shadow(0 6px 10px rgba(0,0,0,.45));
