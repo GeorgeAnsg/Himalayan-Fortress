@@ -2601,13 +2601,14 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
      peldaño más abajo y algo más pequeñas), igual que los monstruos de las
      jaulas se ven uno detrás del otro. */
   + colaLanzaderas.slice(0, 2).map((c, i) => {
-    /* El que espera se apila detrás de su lanzadera: misma vertical, un poco
-       más arriba y por debajo en z-index, con el nivel a la vista. Antes iba
-       casi al borde de abajo del tablero y no se veía. */
+    /* El que espera es una copia exacta de su lanzadera 30 px más arriba (en
+       --u, para que crezca con el mapa) y por debajo en z-index: se apila
+       detrás de la llenada, con su nivel a la vista. Así el hueco se ve sin
+       tapar al que ya está dentro. */
     const pos = i === 0
-      ? { l: "37.1", t: "74.2" }
-      : { l: "63.3", t: "74.4" };
-    return `<div class="lanzadera lanzadera-llena lanzadera-cola" data-cola="${i + 1}" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t}%;z-index:1;pointer-events:none;transform:scale(.72);opacity:.62;filter:blur(1px)"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
+      ? { l: "37.1", t: "calc(77.7% - 7.7 * var(--u))" }
+      : { l: "63.3", t: "calc(77.9% - 7.7 * var(--u))" };
+    return `<div class="lanzadera lanzadera-llena lanzadera-cola" data-cola="${i + 1}" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t};z-index:1;pointer-events:none;opacity:.82"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
   }).join("");
 
   /* Losas */
