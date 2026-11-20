@@ -3156,7 +3156,7 @@ function abrirCriadero(boxInicial = null) {
       <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
         <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
         <b class="bw-criar-coste" title="Cuesta ${monedas} moneda${monedas === 1 ? "" : "s"}">${monedas}</b>
-        <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}"><img src="${BASE_IMG}/iconos/espadas.png" alt="">${m.puntos}</b>
+        <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}">${m.puntos}</b>
         <span class="bw-criar-nombre">${esc(m.nombre)}</span>
       </button>`;
   };
@@ -5623,13 +5623,13 @@ function css() {
     }
     /* Criadero: la fila de cuadrados para elegir el monstruo. La jaula no se
        pregunta, porque es la del «+» por el que se abre el modal. */
-    /* Los cuatro monstruos del bestiario en una fila de cuatro cuadrados, del
-       mismo tamaño que los peldaños del panel de torres: 72 px de lado como
-       mucho (min(72 px, 22 vw)), y en pantallas más estrechas encogen con la
-       fila, que nunca pasa del ancho del modal. */
+    /* Los cuatro monstruos del bestiario en una fila de cuatro cuadrados, como
+       los peldaños del panel de torres pero un 10 % más grandes: 79 px de lado
+       como mucho, y en pantallas más estrechas encogen con la fila, que nunca
+       pasa del ancho del modal. */
     .bw-criar-grid {
       display:grid; grid-template-columns:repeat(4, minmax(0, 1fr));
-      gap:8px; width:min(312px,100%); margin:0 auto;
+      gap:8px; width:min(340px,100%); margin:0 auto;
     }
     .bw-criar-celda { position:relative; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
     .bw-criar-celda .bw-box-img { height:84%; max-width:84%; }
@@ -5652,22 +5652,22 @@ function css() {
     .bw-criar-coste {
       position:absolute; top:3px; left:3px; z-index:2;
       min-width:17px; height:17px; padding:0 3px; box-sizing:border-box;
-      display:grid; place-items:center; border-radius:9px;
+      display:grid; place-items:center; border-radius:50%;
       background:rgba(224,163,63,.95); color:#12161a;
       font:800 10px/1 ui-monospace, monospace;
       box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
     }
-    /* La fuerza del monstruo, a la derecha y en el borgoña de los ataques: las
-       espadas y el número, como la pastilla de nivel de las jaulas. */
+    /* La fuerza del monstruo, a la derecha: el mismo círculo que el coste pero
+       en el azul de la casa (#1a3560, el de los niveles de las jaulas y los
+       recursos de la fortaleza) y sin más dibujo que la cifra. */
     .bw-criar-fuerza {
       position:absolute; top:3px; right:3px; z-index:2;
-      height:17px; padding:0 4px 0 3px; box-sizing:border-box;
-      display:flex; align-items:center; gap:2px; border-radius:9px;
-      background:rgba(122,16,16,.96); color:#fff;
+      min-width:17px; height:17px; padding:0 3px; box-sizing:border-box;
+      display:grid; place-items:center; border-radius:50%;
+      background:rgba(26,53,96,.96); color:#fff;
       font:800 10px/1 ui-monospace, monospace;
       box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
     }
-    .bw-criar-fuerza img { width:11px; height:11px; object-fit:contain; }
     .bw-criar-celda.sel { outline:2px solid #e0a33f; outline-offset:1px; }
     .bw-criar-celda.sel .bw-criar-nombre { background:#e0a33f; }
     /* El que no se puede criar (sin monedas o jaula llena) queda apagado bajo
