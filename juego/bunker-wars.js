@@ -451,6 +451,23 @@ function retirarCartasViejas(e) {
   }
 }
 
+/* Partidas viejas: el búnker se guardó antes de que existieran algunas cartas,
+   así que le faltan arrays enteros (`recursos_mix` nació después). Sin ellos,
+   instalar una de esas cartas reventaba al hacer push y no se guardaba nada:
+   ni las monedas, ni el decreto, ni la carta fuera de la mano. */
+function normalizarBunker(j) {
+  if (!j) return;
+  const b = j.bunker ?? (j.bunker = {});
+  b.recursos     ??= [];
+  b.decretos     ??= [];
+  b.recursos_mix ??= [];
+  b.ciencia      ??= [];
+  b.torres       ??= [null, null, null];
+  b.extra        ??= { monedas: 0, monjes: 0 };
+  if (b.armeria == null) b.armeria = 1;
+  if (b.laboratorio == null) b.laboratorio = 1;
+}
+
 function sincronizarTorres(e) {
   migrarNombres(e);
   retirarCartasViejas(e);
@@ -459,6 +476,7 @@ function sincronizarTorres(e) {
   normalizarDuenos(e);
   normalizarBox(e);
   for (const j of Object.values(e.jugadores ?? {})) {
+    normalizarBunker(j);
     normalizarTorres(j);
     normalizarLanzaderas(j);
     for (const t of j.bunker.torres) {

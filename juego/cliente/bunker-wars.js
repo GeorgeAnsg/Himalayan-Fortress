@@ -200,6 +200,7 @@ export function pintar(contenedor, opciones) {
      mueven, y el Destino entra después con su carta. */
   if (lanzaderaMovidas.length) animarEntradaLanzadera(contenedor, lanzaderaMovidas);
   if (entradasPendientes.length) animarEntradaBunker(contenedor, entradasPendientes);
+  if (aniquiladasPendientes.length) animarAniquiladas(contenedor, aniquiladasPendientes);
   if (!estrenaTurno && scrollPrevio > 0 && pantallaScroll) {
     requestAnimationFrame(() => {
       if (pantallaScroll.isConnected) pantallaScroll.scrollTop = scrollPrevio;
@@ -651,6 +652,9 @@ const fichasPrevias = new Map();
 /* Entradas en el búnker detectadas al pintar mi tablero: un atacante que
    estaba en la puerta y ya no está. Se animan al final del repintado. */
 let entradasPendientes = [];
+/* Fichas que una carta se ha llevado sin pelear (Purga y compañía): se les
+   deja su humo en la casilla, como al que mata una torre pero sin bolas. */
+let aniquiladasPendientes = [];
 /* Vida (puntosMonsters) de mi búnker en el repintado anterior: el que entra
    deja la casilla de la puerta vacía, pero una torre o una carta también, así
    que solo se anima la entrada si la vida ha bajado lo que vale ese monstruo. */
@@ -722,8 +726,17 @@ function animarFichas(raiz, { diferir = true } = {}) {
   });
 
   const reproducirLista = (lista, retardoBase = 0) => {
+    /* Nadie arranca antes de que el de delante suyo en la misma calle haya
+       terminado su tramo: con dos monstruos seguidos, el de atrás espera a
+       que el de delante acabe (antes podían solaparse y se veían avanzar a la
+       vez, como si la mesa se hubiera saltado el orden). */
+    const finDeCalle = new Map();
     lista.forEach(({ el, ol, ot, finL, finT, entra }, i) => {
-      const retardo = retardoBase + i * (MS_FICHA + MS_PAUSA);
+      const calle = el.dataset.sendero ?? "";
+      const turno = retardoBase + i * (MS_FICHA + MS_PAUSA);
+      const ocupada = finDeCalle.get(calle);
+      const retardo = ocupada == null ? turno : Math.max(turno, ocupada);
+      finDeCalle.set(calle, retardo + MS_FICHA + MS_PAUSA);
       const mover = () => {
         /* La ficha se queda en la casilla anterior hasta su turno; solo
            entonces se le pone el destino y se lanza el deslizamiento. Con
@@ -736,6 +749,10 @@ function animarFichas(raiz, { diferir = true } = {}) {
         if (!entra) {
           el.style.left = finL;
           el.style.top = finT;
+        } else {
+          /* Igual que en la llegada: el reposo visible, la niebla la pone la
+             animación. Sin esto, al cancelarla la ficha quedaba invisible. */
+          el.style.opacity = "1";
         }
         const frames = entra
           ? [{ left: `${ol}%`, top: `${ot}%`, opacity: 0 }, { left: finL, top: finT, opacity: 1 }]
@@ -751,6 +768,7 @@ function animarFichas(raiz, { diferir = true } = {}) {
           anim.onfinish = () => {
             el.style.left = finL;
             el.style.top = finT;
+            el.style.opacity = "1";
             anim.cancel();
           };
         }
@@ -884,6 +902,42 @@ function animarEntradaLanzadera(raiz, movidas) {
       }, MS_FICHA + 60);
     }
   });
+}
+
+/* Una ficha que se lleva una carta (Purga, «aniquilar»…) no pelea con nadie:
+   se le pinta una copia en su casilla, sale la nube del combate y se va con
+   ella. El mismo humo que el disparo de las torres, pero sin las bolas. */
+function animarAniquiladas(raiz, lista) {
+  const fichas = raiz.querySelector(".bw-fichas");
+  if (!fichas || !lista.length) return 0;
+  let total = 0;
+  lista.forEach((a, i) => {
+    const pos = LOSAS[a.calle]?.[a.paso];
+    if (!pos) return;
+    /* En cadena: primero el humo de uno y luego el del siguiente. */
+    const retardo = i * 260;
+    const copia = document.createElement("div");
+    copia.className = `ficha bw-aniquilada ${a.esAtacante ? "atacante" : "mia"}`;
+    copia.style.cssText = `left:${pos.l}%;top:${pos.t}%;z-index:6;pointer-events:none`;
+    copia.innerHTML = `<img src="${imgMonstruo(a.nivel, a.esAtacante)}" alt="" class="ficha-img"><b class="ficha-nv">${a.nivel}</b>`;
+    fichas.append(copia);
+    const nube = document.createElement("div");
+    nube.className = "bw-nube";
+    nube.style.cssText = `left:${pos.l}%;top:${pos.t}%`;
+    nube.innerHTML = `<img src="${BASE_IMG}/nube-combate.png" alt="">`;
+    fichas.append(nube);
+    setTimeout(() => {
+      nube.classList.add("on");
+      const fundido = copia.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: "ease-in", fill: "forwards" });
+      if (!fundido) copia.style.opacity = "0";
+      setTimeout(() => copia.remove(), 260);
+      setTimeout(() => nube.classList.add("sale"), MS_NUBE);
+      setTimeout(() => nube.remove(), MS_NUBE + 420);
+    }, retardo);
+    total = Math.max(total, retardo + MS_NUBE + 420);
+    registro(`aniquilada · E${a.calle + 1}·${a.paso + 1} · nv${a.nivel}`);
+  });
+  return total;
 }
 
 /* ── Entrada en el búnker ─────────────────────────────────────────────────
@@ -1184,6 +1238,10 @@ function animarLlegadaEnviados() {
     const fin = losa0 ? { l: `${losa0.l}%`, t: `${losa0.t}%` } : { l: el.style.left, t: el.style.top };
     el.style.left = `${desde.l}%`;
     el.style.top = `${desde.t}%`;
+    /* El estilo de reposo es visible: la animación pone el 0 de la bruma y el
+       relleno lo mantiene al acabar. Si otro repintado cancela la animación,
+       la ficha no puede quedarse con el opacity:0 de la niebla. */
+    el.style.opacity = "1";
     /* Nace apagado en la bruma y sube hasta su casilla; el relleno «both»
        mantiene el destino al acabar (la ficha se queda en su sitio hasta que
        el repintado del avance rehaga el tablero). */
@@ -2150,6 +2208,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* Las entradas en el búnker se detectan abajo y se animan al final del
      pintado, con la nube de la pelea en la puerta. */
   entradasPendientes = [];
+  aniquiladasPendientes = [];
   const puntosAntes = opciones.sinLuchas ? null : puntosPreviosMio;
   const s    = j?.senderos ?? [{}, {}, {}];
   const torres = j?.bunker?.torres ?? [null, null, null];
@@ -2223,7 +2282,14 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const img = imgMonstruo(nivelDe(f), esAtacante);
       /* Monstruo recién llegado que aún no ha sido anunciado: se esconde hasta
          que animarLlegadaEnviados lo haga emerger de la niebla en el avance. */
-      const ocultoHastaAvance = paso === 0 && esAtacante && f.id && !llegadasAnunciadas.has(f.id);
+      /* Solo se esconde la que va a salir de la bruma al empezar TU avance: en
+         cualquier otra fase (o al volver a la mesa) se pinta a la vista,
+         porque nadie la va a animar y se quedaba invisible para siempre. */
+      const avanceMio = tocaMesa && faseMesa === "avance";
+      const ocultoHastaAvance = avanceMio && paso === 0 && esAtacante && f.id && !llegadasAnunciadas.has(f.id);
+      /* La que no se va a animar ya cuenta como vista: así no se la vuelve a
+         esconder en un repintado posterior de la misma jornada. */
+      if (!ocultoHastaAvance && f.id && paso === 0 && esAtacante) llegadasAnunciadas.add(f.id);
       return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
@@ -2238,6 +2304,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* Atacantes que este repintado han pisado la puerta del búnker. */
   const puertaVacia = [];
   const entradas = [];
+  const aniquiladas = [];
   if (!opciones.sinLuchas && fotoMia) {
     const vivos = new Set();
     for (let i = 0; i < 3; i++) for (let paso = 0; paso < 4; paso++) {
@@ -2262,7 +2329,16 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Si su casilla la ocupa ahora un rival, ese ha ganado y se le ve entrar;
          si está vacía, murió al atacar la casilla de delante. */
       const destino = esRival(suCasilla) ? paso : (esRival(delante) ? paso + (esAtacante ? 1 : -1) : null);
-      if (destino == null || destino < 0 || destino > 3) continue;
+      if (destino == null || destino < 0 || destino > 3) {
+        /* Se ha ido sin que nadie la haya comido: la ha quitado una carta
+           (Purga, aniquilar…). Se le deja el humo del combate en la casilla,
+           sin bolas. En la puerta no: ese atacante ya se anima entrando en el
+           búnker, y un monstruo mío que sale de la casilla 1 ha subido a la
+           lanzadera, no ha muerto. */
+        const loQuitaUnaCarta = !suCasilla && !delante && (esAtacante ? paso !== 3 : paso >= 2);
+        if (loQuitaUnaCarta) aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
+        continue;
+      }
       const ganador = fichaEn(s[antes.calle], destino);
       if (!ganador || ganador.id === id) continue;
       luchas.push({
@@ -2371,6 +2447,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   if (!opciones.sinLuchas) {
     puntosPreviosMio = j?.puntosMonsters ?? 0;
     entradasPendientes = entradas;
+    aniquiladasPendientes = aniquiladas;
   }
 
   /* Los tres edificios de la fortaleza, con el mismo modelo: arriba la
@@ -3059,22 +3136,16 @@ function abrirCriadero(boxInicial = null) {
   const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
   const libre = libresEnBox(boxCriadero) > 0;
 
-  /* Igual que la pantalla de descartar: cartas de papel para elegir una y, abajo,
-     el botón de criar. Cada carta lleva su imagen, el coste en monedas arriba y
-     lo que hace el monstruo. */
+  /* Cuadrados de jaula, como los del búnker: el monstruo dentro, su nombre
+     debajo y el coste en la esquina. Nada de cartas de papel. */
   const celda = (m) => {
     const monedas = monedasDe(m);
     const puede = monedas <= energiaMesa && libre;
     return `
-      <button type="button" class="bw-desc-celda" data-nivel="${m.nivel}"${puede ? "" : " disabled"}>
-        <div class="bw-carta-grande">
-          <span class="bw-carta-coste-grande">${monedas}</span>
-          <div class="bw-carta-grande-img"><img src="${imgMonstruo(m.nivel)}" alt=""></div>
-          <div class="bw-carta-grande-texto">
-            <div class="bw-carta-grande-titulo">${esc(m.nombre)}</div>
-            <p class="bw-carta-grande-desc">${esc(m.texto)}</p>
-          </div>
-        </div>
+      <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
+        <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
+        <b class="bw-criar-coste">${monedas}</b>
+        <span class="bw-criar-nombre">${esc(m.nombre)}</span>
       </button>`;
   };
 
@@ -3083,8 +3154,10 @@ function abrirCriadero(boxInicial = null) {
   fondo.className = "bw-modal-fondo bw-hoja-modal";
   fondo.innerHTML = `
     <div class="bw-modal bw-desc-modal" role="dialog" aria-modal="true" aria-label="Criadero">
-      <button type="button" class="bw-modal-x" aria-label="Cerrar">×</button>
-      <div class="bw-desc-tit">Criadero ${ROMANOS[criaderoMesa || 1] || (criaderoMesa || 1)}</div>
+      <div class="bw-panel-head">
+        <div class="bw-panel-label">Criadero ${ROMANOS[criaderoMesa || 1] || (criaderoMesa || 1)}</div>
+        <button class="bw-panel-x" type="button" data-cerrar-criadero aria-label="Cerrar">×</button>
+      </div>
       <div class="bw-criar-toggle">
         ${[0, 1].map((b) => { const n = libresEnBox(b); return `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">Jaula ${ROMANOS[b + 1]}<span>(${n} ${n === 1 ? "libre" : "libres"})</span></button>`; }).join("")}
       </div>
@@ -3099,7 +3172,7 @@ function abrirCriadero(boxInicial = null) {
   const ok = fondo.querySelector(".bw-criar-ok");
   const nota = fondo.querySelector(".bw-desc-nota");
   const marcar = () => {
-    const sel = fondo.querySelector(".bw-desc-celda.sel");
+    const sel = fondo.querySelector(".bw-criar-celda.sel");
     const m = sel ? lista.find(x => x.nivel === Number(sel.dataset.nivel)) : null;
     ok.disabled = !m;
     ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
@@ -3108,11 +3181,11 @@ function abrirCriadero(boxInicial = null) {
   };
   marcar();
 
-  /* Una sola carta marcada a la vez, como en el descarte. */
-  for (const b of fondo.querySelectorAll(".bw-desc-celda")) {
+  /* Un solo monstruo marcado a la vez. */
+  for (const b of fondo.querySelectorAll(".bw-criar-celda")) {
     b.addEventListener("click", () => {
       const ya = b.classList.contains("sel");
-      fondo.querySelectorAll(".bw-desc-celda").forEach(x => x.classList.remove("sel"));
+      fondo.querySelectorAll(".bw-criar-celda").forEach(x => x.classList.remove("sel"));
       if (!ya) b.classList.add("sel");
       marcar();
     });
@@ -3120,7 +3193,7 @@ function abrirCriadero(boxInicial = null) {
 
   const cerrar = () => fondo.remove();
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
-  fondo.querySelector(".bw-modal-x").addEventListener("click", cerrar);
+  fondo.querySelector("[data-cerrar-criadero]").addEventListener("click", cerrar);
 
   /* Toggle de jaula: se puede cambiar siempre, también si se entró por un hueco. */
   for (const tb of fondo.querySelectorAll(".bw-criar-box")) {
@@ -3132,7 +3205,7 @@ function abrirCriadero(boxInicial = null) {
   }
 
   ok.addEventListener("click", async () => {
-    const sel = fondo.querySelector(".bw-desc-celda.sel");
+    const sel = fondo.querySelector(".bw-criar-celda.sel");
     if (!sel || !enviarAccion) return;
     ok.disabled = true;
     const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(sel.dataset.nivel), boxIdx: boxCriadero });
@@ -5567,25 +5640,46 @@ function css() {
       color:#12161a; border-color:transparent;
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
-    /* Dos cartas arriba y dos abajo, con anchos en % del modal (nada fijo):
-       dos huecos de medio ancho menos la separación, y la fila de abajo más
-       despegada para que se lean como dos filas. */
+    /* Monstruos criables en cuadrados de jaula: dos por fila, con el bicho
+       dentro, su nombre debajo y lo que cuesta en la esquina. */
     .bw-criar-grid {
-      display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start;
-      column-gap:3%; row-gap:0; width:76%; margin:0 auto;
+      display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:8px; width:min(300px,74%); margin:0 auto;
     }
-    .bw-criar-grid .bw-desc-celda { flex:0 0 calc((100% - 3%) / 2); width:calc((100% - 3%) / 2); }
-    /* La separación entre las dos filas va en % del ancho (el row-gap en % de
-       un contenedor de alto automático se queda en 0). */
-    .bw-criar-grid .bw-desc-celda:nth-child(n+3) { margin-top:5%; }
-    /* Carta que no se puede criar (sin monedas o jaula llena): el cartón queda
-       opaco y encima va un velo negro, así no se transparenta el modal. */
-    .bw-desc-celda:disabled { cursor:not-allowed; }
-    .bw-desc-celda:disabled::before {
+    .bw-criar-celda { position:relative; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
+    .bw-criar-celda .bw-box-img { height:84%; max-width:84%; }
+    .bw-criar-nombre {
+      position:absolute; left:0; right:0; bottom:0; z-index:2;
+      padding:2px 3px 3px; box-sizing:border-box;
+      text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font:700 10px/1.15 ui-sans-serif, system-ui, sans-serif;
+      color:#12161a; background:rgba(232,221,200,.94);
+    }
+    .bw-criar-coste {
+      position:absolute; top:3px; left:3px; z-index:2;
+      min-width:17px; height:17px; padding:0 3px; box-sizing:border-box;
+      display:grid; place-items:center; border-radius:9px;
+      background:rgba(224,163,63,.95); color:#12161a;
+      font:800 10px/1 ui-monospace, monospace;
+      box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
+    }
+    .bw-criar-celda.sel { outline:2px solid #e0a33f; outline-offset:1px; }
+    .bw-criar-celda.sel .bw-criar-nombre { background:#e0a33f; }
+    /* El que no se puede criar (sin monedas o jaula llena) queda apagado bajo
+       un velo negro, sin transparentar el modal. */
+    .bw-criar-celda:disabled { cursor:not-allowed; }
+    .bw-criar-celda:disabled::before {
       content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
-      border-radius:9px; background:rgba(0,0,0,.6);
+      border-radius:8px; background:rgba(0,0,0,.55);
     }
-    .bw-desc-celda:disabled .bw-carta-grande { filter:grayscale(.35); }
+    .bw-criar-celda:disabled .bw-box-img { filter:grayscale(.45); }
+    /* Velo detrás del criadero: si se abre desde la hoja de Jaulas, la de
+       debajo se transparentaba por el borde y se mezclaban las dos. */
+    #bw-modal-criadero { background:rgba(8,7,5,.55); }
+    /* La cabecera del criadero es la de los paneles (X incluida) y el pie la
+       misma línea de botón que el resto de modales. */
+    #bw-modal-criadero .bw-modal { width:100%; }
+    #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:2px; }
     /* El botón de criar va debajo de las cartas, como el de descartar, y sube
        sobre el hueco de la nota (que casi siempre está vacía). */
     .bw-criar-ok { min-width:170px; }
