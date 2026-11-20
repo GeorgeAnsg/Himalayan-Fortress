@@ -3130,16 +3130,23 @@ function abrirCriadero(boxInicial = null) {
     return;
   }
 
-  const max = nivelMaxCriadero(criaderoMesa || 1);
+  const nivelCriadero = criaderoMesa || 1;
+  const max = nivelMaxCriadero(nivelCriadero);
   const barato = cienciasMesa.some(c => c.efecto === "monstruo_barato") ? 1 : 0;
   const monedasDe = (m) => Math.max(0, m.coste - barato);
-  const lista = BESTIARIO_UI.filter(m => m.nivel <= max);
+  /* Siempre los cuatro del bestiario: los que el criadero aún no alcanza se
+     pintan como hueco, para que la fila mida lo mismo que la de las torres. */
+  const lista = BESTIARIO_UI;
   const libre = libresEnBox(boxCriadero) > 0;
 
   /* Cuadrados de jaula, como los del búnker: el monstruo dentro, su nombre
      debajo, el coste a la izquierda y la fuerza a la derecha. Nada de cartas
-     de papel. */
+     de papel. Lo que el criadero todavía no permite criar deja el mismo
+     cuadrado, redondo y a trazos, sin nada dentro. */
   const celda = (m) => {
+    if (m.nivel > max) {
+      return `<div class="bw-box-slot bw-criar-hueco" title="Criadero ${ROMANOS[nivelCriadero] || nivelCriadero}: todavía no se puede criar ${esc(m.nombre)}"></div>`;
+    }
     const monedas = monedasDe(m);
     const puede = monedas <= energiaMesa && libre;
     return `
@@ -5624,10 +5631,9 @@ function css() {
       margin:0; max-width:min(340px,90vw); text-align:center;
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
-    /* Criadero: toggle de jaula y cuadrados para elegir el monstruo */
-    /* Los dos botones van en una sola línea, así que el toggle puede ser más
-       ancho que la rejilla de cuadrados. */
-    .bw-criar-toggle { display:flex; gap:8px; width:76%; margin:0 auto; }
+    /* Criadero: toggle de jaula y cuadrados para elegir el monstruo. El toggle
+       mide lo mismo que la fila de cuadrados. */
+    .bw-criar-toggle { display:flex; gap:8px; width:min(312px,100%); margin:0 auto; }
     /* Jaula y huecos libres en la misma línea: el toggle no crece de alto, y
        los dos botones miden lo mismo aunque uno diga "2 libres". */
     .bw-criar-toggle .bw-criar-box {
@@ -5643,21 +5649,30 @@ function css() {
       color:#12161a; border-color:transparent;
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
-    /* Monstruos criables en cuadrados de jaula: dos por fila, con el bicho
-       dentro, su nombre debajo, el coste a la izquierda y la fuerza a la
-       derecha. Un 30 % más pequeños que la primera versión (140 → ~98 px de
-       lado en un móvil normal) para que el modal quepa entero de alto. */
+    /* Los cuatro monstruos del bestiario en una fila de cuatro cuadrados, del
+       mismo tamaño que los peldaños del panel de torres: 72 px de lado como
+       mucho (min(72 px, 22 vw)), y en pantallas más estrechas encogen con la
+       fila, que nunca pasa del ancho del modal. */
     .bw-criar-grid {
-      display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
-      gap:8px; width:min(210px,56%); margin:0 auto;
+      display:grid; grid-template-columns:repeat(4, minmax(0, 1fr));
+      gap:8px; width:min(312px,100%); margin:0 auto;
     }
     .bw-criar-celda { position:relative; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
     .bw-criar-celda .bw-box-img { height:84%; max-width:84%; }
+    /* El monstruo que el criadero todavía no alcanza: el mismo cuadrado, pero
+       redondo, con el borde a trazos y sin nada dentro. */
+    .bw-criar-hueco {
+      border:1px dashed rgba(244,236,221,.42);
+      border-radius:50%;
+      background:rgba(0,0,0,.14);
+    }
     .bw-criar-nombre {
       position:absolute; left:0; right:0; bottom:0; z-index:2;
-      padding:2px 3px 3px; box-sizing:border-box;
+      padding:1px 2px 2px; box-sizing:border-box;
       text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      font:700 10px/1.15 ui-sans-serif, system-ui, sans-serif;
+      /* Un punto menos que con los cuadrados grandes: en 72 px de ancho los
+         nombres largos («Coloso de hielo») tienen que caber enteros. */
+      font:700 8.5px/1.2 ui-sans-serif, system-ui, sans-serif;
       color:#12161a; background:rgba(232,221,200,.94);
     }
     .bw-criar-coste {
