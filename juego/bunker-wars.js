@@ -979,7 +979,7 @@ function faseLanzar(e, jugadorId, accion, evs) {
     const rival = e.jugadores[accion.rivalId];
     const s = rival?.senderos.find(s => s.id === accion.sendero);
     if (mon && mon.bloqueadaEn !== claveLanzar(e) && s && !s.posiciones[0] && rival.vivo) {
-      s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId };
+      s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId, ...(mon.vuela ? { vuela: true } : {}) };
       evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
       /* La reserva entra en el hueco que ha quedado libre, pero no cuenta como
          lanzadera cargada hasta el turno siguiente. */
