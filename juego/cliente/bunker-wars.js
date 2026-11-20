@@ -1913,6 +1913,10 @@ function abrirLanzar(ops) {
   const enviar = async (accion, boton) => {
     if (!accion || !enviarAccion || enviando) return;
     if (boton) boton.disabled = true;
+    /* El nivel se apunta antes de esperar: el repintado que llega con el estado
+       nuevo mete la reserva de la cola en el hueco que deja la lanzadera, así
+       que después ya no está el monstruo que acabas de mandar. */
+    const nvLanzado = lanzaderasModal[accion.lanzadera]?.nivel ?? null;
     enviando = true;
     fondo.classList.add("enviando");
     const r = await enviarAccion(accion);
@@ -1924,10 +1928,9 @@ function abrirLanzar(ops) {
       return;
     }
     if (accion.tipo !== "lanzar") { rivalLanzarElegido = null; cerrar(); return; }
-    /* La hoja no se cierra: pierde la lanzadera que acaba de salir y se vuelve
-       a pintar con la que queda. */
-    const nvLanzado = lanzaderasModal[accion.lanzadera]?.nivel ?? null;
-    lanzaderasModal = lanzaderasModal.map((m, i) => (i === accion.lanzadera ? null : m));
+    /* La hoja no se cierra: se queda con lo que la mesa dice ahora mismo, que
+       ya no incluye la lanzadera que acaba de salir. */
+    lanzaderasModal = lanzaderasMesa;
     /* Lo que vale ahora es lo legal en la mesa: si has llenado el único hueco
        que quedaba, la otra lanzadera se queda sin destino y la hoja se cierra. */
     opsModal = (accionesMesa ?? []).filter(a => a.tipo === "lanzar"
@@ -1968,9 +1971,12 @@ function abrirLanzar(ops) {
   let opsModal = ops;
   let lanzaderasModal = lanzaderasMesa;
   let firmaVista = "";
+  /* La firma es solo lo que se puede lanzar, no las lanzaderas: al lanzar, la
+     reserva de la cola entra en el hueco libre y cambia la lista de monstruos
+     del mismo índice aunque para el jugador no cambie nada. Contándola, la hoja
+     se reconstruía entera después de cada lanzamiento (el fogonazo). */
   const firmaDe = () => opsModal.filter(a => a.tipo === "lanzar")
-    .map(a => `${a.lanzadera}.${a.rivalId}.${a.sendero}`).join("|")
-    + "/" + lanzaderasModal.map(m => m?.nivel ?? "-").join(",");
+    .map(a => `${a.lanzadera}.${a.rivalId}.${a.sendero}`).join("|");
   const quedanLanzamientos = () => opsModal.filter(a => a.tipo === "lanzar");
 
   /* Repinta el paso en el que está la hoja con lo que queda. */
