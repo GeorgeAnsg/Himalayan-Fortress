@@ -2668,7 +2668,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const desde = movida ? LOSAS[antes.calle][antes.paso] : (entra ? ENTRADA[i] : null);
       /* La foto es solo de tu tablero: una visita a otra fortaleza escribía
          aquí sus monstruos y dejaba sin comparación el repintado siguiente. */
-      if (!opciones.sinLuchas && f.id) fichasPrevias.set(f.id, { calle: i, paso, nivel: nivelDe(f), tipo: f.tipo });
+      if (!opciones.sinLuchas && f.id) fichasPrevias.set(f.id, { calle: i, paso, nivel: nivelDe(f), tipo: f.tipo, vuela: f.vuela });
       /* `data-entra` marca las que aparecen por abajo: fuera de tu turno no
          hay jornada que las anime y se lanzan en el mismo repintado. */
       const desdeAttr = desde
@@ -2730,7 +2730,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       if (esAtacante && paso === 0 && saliente?.paso === 1 && saliente.id !== id) {
         luchas.push({
           calle: antes.calle, origen: paso, destino: paso,
-          nivel: antes.nivel, esAtacante: true,
+          nivel: antes.nivel, vuela: antes.vuela, esAtacante: true,
           ganadorId: saliente.id,
           grupo: "defensores",
         });
@@ -2754,7 +2754,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       if (!ganador || ganador.id === id) continue;
       luchas.push({
         calle: antes.calle, origen: paso, destino,
-        nivel: antes.nivel, esAtacante,
+        nivel: antes.nivel, vuela: antes.vuela, esAtacante,
         /* Quién ha ganado: sirve para saber cuándo llega y abrir la nube. */
         ganadorId: ganador.id ?? "",
         /* Se enseña en la fase que anima al que se ha movido. Si el fantasma

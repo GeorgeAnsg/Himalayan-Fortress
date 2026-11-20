@@ -798,9 +798,9 @@ const bunkerWars = {
              deducirlo comparando repintados fallaba a veces. */
           entradas: (j.entradasBunker ?? []).slice(-8),
           senderos: j.senderos,
-          lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor" } : null)),
-          colaLanzaderas: (j.colaLanzaderas ?? []).map(m => ({ nivel: m.nivel, tipo: m.tipo ?? "defensor" })),
-          box: j.box.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor", id: m.id } : null)),
+          lanzaderas: j.lanzaderas.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor", ...(m.vuela ? { vuela: true } : {}) } : null)),
+          colaLanzaderas: (j.colaLanzaderas ?? []).map(m => ({ nivel: m.nivel, tipo: m.tipo ?? "defensor", ...(m.vuela ? { vuela: true } : {}) })),
+          box: j.box.map(m => (m ? { nivel: m.nivel, tipo: m.tipo ?? "defensor", id: m.id, ...(m.vuela ? { vuela: true } : {}) } : null)),
         }])
       ),
       /* Caídos en orden: el cliente saca de aquí el puesto de cada uno. */
