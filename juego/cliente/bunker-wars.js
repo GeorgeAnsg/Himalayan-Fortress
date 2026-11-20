@@ -1935,21 +1935,32 @@ function abrirLanzar(ops) {
       && !(a.rivalId === accion.rivalId && a.sendero === accion.sendero));
     /* La que acaba de salir se queda a la vista en la calle donde la has
        dejado: con la segunda en la mano se ve dónde fue la primera. */
-    marcarLanzado(accion.sendero, nvLanzado);
+    marcarLanzado(accion.rivalId, accion.sendero, nvLanzado);
     actualizarChips();
   };
 
-  /* Pinta el monstruo recién lanzado en la entrada de su calle, como lo pinta
-     el tablero del rival (turquesa, de cara al fuerte). */
-  const marcarLanzado = (calle, nv) => {
+  /* Monstruos ya lanzados desde esta hoja, por rival y calle: se vuelven a
+     pintar en la entrada de su calle cada vez que la hoja se monta de nuevo,
+     para no perder de vista dónde has dejado los que ya has mandado. */
+  const lanzados = new Map();
+  const pintarLanzados = (rivalId) => {
+    if (rivalId == null) return;
+    for (const [clave, nv] of lanzados) {
+      const [de, calle] = clave.split(":");
+      if (de !== String(rivalId)) continue;
+      const hueco = fondo.querySelector(
+        `.bw-torre[data-calle="${calle}"] .bw-torre-slots .bw-torre-slot:last-child`);
+      if (!hueco || hueco.classList.contains("atacante")) continue;
+      hueco.className = "bw-box-slot lleno bw-torre-slot atacante";
+      hueco.title = `Atacante nivel ${nv} en el peldaño 1`;
+      hueco.innerHTML = `<img src="${imgMonstruo(nv, true)}" class="bw-box-img" alt="monstruo">`
+        + `<b class="bw-box-nv">${nv}</b><span class="bw-torre-step">1</span>`;
+    }
+  };
+  const marcarLanzado = (rivalId, calle, nv) => {
     if (!nv) return;
-    const hueco = fondo.querySelector(
-      `.bw-torre[data-calle="${Number(calle)}"] .bw-torre-slots .bw-torre-slot:last-child`);
-    if (!hueco) return;
-    hueco.className = "bw-box-slot lleno bw-torre-slot atacante";
-    hueco.title = `Atacante nivel ${nv} en el peldaño 1`;
-    hueco.innerHTML = `<img src="${imgMonstruo(nv, true)}" class="bw-box-img" alt="monstruo">`
-      + `<b class="bw-box-nv">${nv}</b><span class="bw-torre-step">1</span>`;
+    lanzados.set(`${rivalId}:${Number(calle)}`, nv);
+    pintarLanzados(rivalId);
   };
 
   /* Lo que la hoja puede ofrecer ahora mismo. Va aparte porque la hoja ya no
@@ -2238,6 +2249,7 @@ function abrirLanzar(ops) {
         </div>
       </div>`;
     fondo.querySelector(".bw-lz-atras").addEventListener("click", pasoRivales);
+    pintarLanzados(rivalId);
   };
 
   const rivalInicial = rivalLanzarElegido
@@ -5821,6 +5833,10 @@ function css() {
       background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
       align-items:flex-end; padding:0; pointer-events:auto; z-index:9999;
     }
+    /* Detrás de la hoja de lanzaderas se ve el tablero, y el repintado de cada
+       jugada se notaba como un fogonazo: se atenúa lo de debajo. */
+    #bw-modal-lanzar.lz-inicial,
+    #bw-modal-lanzar.lz-detalle { background:rgba(6,8,7,.62); }
     /* Mientras se elige lanzadera, el menú inferior no debe abrir cartas ni
        ningún otro panel: se bloquea explícitamente además de la capa. */
     body.bw-lanzando #bw-nav-global,
