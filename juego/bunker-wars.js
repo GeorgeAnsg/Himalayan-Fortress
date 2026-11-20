@@ -33,7 +33,7 @@ function uid(p) { return `${p}${ARRANQUE}${++_seq}`; }
 const NIVELES = [1, 2, 3, 5, 7];
 const COSTE_MONSTRUO = { 1: 0, 2: 1, 3: 2, 5: 3, 7: 3 };
 /* Cartas de Destino que meten monstruos en los caminos. */
-const AMENAZAS = new Set(["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival"]);
+const AMENAZAS = new Set(["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival", "amenaza_mixta"]);
 /* Estas cartas actúan sobre la mesa entera: con un Destino compartido se
    resuelven una vez por ciclo, no una vez por cada jugador. */
 const DESTINO_GLOBAL = new Set(["miedo", "amenaza_rival"]);
@@ -54,9 +54,15 @@ const PLANTILLAS_DESTINO = [
   { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
     titulo:"Un rastreador",
     descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
-  { id:"a03", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
-    titulo:"Se han avistado 2 rastreadores",
-    descripcion:"Dos rastreadores salen de la ventisca." },
+  /* Avistamiento mixto de la apertura: el carroñero entra por la central y un
+     rastreador por cada lado. Es la única carta con niveles distintos a la vez,
+     así que guarda el nivel de cada escalera en `niveles` (izquierda, central,
+     derecha). `nivelPropio` la salta la rebaja de la luna blanca: si no, el
+     carroñero entraría como rastreador. */
+  { id:"a03", tipo:"amenaza_mixta", tramo:1, tramoMax:1, nivel:2,
+    niveles:[1, 2, 1], nivelPropio:true,
+    titulo:"Se ha avistado un carroñero",
+    descripcion:"Un carroñero baja por la escalera central; dos rastreadores aparecen por los lados." },
   { id:"a03b", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
     titulo:"2 rastreadores avistados",
     descripcion:"Dos rastreadores aparecen en el comienzo de tus escaleras." },
@@ -118,10 +124,11 @@ const PLANTILLAS_DESTINO = [
    se repartieron antes de que los eventos lo tuvieran. */
 const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null]));
 
-/* Apertura fija de las cuatro primeras lunas: rastreador, dos rastreadores,
-   calma y dos rastreadores. El arranque es el momento más frágil de la
-   partida y una carta fea en la luna 1 la decidía; así todas las mesas
-   empiezan igual.
+/* Apertura fija de las cuatro primeras lunas: rastreador, carroñero con dos
+   rastreadores por los lados, calma y dos rastreadores. El arranque es el
+   momento más frágil de la partida y una carta fea en la luna 1 la decidía;
+   así todas las mesas empiezan igual, y la segunda luna sube de nivel para
+   que el comienzo no sea una cuesta plana.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
 const APERTURA_DESTINO = { 1: "a01", 2: "a03", 3: "d21", 4: "a03b" };
@@ -1108,21 +1115,28 @@ function faseCarta(e, jugadorId, evs) {
     /* La descripción se calcula con las escaleras que hay libres ahora mismo
        en el tablero de este jugador. Así no anuncia la central si está
        ocupada y el monstruo va a entrar por la siguiente de la prioridad. */
+    const senderos = e.jugadores[jugadorId]?.senderos ?? [];
+    const puestosMixta = carta.tipo === "amenaza_mixta" ? planificarMixta(senderos, carta) : [];
     const senderosDestino = carta.tipo === "amenaza"
-      ? planificarAmenaza(e.jugadores[jugadorId]?.senderos ?? [], carta)
-      : [];
+      ? planificarAmenaza(senderos, carta)
+      : puestosMixta.map((p) => p.sendero);
     const descripcion = carta.tipo === "amenaza"
       ? describirAmenaza(carta, senderosDestino)
-      : carta.descripcion ?? null;
+      : carta.tipo === "amenaza_mixta"
+        ? describirMixta(puestosMixta)
+        : carta.descripcion ?? null;
     e.ultimoDestino = {
       tipo: carta.tipo,
       nivel: carta.nivel ?? null,
       /* Lo que de verdad entra en la mesa: antes de la carta roja todo
          monstruo es de nivel 1, diga la carta lo que diga. La mesa no debe
-         anunciar un nivel que luego no aparece. */
-      nivelReal: AMENAZAS.has(carta.tipo) ? nivelRealEnemigo(e, carta.nivel) : null,
+         anunciar un nivel que luego no aparece. El avistamiento mixto lleva
+         el suyo por escalera, así que no se rebaja. */
+      nivelReal: AMENAZAS.has(carta.tipo) && carta.tipo !== "amenaza_mixta"
+        ? nivelRealEnemigo(e, carta.nivel) : null,
       prio: carta.prio ?? null,
       cantidad: carta.cantidad ?? null,
+      puestos: puestosMixta,
       tramo: carta.tramo ?? null,
       titulo: carta.titulo ?? null,
       descripcion,
@@ -2551,6 +2565,30 @@ function describirAmenaza(carta, ids) {
   return `${base} ${verbo} ${fraseEscaleras(ids)}.`.trim();
 }
 
+/* El avistamiento mixto: el carroñero por la central y un rastreador por cada
+   lado. Si una escalera está ocupada, el de ese lado no entra; los demás
+   mantienen su sitio. */
+function planificarMixta(senderos, carta) {
+  const niveles = Array.isArray(carta.niveles) ? carta.niveles : [1, 1, 1];
+  const libres = new Set((senderos ?? []).filter(s => !s.posiciones[0]).map(s => s.id));
+  const puestos = [];
+  for (const id of [2, 1, 3]) {
+    if (!libres.has(id)) continue;
+    puestos.push({ sendero: id, nivel: niveles[id - 1] ?? 1 });
+  }
+  return puestos;
+}
+
+const NOMBRE_NIVEL = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso de hielo", 7: "devorador de cumbres" };
+
+function describirMixta(puestos) {
+  if (!puestos.length) return "Un carroñero y dos rastreadores buscan hueco en las escaleras, pero no lo encuentran.";
+  const trozos = puestos.map(p =>
+    `un ${NOMBRE_NIVEL[p.nivel] ?? `monstruo de nivel ${p.nivel}`} por la escalera ${ESCALERA_LARGA[p.sendero] ?? "central"}`);
+  const lista = trozos.length === 1 ? trozos[0] : `${trozos.slice(0, -1).join(", ")} y ${trozos[trozos.length - 1]}`;
+  return `Se ha avistado ${lista}.`;
+}
+
 function colocarAtacante(senderos, senderoId, nivel) {
   const s = senderos.find(s => s.id === senderoId);
   if (s && !s.posiciones[0]) {
@@ -2571,6 +2609,17 @@ function resolverDestino(e, jugadorId, carta) {
       for (const id of ids) colocarAtacante(j.senderos, id, nv);
       if (ids.length) {
         evs.push({ tipo: "amenaza", texto: `Destino: ${ids.length} monstruo(s) ${nv} en las escaleras de ${j.nombre}.` });
+      }
+      break;
+    }
+    case "amenaza_mixta": {
+      const puestos = planificarMixta(j.senderos, carta);
+      for (const p of puestos) {
+        const nv = carta.nivelPropio ? p.nivel : nivelRealEnemigo(e, p.nivel);
+        colocarAtacante(j.senderos, p.sendero, nv);
+      }
+      if (puestos.length) {
+        evs.push({ tipo: "amenaza", texto: `Destino: ${puestos.map(p => `${NOMBRE_NIVEL[p.nivel] ?? "monstruo"} nv${p.nivel} por la escalera ${p.sendero}`).join(", ")} de ${j.nombre}.` });
       }
       break;
     }

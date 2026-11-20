@@ -1,7 +1,7 @@
 ID,Tipo,Titulo,Texto,Nivel,Cantidad,Prioridad,Tramo desde,Tramo hasta,Notas
 a01,Amenaza,Se ha avistado un rastreador,Un rastreador se arrastra desde la nieve.,1,1,"1,2,3",1,1,Abre la luna 1 (apertura fija)
 a02,Amenaza,Un rastreador,Un rastreador aparece al otro lado de la fortaleza.,1,1,"3,2,1",1,1,
-a03,Amenaza,Se han avistado 2 rastreadores,Dos rastreadores salen de la ventisca.,1,2,"2,1,3",1,1,Apertura luna 2
+a03,Amenaza mixta,Se ha avistado un carroñero,"Un carroñero baja por la escalera central; dos rastreadores aparecen por los lados (nv 2 en la central, nv 1 en los lados).",2,3,"2,1,3",1,1,"Apertura, luna 2: carroñero nv 2 en la central y rastreadores nv 1 en los lados"
 a03b,Amenaza,2 rastreadores avistados,Dos rastreadores aparecen en el comienzo de tus escaleras.,1,2,"2,1,3",1,1,Apertura luna 4
 a04,Amenaza,Tres rastreadores,Tres rastreadores emergen de la nieve.,1,3,"1,2,3",1,1,
 a05,Amenaza,Un carroñero,Un carroñero husmea entre las rocas.,2,1,"1,2,3",2,2,

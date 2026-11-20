@@ -89,8 +89,18 @@ export function pintar(contenedor, opciones) {
   });
   /* Los que ya estaban en el camino y este repintado salen hacia la lanzadera:
      hacen el último tramo como una ficha más, en su turno, y solo después se
-     apagan para aparecer en la lanzadera (ver prepararSalidasLanzadera). */
-  const salidasLanzadera = lanzaderaMovidas.filter((m) => m.desdePath && m.desdePath.paso > 0);
+     apagan para aparecer en la lanzadera (ver prepararSalidasLanzadera). Si
+     las dos lanzaderas están llenas el motor los deja en la cola: el viaje es
+     el mismo, solo cambia el sitio donde aparecen. */
+  const colaMovidas = (privada?.colaLanzaderas ?? []).flatMap((m, i) => {
+    if (!m?.id) return [];
+    const prevPos = fichasPrevias.get(m.id);
+    return prevPos ? [{ id: m.id, nivel: m.nivel, cola: i, desdePath: prevPos }] : [];
+  });
+  const salidasLanzadera = [
+    ...lanzaderaMovidas.filter((m) => m.desdePath && m.desdePath.paso > 0),
+    ...colaMovidas.filter((m) => m.desdePath?.paso > 0),
+  ];
   /* Por calle, el que sale: hace falta en el tablero para saber que el
      atacante de la casilla 1 ha caído contra él, no por una carta. */
   const salen = new Map(salidasLanzadera.map((m) => [m.desdePath.calle, {
@@ -817,7 +827,7 @@ function animarFichas(raiz, { diferir = true } = {}) {
       /* El que sale hacia la lanzadera no desaparece al llegar: se queda un
          momento en la casilla 1 o, si ha peleado, todo el humo; después se
          apaga para encenderse ya en la lanzadera. */
-      if (el.dataset.sale != null) {
+      if (el.dataset.puesto != null) {
         const espera = pelea ? MS_HUMO_FIN_SALIDA : MS_QUIETO_LANZADERA;
         setTimeout(() => despedirALaLanzadera(raiz, el), retardo + MS_FICHA + espera);
       }
@@ -836,7 +846,7 @@ function animarFichas(raiz, { diferir = true } = {}) {
     fantasmas.filter((g) => g.dataset.grupo === "defensores").map((g) => g.dataset.ganador),
   );
   for (const p of pendientes) {
-    if (p.el.dataset.sale != null) p.pelea = ganadoresDefensa.has(p.el.dataset.fid);
+    if (p.el.dataset.puesto != null) p.pelea = ganadoresDefensa.has(p.el.dataset.fid);
   }
   /* `llegada`: cuánto tarda en llegar el que ataca a la casilla del otro. La
      nube entra con su fundido justo antes, así que se abre del todo cuando el
@@ -893,7 +903,7 @@ function animarFichas(raiz, { diferir = true } = {}) {
     const retrasos = retrasosDe(lista, 0);
     let fin = 0;
     lista.forEach((p, i) => {
-      if (p.el.dataset.sale == null) return;
+      if (p.el.dataset.puesto == null) return;
       const espera = p.pelea ? MS_HUMO_FIN_SALIDA : MS_QUIETO_LANZADERA;
       fin = Math.max(fin, retrasos[i] + MS_FICHA + espera + MS_FUNDIDO_SALIDA + MS_FUNDIDO_LANZADERA);
     });
@@ -976,11 +986,22 @@ function mostrarLanzadera(destino) {
   });
 }
 
+/* El hueco al que va un monstruo: su lanzadera o, si las dos estaban llenas,
+   el sitio de la cola. Los dos se distinguen por `data-puesto` (lanzadera-1,
+   cola-2…). */
+function puestoDestino(raiz, puesto) {
+  const [tipo, n] = String(puesto ?? "").split("-");
+  if (!n) return null;
+  return tipo === "cola"
+    ? raiz.querySelector(`.lanzadera-cola[data-cola="${n}"]`)
+    : raiz.querySelector(`.lanzadera[data-lanzadera="${n}"]`);
+}
+
 /* Se apaga en la casilla 1 y se enciende en la lanzadera: un cambio de sitio,
    no una aparición. El relevo es en dos tiempos para que no se amontonen. */
 function despedirALaLanzadera(raiz, ficha) {
   if (!ficha?.isConnected) return;
-  const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${Number(ficha.dataset.sale) + 1}"]`);
+  const destino = puestoDestino(raiz, ficha.dataset.puesto);
   const irse = () => { ficha.remove(); mostrarLanzadera(destino); };
   const fundido = ficha.animate?.([{ opacity: 1 }, { opacity: 0 }], {
     duration: MS_FUNDIDO_SALIDA, easing: "ease-in", fill: "forwards",
@@ -997,14 +1018,15 @@ function prepararSalidasLanzadera(raiz, movidas) {
     const { calle, paso } = m.desdePath ?? {};
     const desde = LOSAS[calle]?.[paso];
     const hasta = LOSAS[calle]?.[0];
-    const destino = raiz.querySelector(`.lanzadera[data-lanzadera="${m.lanzadera + 1}"]`);
+    const puesto = m.cola != null ? `cola-${m.cola + 1}` : `lanzadera-${m.lanzadera + 1}`;
+    const destino = puestoDestino(raiz, puesto);
     if (!desde || !hasta || !destino) continue;
     /* La lanzadera enseña al monstruo cuando llega, no antes. */
     ocultarLanzadera(destino);
     setTimeout(() => { if (destino.dataset.llega === "0") mostrarLanzadera(destino); }, MS_SALIDA_MAX);
     const ficha = document.createElement("div");
     ficha.className = "ficha mia bw-sale";
-    ficha.dataset.sale = String(m.lanzadera);
+    ficha.dataset.puesto = puesto;
     ficha.dataset.fid = m.id;
     ficha.dataset.sendero = String(calle + 1);
     ficha.dataset.nivel = String(m.nivel);
@@ -2241,6 +2263,7 @@ function imgDestino(d) {
     amenaza_triple: `monstruo-nv${nv}`,
     amenaza_doble: `monstruo-nv${nv}`,
     amenaza_rival: `monstruo-nv${nv}`,
+    amenaza_mixta: `monstruo-nv${nv}`,
     colocar_monstruos: `monstruo-nv${nv}`,
     calma: "defensa",
     buscar_bunker: "recursos",
@@ -2578,10 +2601,13 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
      peldaño más abajo y algo más pequeñas), igual que los monstruos de las
      jaulas se ven uno detrás del otro. */
   + colaLanzaderas.slice(0, 2).map((c, i) => {
+    /* El que espera se apila detrás de su lanzadera: misma vertical, un poco
+       más arriba y por debajo en z-index, con el nivel a la vista. Antes iba
+       casi al borde de abajo del tablero y no se veía. */
     const pos = i === 0
-      ? { l: "37.1", t: "86.5" }
-      : { l: "63.3", t: "86.5" };
-    return `<div class="lanzadera lanzadera-llena lanzadera-cola" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t}%;transform:scale(.78);opacity:.6;filter:blur(1px)"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
+      ? { l: "37.1", t: "74.2" }
+      : { l: "63.3", t: "74.4" };
+    return `<div class="lanzadera lanzadera-llena lanzadera-cola" data-cola="${i + 1}" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t}%;z-index:1;pointer-events:none;transform:scale(.72);opacity:.62;filter:blur(1px)"><img src="${imgMonstruo(nivelDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
   }).join("");
 
   /* Losas */
@@ -3425,7 +3451,7 @@ function pintarManuscritos() {
 
     ${seccion("Destino", `
       ${fila("Luna 1", "Se ha avistado un rastreador", "1 rastreador")}
-      ${fila("Luna 2", "Se han avistado 2 rastreadores", "2 rastreadores")}
+      ${fila("Luna 2", "Se ha avistado un carroñero", "1 carroñero y 2 rastreadores")}
       ${fila("Luna 3", "Calma", "no aparece nadie")}
       ${fila("Luna 4", "2 rastreadores avistados", "2 rastreadores")}
       ${parrafo("La carta es la misma para toda la mesa y se revela una vez por luna. Este primer ciclo va fijo, para que todas las partidas arranquen igual. Desde la luna 5 el mazo se baraja y solo salen las cartas del tramo de la luna: tramo 2 en las lunas 5 a 8 y tramo 3 desde la 9.")}
@@ -3504,7 +3530,7 @@ function pintarManuscritos() {
 /* ── Carta de Destino del turno ─────────────────────────────────────────── */
 
 function textoDestino(d) {
-  const amenaza = ["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival"].includes(d.tipo);
+  const amenaza = ["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival", "amenaza_mixta"].includes(d.tipo);
   const n = d.nivelReal ?? (amenaza && nivelEnemigoMesa === 1 ? Math.min(1, d.nivel ?? 1) : d.nivel);
   const nota = (d.nivel && n !== d.nivel)
     ? ` · la carta es de nivel ${d.nivel}, la luna lo deja en ${n}`
@@ -3520,6 +3546,13 @@ function textoDestino(d) {
       if (ids.length === 1) return `${monstruos} por la escalera ${escaleraDe(ids[0])}${nota}`;
       if (ids.length === 2) return `${monstruos} en las escaleras ${ids.map(escaleraDe).join(" y ")}${nota}`;
       return `${monstruos}, uno por escalera${nota}`;
+    }
+    case "amenaza_mixta": {
+      const puestos = Array.isArray(d.puestos) ? d.puestos : [];
+      if (!puestos.length) return "Los avistados no encuentran hueco libre en las escaleras";
+      const trozos = puestos.map((p) =>
+        `${nombreMonstruo(p.nivel)} (Nv ${p.nivel}) por la escalera ${escaleraDe(p.sendero)}`);
+      return trozos.length === 1 ? trozos[0] : `${trozos.slice(0, -1).join(", ")} y ${trozos[trozos.length - 1]}`;
     }
     case "amenaza_triple":  return `3 ${pluralMonstruo(n)}, uno por escalera${nota}`;
     case "amenaza_doble":   return `2 ${pluralMonstruo(n)} en 2 escaleras${nota}`;
@@ -3545,7 +3578,7 @@ function textoDestino(d) {
 
 function pintarDestino(d, mazo) {
   if (!d) return "";
-  const amenaza = ["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival"].includes(d.tipo);
+  const amenaza = ["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival", "amenaza_mixta"].includes(d.tipo);
   return `
     <div class="bw-destino${amenaza ? " amenaza" : ""}${d.tipo === "carta_roja" ? " roja" : ""}">
       <span class="bw-destino-tag">Carta de Destino</span>
