@@ -3756,6 +3756,8 @@ function defsCarta(c) {
     laboratorio:   { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`,  cls: "laboratorio",   costo: c.coste },
     ciencia:       { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia",    cls: "ciencia",    costo: c.coste },
     ciencia_i:     { emoji: "⚗️", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Inmediata",  cls: "ciencia_i",  costo: c.coste },
+    /* Dichos: no se juegan, solo se descartan. */
+    dicho:         { emoji: "📜", label: c.titulo ?? "Dicho",  cls: "dicho",  costo: 0 },
   };
   const def = defs[c.tipo] ?? { emoji: "?", label: c.tipo ?? "Carta", cls: "", costo: c.coste ?? 0 };
   return { ...def, label: tituloCarta(c, def.label) };
@@ -3785,12 +3787,16 @@ function imgCarta(tipo, nivel) {
     laboratorio:  "laboratorio",
     ciencia:      "ciencia",
     ciencia_i:    "ciencia",
+    /* Los dichos comparten el pergamino de los decretos. */
+    dicho:        "energia",
   };
   const nombre = mapa[tipo] ?? tipo;
   return `${BASE_IMG}/cartas/${nombre}.png`;
 }
 
 function cartaValida(c, bunker) {
+  /* Un dicho no encaja nunca: no hay forma de jugarlo. */
+  if (c.tipo === "dicho") return false;
   if (!bunker) return true;
   if (c.tipo === "armeria")     return c.nivel === (bunker.armeria ?? 0) + 1;
   if (c.tipo === "laboratorio") return c.nivel === (bunker.laboratorio ?? 0) + 1;
@@ -3833,7 +3839,7 @@ function pintarCarta(c, priv, fase, bunker) {
          data-encaja="${encaja ? "1" : "0"}"
          data-sin-energia="${sinEnergia ? "1" : "0"}"
          data-jugable="${jugable ? "1" : "0"}">
-      <span class="bw-carta-coste">${coste}</span>
+      ${c.tipo === "dicho" ? "" : `<span class="bw-carta-coste">${coste}</span>`}
       <span class="bw-carta-nombre">${esc(t.label)}</span>
       <div class="bw-carta-img"><img src="${esc(img)}" alt=""></div>
     </div>
@@ -3876,7 +3882,9 @@ function abrirCarta(el) {
         : sinObjetivo
           ? "Ahora mismo no hay ningún objetivo válido para esta carta: guárdala para más adelante."
           : ""
-    : d.encaja === "0"
+    : d.tipo === "dicho"
+      ? "Un dicho no hace nada: solo se puede descartar en tu fase de descarte."
+      : d.encaja === "0"
       ? d.tipo === "ciencia_i"
         ? "Ese edificio ya está a su nivel máximo, así que esta carta no subiría nada: guárdala para cuando lo amplíes."
         : "Esta carta no encaja en tu búnker ahora mismo: sube al nivel inmediatamente siguiente y no repitas lo que ya tienes."
@@ -3894,7 +3902,7 @@ function abrirCarta(el) {
   fondo.innerHTML = `
     <div class="bw-modal" role="dialog" aria-modal="true" aria-label="${esc(tituloCarta(d, d.titulo))}">
       <div class="bw-carta-grande">
-        <span class="bw-carta-coste-grande${sinEnergia ? " sin-energia" : ""}">${d.coste}</span>
+        ${d.tipo === "dicho" ? "" : `<span class="bw-carta-coste-grande${sinEnergia ? " sin-energia" : ""}">${d.coste}</span>`}
         <div class="bw-carta-grande-img"><img src="${esc(d.img ?? "")}" alt=""></div>
         <div class="bw-carta-grande-texto">
           <div class="bw-carta-grande-titulo">${esc(tituloCarta(d, d.titulo))}</div>

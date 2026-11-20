@@ -159,6 +159,14 @@ const PLANTILLAS_BUNKER = [
   { tipo:"ciencia_i",   efecto:"subir_laboratorio",  coste:3, titulo: "Subir criadero", descripcion: "Aumenta un nivel el criadero." },
   { tipo:"ciencia_i",   efecto:"bombardear",         coste:3, titulo: "Bombardear", descripcion: "Baja un nivel a una torre enemiga. Si es de nivel 1, la destruye." },
   { tipo:"ciencia_i",   efecto:"subir_lab_o_arm",    coste:4, titulo: "Criadero o armería", descripcion: "Aumenta un nivel el criadero o la armería." },
+  /* Dichos: cartas de relleno, sin efecto ninguno. No se pueden jugar, solo
+     descartar. Cada una lleva su propio `efecto` porque la clave con la que se
+     refrescan los textos guardados no distingue dos cartas iguales. */
+  { tipo:"dicho", efecto:"dicho_yak",      coste:0, titulo: "El yak prudente",   descripcion: "No cruces el puente antes de saber cuánto pesa el yak. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_te",       coste:0, titulo: "El té del monje",   descripcion: "El té que se enfría discutiendo no se calienta solo. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_montana",  coste:0, titulo: "La montaña",        descripcion: "La montaña no sube a verte. Ni piensa hacerlo. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_escalera", coste:0, titulo: "Barrer dos veces",  descripcion: "Quien barre dos veces la misma escalera está barriendo la de otro. No hace nada: solo se puede descartar." },
+  { tipo:"dicho", efecto:"dicho_cuerda",   coste:0, titulo: "La cuerda del yeti", descripcion: "Nunca preguntes al yeti si la cuerda aguanta: él ya lo sabe. No hace nada: solo se puede descartar." },
 ];
 
 /* Topes de los edificios del búnker. Los recursos no son un nivel único:
@@ -170,6 +178,7 @@ const TOPE_RECURSOS = 4;
 // Una copia de cada carta — mazo sin duplicados
 const COPIAS_BUNKER = {
   recursos: 1, decreto: 1, recursos_mix: 1, armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1,
+  dicho: 1,
 };
 
 /* Cartas que todavía le sirven al jugador: recursos mientras quede hueco en el
@@ -214,8 +223,19 @@ function reponerCiencias(j, e) {
   j.mazoBunker = barajar([...(j.mazoBunker ?? []), ...faltan.map(p => ({ ...p, uid: uid("cb") }))], e);
 }
 
+/* Los dichos llegaron después: una mesa empezada no los tiene en el mazo. Si
+   no queda ninguno en juego, entran los cinco (una sola vez: luego ya están). */
+function reponerDichos(j, e) {
+  const todas = [...(j.mano ?? []), ...(j.mazoBunker ?? []), ...(j.descarteBunker ?? [])];
+  if (todas.some(c => c.tipo === "dicho")) return;
+  const dichos = PLANTILLAS_BUNKER.filter(p => p.tipo === "dicho")
+    .map(p => ({ ...p, uid: uid("cb") }));
+  j.mazoBunker = barajar([...(j.mazoBunker ?? []), ...dichos], e);
+}
+
 function robarBunker(j, e) {
   reponerMazoBunker(j, e);
+  reponerDichos(j, e);
   reponerCiencias(j, e);
   return j.mazoBunker.length ? j.mazoBunker.shift() : null;
 }
@@ -1767,6 +1787,8 @@ function botAccionEnvio(e, j, aliado) {
 
 function botValorCarta(c) {
   if (!c) return 0;
+  /* Un dicho no vale nada: es la primera carta que el bot tira al descartar. */
+  if (c.tipo === "dicho") return 0;
   if (c.tipo === "recursos") return 100;
   if (c.tipo === "armeria") return 96;
   if (c.tipo === "laboratorio") return 72;
@@ -1943,6 +1965,8 @@ function legalesDescartar(e, jugadorId) {
 
 // ── Helpers de lógica ─────────────────────────────────────────────────────
 function puedeJugarCarta(j, carta) {
+  /* Los dichos no se juegan nunca: solo sirven para descartarlos. */
+  if (carta.tipo === "dicho") return false;
   if (carta.tipo === "armeria") {
     return carta.nivel === j.bunker.armeria + 1;
   }
