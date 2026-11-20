@@ -22,5 +22,5 @@ d23,Evento,Aniquilar nivel 3 o menos,Mueren todos los monstruos de nivel 3 o men
 d24,Evento,Matar al mayor,Muere el monstruo de más nivel que ataca tu búnker.,,,,3,,
 d33,Evento,Deserción,Uno de tus monstruos en tus senderos se vuelve atacante.,,,,3,,
 d31,Evento,Colocar monstruos,Coloca 2 monstruos de nivel 3 saliendo de tu búnker.,3,2,,3,,
-d34,Evento,Ventisca,Tus torres sufren daños: todas bajan un nivel. Las de nivel 1 se destruyen.,,,,2,,Nueva; no hace nada si tienes Protección ancestral
-d35,Evento,Desprendimiento,"Un desprendimiento destruye tu torre de más nivel, esté en el nivel que esté.",,,,3,,Nueva; no hace nada si tienes Protección ancestral
+d34,Evento,Ventisca,Una ventisca ciega a los tuyos desde las almenas: todas tus torres bajan un nivel y las de nivel 1 se derrumban.,,,,2,,En el juego desde la luna 5; no hace nada si tienes Protección ancestral
+d35,Evento,Desprendimiento,"Un bloque de hielo se desprende de la cornisa y aplasta tu torre más alta, sea cual sea su nivel.",,,,3,,En el juego desde la luna 9; no hace nada si tienes Protección ancestral

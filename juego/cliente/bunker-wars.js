@@ -1348,6 +1348,25 @@ function htmlAtaques(lista) {
   return `<div class="bw-turno-ataques">${bloques}</div>`;
 }
 
+/* Torres dañadas desde tu último turno (bombardeos y cartas de Destino): la
+   misma caja roja que los ataques, con el nivel de antes y el de ahora. */
+function htmlTorres(lista) {
+  if (!lista?.length) return "";
+  const filas = lista.map((t) => {
+    const tit = t.de
+      ? `${t.de} te ha bombardeado la torre ${t.pos}`
+      : `${t.carta ?? "El Destino"} te ha ${t.despues ? "dañado" : "derribado"} la torre ${t.pos}`;
+    const nivel = t.despues
+      ? `${torreEnRomano(t.antes)} → ${torreEnRomano(t.despues)}`
+      : `${torreEnRomano(t.antes)} → destruida`;
+    return `<div class="bw-turno-ataques-grupo bw-turno-torre">
+      <div class="bw-turno-ataques-tit"><b>${esc(tit)}</b></div>
+      <div class="bw-turno-ataques-det">${esc(`Nivel ${nivel}`)}</div>
+    </div>`;
+  }).join("");
+  return `<div class="bw-turno-ataques bw-turno-torres">${filas}</div>`;
+}
+
 function programarJornada(anim, { estrenaTurno, claveTurno }) {
   if (!tocaMesa || viendoJugador) return;
   registro(`jornada · fase ${faseMesa} · ${estrenaTurno ? "abre el aviso de turno" : "sigue"} · clave ${claveTurno}`);
@@ -1362,7 +1381,7 @@ function programarJornada(anim, { estrenaTurno, claveTurno }) {
       titulo: "",
       texto: "Es tu turno",
       clase: "modal-version",
-      html: htmlAtaques(ataquesEnCamino()),
+      html: htmlAtaques(ataquesEnCamino()) + htmlTorres(privadaMesa?.avisosTorre ?? []),
       botones: [{ texto: "Empezar", estilo: "boton", valor: "ok" }],
       obligatorio: true,
     }).then(async () => {
@@ -2125,6 +2144,8 @@ function imgDestino(d) {
     desercion: "ataque",
     subir_monstruos: "monstruo-nv3",
     bajar_monstruos: "monstruo-nv1",
+    ventisca: "ataque",
+    desprendimiento: "ataque",
     carta_roja: "vida",
   };
   /* Versión azul del dibujo, ya recortada sin fondo blanco: así se funde con
@@ -3364,6 +3385,8 @@ function textoDestino(d) {
     case "subir_monstruos": return "Tus monstruos de nivel 5 o inferior suben un rango";
     case "bajar_monstruos": return "Tus monstruos de nivel 2 o superior bajan un rango";
     case "colocar_monstruos": return `Pon ${d.cantidad ?? 3} monstruos de nivel ${n} en tus jaulas (criadero)`;
+    case "ventisca":        return "Todas tus torres bajan un nivel; las de nivel 1 se derrumban";
+    case "desprendimiento": return "Tu torre de más nivel se derrumba";
     case "carta_roja":      return "¡Carta roja! Desde ahora los monstruos suben de nivel";
     default:                return String(d.tipo ?? "");
   }
@@ -3888,6 +3911,11 @@ function abrirCarta(el) {
   const conTablero = jugable && !reemplazos
     && CON_TABLERO.includes(d.efecto) && opciones.length > 0;
   const elecciones = !reemplazos && !conTablero && opciones.length > 1 ? opciones : null;
+  /* Protección ancestral: el objetivo sigue en la lista, en gris y con el
+     motivo a la vista, para que se entienda que existe y que no se puede tocar. */
+  const todasBloqueadas = !!elecciones && elecciones.every(a => a.bloqueada);
+  const unicaBloqueada = !elecciones && !conTablero && !reemplazos
+    && opciones.length === 1 && !!opciones[0]?.bloqueada;
 
   /* Motivo por el que no se puede jugar, para el pie del modal. Las monedas se
      dicen también aunque el coste ya vaya en rojo: nunca está de más el número. */
@@ -3895,12 +3923,16 @@ function abrirCarta(el) {
     "evolucionar_torreta", "torreta2_gratis", "monstruo3_gratis", "subir_lab_o_arm"];
   const sinObjetivo = jugable && CON_OBJETIVO.includes(d.efecto) && opciones.length === 0;
   /* Si el pie dice que no hay objetivo, el botón no puede quedarse activo. */
-  const puedeUsar = jugable && !sinObjetivo;
+  const puedeUsar = jugable && !sinObjetivo && !unicaBloqueada;
   const motivo = jugable
     ? reemplazos
       ? "Tu búnker tiene dos ciencias. Al instalar esta sale una de las dos: elige cuál."
       : elecciones
-        ? "Elige el objetivo de la carta."
+        ? todasBloqueadas
+          ? opciones[0]?.motivo ?? "Ese rival no se puede tocar."
+          : "Elige el objetivo de la carta."
+        : unicaBloqueada
+        ? opciones[0]?.motivo ?? "Ese rival no se puede tocar."
         : sinObjetivo
           ? "Ahora mismo no hay ningún objetivo válido para esta carta: guárdala para más adelante."
           : ""
@@ -3937,7 +3969,7 @@ function abrirCarta(el) {
           : conTablero
             ? `<button type="button" class="bw-modal-usar" data-tablero="1">${esc(ETIQUETA_TABLERO[d.efecto] ?? "Elegir objetivo")}</button>`
           : elecciones
-            ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable ? "" : " disabled"}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir criadero") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
+            ? elecciones.map(a => `<button type="button" class="bw-modal-usar" data-accion="${accionesMesa.indexOf(a)}"${jugable && !a.bloqueada ? "" : " disabled"}${a.bloqueada ? ` title="${esc(a.motivo ?? "")}"` : ""}>${esc(a.edificio ? (a.edificio === "armeria" ? "Subir armería" : "Subir criadero") : (a.etiqueta ?? a.texto ?? "Usar carta"))}</button>`).join("")
             : `<button type="button" class="bw-modal-usar"${puedeUsar ? "" : " disabled"}${opciones.length === 1 ? ` data-accion="${accionesMesa.indexOf(opciones[0])}"` : ""}>Usar carta</button>`}
       </div>
       <button type="button" class="bw-modal-cancelar">Cancelar</button>

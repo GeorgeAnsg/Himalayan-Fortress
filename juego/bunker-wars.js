@@ -101,13 +101,17 @@ const PLANTILLAS_DESTINO = [
   { id:"d20", tipo:"aniquilar_entrada", tramo:1 },
   { id:"d28", tipo:"miedo", tramo:1 },
   { id:"d27", tipo:"avanzar_extra", tramo:2 },
-  { id:"d26", tipo:"convertir_aliado", tramo:2 },
   { id:"d30", tipo:"bajar_monstruos", nivelMin:2, tramo:2 },
   { id:"d23", tipo:"aniquilar_nivel", nivelMax:3, tramo:2 },
   { id:"d24", tipo:"matar_mayor", tramo:3 },
   { id:"d33", tipo:"desercion", tramo:3 },
-  { id:"d29", tipo:"subir_monstruos", nivelMax:5, tramo:3 },
   { id:"d31", tipo:"colocar_monstruos", nivel:3, cantidad:2, tramo:3 },
+  /* Estas dos castigan la defensa del que roba la carta: le tocan sus propias
+     torres. La Protección ancestral las anula. */
+  { id:"d34", tipo:"ventisca", tramo:2, titulo:"Ventisca",
+    descripcion:"Una ventisca ciega a los tuyos desde las almenas: todas tus torres bajan un nivel, y las de nivel 1 se derrumban." },
+  { id:"d35", tipo:"desprendimiento", tramo:3, titulo:"Desprendimiento",
+    descripcion:"Un bloque de hielo se desprende de la cornisa y aplasta tu torre más alta, sea cual sea su nivel." },
 ];
 
 /* Tramo de cada carta por su id: sirve para ponerle el tramo a las cartas que
@@ -517,6 +521,12 @@ function normalizarIds(e) {
 const CARTAS_RETIRADAS = new Set(["vuelo_seguro", "avanzar_rival_1"]);
 
 function retirarCartasViejas(e) {
+  /* De Destino salieron Subir rango y Convertir aliado: se quitan también de
+     las mesas empezadas, que si no seguirían robándolas de su mazo. */
+  const fueraDestino = new Set(["d26", "d29"]);
+  for (const clave of ["mazoDestino", "descarteDestino"]) {
+    if (Array.isArray(e[clave])) e[clave] = e[clave].filter(c => !fueraDestino.has(c?.id));
+  }
   for (const j of Object.values(e.jugadores ?? {})) {
     const listas = [j.mano, j.mazoBunker, j.descarteBunker, j.bunker?.recursos, j.bunker?.ciencia];
     for (const lista of listas) {
@@ -532,6 +542,13 @@ function retirarCartasViejas(e) {
    así que le faltan arrays enteros (`recursos_mix` nació después). Sin ellos,
    instalar una de esas cartas reventaba al hacer push y no se guardaba nada:
    ni las monedas, ni el decreto, ni la carta fuera de la mano. */
+/* Torres que te han tocado desde tu último turno: el cliente las enseña en el
+   aviso de «Es tu turno», en la misma caja roja que los ataques. */
+function avisosTorre(j) {
+  if (!Array.isArray(j.avisosTorre)) j.avisosTorre = [];
+  return j.avisosTorre;
+}
+
 function normalizarBunker(j) {
   if (!j) return;
   const b = j.bunker ?? (j.bunker = {});
@@ -778,6 +795,7 @@ const bunkerWars = {
         e.jugadores[p.de]?.vivo
         && (p.de === jugadorId || esAliado(e, jugadorId, p.de))),
       enviosPendientes: (e.regalos ?? []).filter((g) => g.para === jugadorId),
+      avisosTorre: j.avisosTorre ?? [],
       vistasAliados: Object.fromEntries(
         Object.entries(e.jugadores)
           .filter(([id, o]) => id !== jugadorId && o.vivo && esAliado(e, jugadorId, id))
@@ -1542,6 +1560,10 @@ function faseFinTurno(e, jugadorId, accion, evs) {
    usa al final del turno y también cuando el jugador pulsa «pasar turno» en
    cualquier otra fase. */
 function cerrarTurnoYAvanzar(e, jugadorId, evs) {
+  /* Los avisos de torres dañadas se gastan al cerrar tu turno: ya se han visto
+     en el aviso de «Es tu turno» y a partir de aquí cuentan los nuevos. */
+  const quienCierra = e.jugadores[jugadorId];
+  if (quienCierra) quienCierra.avisosTorre = [];
   const lunaRoja = avanzarTurno(e);
   e.fase = "lanzar";
   comprobarFin(e);
@@ -1673,16 +1695,24 @@ function legalesAcciones(e, jugadorId) {
     } else if (carta.efecto === "bombardear") {
       Object.values(e.jugadores).forEach(enemigo => {
         if (enemigo.id === j.id) return;
-        /* Protección ancestral: sus torres no se pueden bajar ni destruir. */
-        if (tieneCiencia(enemigo, "proteccion_torres")) return;
+        /* Protección ancestral: sus torres no se pueden bajar ni destruir. El
+           objetivo se sigue enseñando, pero bloqueado y con el motivo, para
+           que se vea que existe y por qué no se puede tocar. */
+        const protegido = tieneCiencia(enemigo, "proteccion_torres");
         normalizarTorres(enemigo);
         enemigo.bunker.torres.forEach((t, i) => {
           if (!t) return;
           acc.push({
             tipo: "mejorar_bunker", cartaId: carta.uid,
             objetivo: { enemigoId: enemigo.id, posicion: i + 1 },
-            etiqueta: `Bombardear torre ${i + 1} de ${enemigo.nombre} (nv ${t.nivel})`,
-            texto: `Bombardear: bajar torre ${i + 1} de ${enemigo.nombre} a nivel ${t.nivel - 1 || "destruida"}`,
+            bloqueada: protegido || undefined,
+            motivo: protegido ? `${enemigo.nombre} tiene Protección ancestral` : undefined,
+            etiqueta: protegido
+              ? `Torre ${i + 1} de ${enemigo.nombre} (nv ${t.nivel}) · Protección ancestral`
+              : `Bombardear torre ${i + 1} de ${enemigo.nombre} (nv ${t.nivel})`,
+            texto: protegido
+              ? `Bombardear: la torre ${i + 1} de ${enemigo.nombre} está protegida`
+              : `Bombardear: bajar torre ${i + 1} de ${enemigo.nombre} a nivel ${t.nivel - 1 || "destruida"}`,
           });
         });
       });
@@ -1885,6 +1915,9 @@ function botValorCarta(c) {
 }
 
 function botPuntuarMejora(e, j, a) {
+  /* Un objetivo bloqueado (Protección ancestral) no se elige nunca: si el bot
+     lo intentara, el motor lo rechazaría y volvería a elegirlo en bucle. */
+  if (a.bloqueada) return 0;
   const carta = j.mano.find((c) => c.uid === a.cartaId);
   if (!carta) return 0;
   let puntos = botValorCarta(carta) * 10;
@@ -2298,9 +2331,11 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
       }
       if (o.torre.nivel <= 1) {
         o.enemigo.bunker.torres[o.pos - 1] = null;
+        avisosTorre(o.enemigo).push({ de: j.nombre, pos: o.pos, antes: o.torre.nivel, despues: 0 });
         evs.push({ tipo: "torre", texto: `${j.nombre} bombardea y destruye la torre ${o.pos} de ${o.enemigo.nombre}.` });
       } else {
         o.torre.nivel -= 1;
+        avisosTorre(o.enemigo).push({ de: j.nombre, pos: o.pos, antes: o.torre.nivel + 1, despues: o.torre.nivel });
         evs.push({ tipo: "torre", texto: `${j.nombre} bombardea la torre ${o.pos} de ${o.enemigo.nombre}: baja a nivel ${o.torre.nivel}.` });
       }
       return true;
@@ -2721,6 +2756,51 @@ function resolverDestino(e, jugadorId, carta) {
         o.f.tipo = "atacante";
         o.f.dueno = j.id;
         evs.push({ tipo: "convertir", texto: `Un monstruo ${o.f.nivel} de ${j.nombre} deserta en la escalera ${o.s.id}.` });
+      }
+      break;
+    }
+    case "ventisca": {
+      /* Cae sobre quien roba la carta: sus torres, no las del resto. */
+      normalizarTorres(j);
+      if (tieneCiencia(j, "proteccion_torres")) {
+        evs.push({ tipo: "torre", a: jugadorId,
+          texto: `La protección ancestral de ${j.nombre} aguanta la ventisca.` });
+        break;
+      }
+      let danadas = 0, caidas = 0;
+      j.bunker.torres.forEach((t, i) => {
+        if (!t) return;
+        const antes = t.nivel;
+        if (antes > 1) { t.nivel = antes - 1; danadas++; }
+        else { j.bunker.torres[i] = null; caidas++; }
+        avisosTorre(j).push({ carta: "Ventisca", pos: i + 1, antes, despues: antes > 1 ? antes - 1 : 0 });
+      });
+      if (danadas || caidas) {
+        evs.push({ tipo: "torre", a: jugadorId,
+          texto: `Ventisca: las torres de ${j.nombre} bajan un nivel (${danadas} dañadas y ${caidas} derribadas).` });
+      } else {
+        evs.push({ tipo: "torre", texto: `La ventisca no encuentra torres en el búnker de ${j.nombre}.` });
+      }
+      break;
+    }
+    case "desprendimiento": {
+      normalizarTorres(j);
+      if (tieneCiencia(j, "proteccion_torres")) {
+        evs.push({ tipo: "torre", a: jugadorId,
+          texto: `La protección ancestral de ${j.nombre} aguanta el desprendimiento.` });
+        break;
+      }
+      let alto = -1, nivel = 0;
+      j.bunker.torres.forEach((t, i) => {
+        if (t && t.nivel > nivel) { alto = i; nivel = t.nivel; }
+      });
+      if (alto >= 0) {
+        j.bunker.torres[alto] = null;
+        avisosTorre(j).push({ carta: "Desprendimiento", pos: alto + 1, antes: nivel, despues: 0 });
+        evs.push({ tipo: "torre", a: jugadorId,
+          texto: `Desprendimiento: la torre ${alto + 1} de ${j.nombre} (nivel ${nivel}) queda aplastada.` });
+      } else {
+        evs.push({ tipo: "torre", texto: `El desprendimiento no encuentra torres en el búnker de ${j.nombre}.` });
       }
       break;
     }
