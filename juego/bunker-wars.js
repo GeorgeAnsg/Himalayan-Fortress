@@ -1497,7 +1497,12 @@ function faseDescartar(e, jugadorId, accion, evs) {
 
   for (const uid of ids) {
     const idx = j.mano.findIndex(c => c.uid === uid);
-    if (idx >= 0) j.descarteBunker.push(j.mano.splice(idx, 1)[0]);
+    if (idx >= 0) {
+      /* La carta descartada va al final del mazo en el acto: así el mazo no se
+         queda vacío a mitad de ronda y vuelve a salir cuando le toca, sin
+         esperar a que se baraje el descarte. */
+      j.mazoBunker.push(j.mano.splice(idx, 1)[0]);
+    }
   }
 
   // Robar hasta 4 antes de cerrar la jornada.
