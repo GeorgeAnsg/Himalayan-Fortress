@@ -3148,17 +3148,19 @@ function abrirCriadero(boxInicial = null) {
      cuadrado, redondo y a trazos, sin nada dentro. */
   const celda = (m) => {
     if (m.nivel > max) {
-      return `<div class="bw-box-slot bw-criar-hueco" title="Criadero ${ROMANOS[nivelCriadero] || nivelCriadero}: todavía no se puede criar ${esc(m.nombre)}"></div>`;
+      return `<div class="bw-criar-item"><div class="bw-box-slot bw-criar-hueco" title="Criadero ${ROMANOS[nivelCriadero] || nivelCriadero}: todavía no se puede criar ${esc(m.nombre)}"></div></div>`;
     }
     const monedas = monedasDe(m);
     const puede = monedas <= energiaMesa && libre;
     return `
-      <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
-        <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
-        <b class="bw-criar-coste" title="Cuesta ${monedas} moneda${monedas === 1 ? "" : "s"}">${monedas}</b>
-        <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}">${m.puntos}</b>
-        <span class="bw-criar-nombre">${esc(m.nombre)}</span>
-      </button>`;
+      <div class="bw-criar-item">
+        <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
+          <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
+          <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}">${m.puntos}</b>
+          <span class="bw-criar-nombre">${esc(m.nombre)}</span>
+        </button>
+        <span class="bw-criar-coste">${monedas} ${monedas === 1 ? "moneda" : "monedas"}</span>
+      </div>`;
   };
 
   const fondo = document.createElement("div");
@@ -3171,6 +3173,7 @@ function abrirCriadero(boxInicial = null) {
         <button class="bw-panel-x" type="button" data-cerrar-criadero aria-label="Cerrar">×</button>
       </div>
       <div class="bw-criar-grid">${lista.map(celda).join("")}</div>
+      <p class="bw-criar-pista">Elige el monstruo que quieres criar</p>
       <p class="bw-desc-nota"></p>
       <div class="bw-modal-acciones">
         <button type="button" class="bw-modal-usar bw-criar-ok" disabled>Criar</button>
@@ -5631,13 +5634,16 @@ function css() {
       display:grid; grid-template-columns:repeat(4, minmax(0, 1fr));
       gap:8px; width:min(340px,100%); margin:0 auto;
     }
-    .bw-criar-celda { position:relative; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
+    /* Cada monstruo es una columna: su cuadrado y, debajo, lo que cuesta. */
+    .bw-criar-item { display:flex; flex-direction:column; gap:3px; min-width:0; }
+    .bw-criar-celda { position:relative; width:100%; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
     .bw-criar-celda .bw-box-img { height:84%; max-width:84%; }
-    /* El monstruo que el criadero todavía no alcanza: el mismo cuadrado, pero
-       redondo, con el borde a trazos y sin nada dentro. */
+    /* El monstruo que el criadero todavía no alcanza: el mismo cuadrado, con
+       las esquinas redondeadas, el borde a trazos y sin nada dentro. */
     .bw-criar-hueco {
+      width:100%;
       border:1px dashed rgba(244,236,221,.42);
-      border-radius:50%;
+      border-radius:8px;
       background:rgba(0,0,0,.14);
     }
     .bw-criar-nombre {
@@ -5649,17 +5655,16 @@ function css() {
       font:700 8.5px/1.2 ui-sans-serif, system-ui, sans-serif;
       color:#12161a; background:rgba(232,221,200,.94);
     }
+    /* Lo que cuesta, debajo de su cuadrado y en el oro de las monedas de la
+       fortaleza (#e0a33f, el de la pastilla del botín y del reparto). */
     .bw-criar-coste {
-      position:absolute; top:3px; left:3px; z-index:2;
-      min-width:17px; height:17px; padding:0 3px; box-sizing:border-box;
-      display:grid; place-items:center; border-radius:50%;
-      background:rgba(224,163,63,.95); color:#12161a;
-      font:800 10px/1 ui-monospace, monospace;
-      box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
+      text-align:center; white-space:nowrap;
+      font:700 8.5px/1.2 ui-sans-serif, system-ui, sans-serif;
+      color:#e0a33f;
     }
-    /* La fuerza del monstruo, a la derecha: el mismo círculo que el coste pero
-       en el azul de la casa (#1a3560, el de los niveles de las jaulas y los
-       recursos de la fortaleza) y sin más dibujo que la cifra. */
+    /* La fuerza del monstruo, a la derecha y en el azul de la casa (#1a3560,
+       el de los niveles de las jaulas y los recursos de la fortaleza), sin más
+       dibujo que la cifra. */
     .bw-criar-fuerza {
       position:absolute; top:3px; right:3px; z-index:2;
       min-width:17px; height:17px; padding:0 3px; box-sizing:border-box;
@@ -5694,10 +5699,15 @@ function css() {
     /* La línea va 20 px por debajo del título; con 30 px de margen más el gap
        de la rejilla, quedan otros 20 px de aire hasta los botones de jaula. */
     #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:30px; }
-    /* El botón de criar va debajo de los cuadrados; la nota, si está vacía,
-       no ocupa ni el renglón ni su hueco. */
+    /* La pista va pegada a los cuadrados, en el gris de las notas del panel. */
+    .bw-criar-pista {
+      margin:0; text-align:center;
+      font:400 11px/1.35 ui-sans-serif, system-ui, sans-serif; color:#8b7e6b;
+    }
+    /* El botón de criar va debajo de la pista, con 30 px de aire (20 de margen
+       más los 10 del gap); la nota, si está vacía, no ocupa ni su hueco. */
     .bw-criar-ok { min-width:170px; }
-    #bw-modal-criadero .bw-modal-acciones { margin-top:0; }
+    #bw-modal-criadero .bw-modal-acciones { margin-top:20px; }
     #bw-modal-criadero .bw-desc-nota { min-height:0; }
     #bw-modal-criadero .bw-desc-nota:empty { display:none; }
   </style>`;
