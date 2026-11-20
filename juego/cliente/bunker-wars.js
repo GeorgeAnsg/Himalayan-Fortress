@@ -1898,13 +1898,25 @@ function abrirLanzar(ops) {
     if (r?.error) aviso(r.error, { error: true });
   };
 
+  /* El botón de lanzar enseña el monstruo que va a salir, con su nivel y la
+     lanzadera de la que sale: con dos lanzaderas, «L1» y «L2» obligaban a
+     recordar qué había en cada una. */
+  const botonLanzar = (a) => {
+    const mon = lanzaderasMesa[a.lanzadera] ?? null;
+    const nv = mon?.nivel ?? null;
+    const dos = lanzaderasMesa.filter(Boolean).length > 1;
+    const titulo = `Lanzar monstruo ${nv ?? "?"} (lanzadera ${a.lanzadera + 1}) por la escalera ${a.sendero} (la ${escaleraDe(a.sendero)})`;
+    return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="${esc(titulo)}" aria-label="${esc(titulo)}">${
+      nv ? `<img src="${imgMonstruo(nv, false, true)}" alt="" class="bw-lz-lanzar-img"><b class="bw-lz-lanzar-nv">${nv}</b>` : ""
+    }${dos ? `<span class="bw-lz-lanzar-l">L${a.lanzadera + 1}</span>` : ""}</button>`;
+  };
+
   /* Cada calle enseña cinco huecos: arriba la torre y debajo sus cuatro
      peldaños. En el detalle se añade un botón cuadrado de lanzar bajo cada
      calle; en la lista de rivales solo se ve el resumen. */
   const callesRival = (r, { rivalId = null, elegir = false, bloqueado = false } = {}) => {
     const torres = r.bunker?.torres ?? [];
     const senderos = r.senderos ?? [];
-    const dos = lanzaderasMesa.filter(Boolean).length > 1;
 
     return `<span class="bw-lz-calles${elegir ? " detalle" : ""}">${[0, 1, 2].map(i => {
       const sid = senderos[i]?.id ?? i + 1;
@@ -1928,11 +1940,7 @@ function abrirLanzar(ops) {
         : [];
       const botones = elegir
         ? (suyas.length
-          ? suyas.map(a => {
-            const mon = lanzaderasMesa[a.lanzadera] ?? null;
-            const txt = dos ? `L${a.lanzadera + 1}` : "Lanzar";
-            return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="Lanzar monstruo ${mon?.nivel ?? "?"} por la escalera ${sid} (la ${escaleraDe(sid)})">${txt}</button>`;
-          }).join("")
+          ? suyas.map(botonLanzar).join("")
           : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`)
         : "";
 
@@ -1949,18 +1957,13 @@ function abrirLanzar(ops) {
      calle y su botón de lanzar debajo. */
   const tableroRival = (id, { elegir = false } = {}) => {
     const r = jugadoresMesa.find(x => x.id === id) ?? {};
-    const dos = lanzaderasMesa.filter(Boolean).length > 1;
 
     const accionesDe = (sendero, i) => {
       if (!elegir) return "";
       const sid = sendero?.id ?? i + 1;
       const suyas = ops.filter(a => a.rivalId === id && a.sendero === sid);
       const botones = suyas.length
-        ? suyas.map(a => {
-          const mon = lanzaderasMesa[a.lanzadera] ?? null;
-          const txt = dos ? `L${a.lanzadera + 1}` : "Lanzar";
-          return `<button type="button" class="bw-lz-lanzar" data-op="${ops.indexOf(a)}" title="Lanzar monstruo ${mon?.nivel ?? "?"} por la escalera ${sid} (la ${escaleraDe(sid)})">${txt}</button>`;
-        }).join("")
+        ? suyas.map(botonLanzar).join("")
         : `<button type="button" class="bw-lz-lanzar bloqueado" disabled title="No puedes lanzar por esta escalera">Lanzar</button>`;
       return `<div class="bw-torre-lanzar">${botones}</div>`;
     };
@@ -5805,11 +5808,25 @@ function css() {
     }
     /* El botón de lanzar, cuadrado y debajo de cada calle. */
     .bw-lz-lanzar {
+      position:relative; overflow:hidden;
       width:42px; height:42px; min-height:42px; aspect-ratio:1;
-      margin:4px auto 0; padding:0; border-radius:6px; border:none; cursor:pointer;
+      margin:4px auto 0; padding:2px; border-radius:6px; border:none; cursor:pointer;
       display:grid; place-items:center; box-sizing:border-box;
       font:800 10px/1.05 ui-monospace,monospace;
       background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1); color:#12161a;
+    }
+    /* Dentro va el monstruo que va a salir: su vista de lanzadera, su nivel y
+       de qué lanzadera sale, para no tener que recordarlo. */
+    .bw-lz-lanzar-img { width:100%; height:100%; object-fit:contain; display:block; }
+    .bw-lz-lanzar-nv {
+      position:absolute; left:1px; bottom:0; padding:0 3px; border-radius:3px;
+      font:800 9px/1.3 ui-monospace,monospace; color:#12161a;
+      background:rgba(255,255,255,.82);
+    }
+    .bw-lz-lanzar-l {
+      position:absolute; right:1px; top:0; padding:0 3px; border-radius:3px;
+      font:800 9px/1.3 ui-monospace,monospace; color:#f4ecdd;
+      background:rgba(18,22,26,.8);
     }
     .bw-lz-calles.detalle .bw-lz-lanzar { width:46px; height:46px; min-height:46px; }
     .bw-lz-lanzar.bloqueado,
