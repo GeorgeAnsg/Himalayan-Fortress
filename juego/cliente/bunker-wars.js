@@ -5693,7 +5693,7 @@ function css() {
        la pantalla (la hoja acaba justo encima del menú). */
     #bw-modal-criadero .bw-modal {
       width:100%; gap:10px;
-      padding-bottom:20px;
+      padding-bottom:34px;
       max-height:calc(100vh - var(--alto-nav, 34px) - 12px);
     }
     /* La línea va 20 px por debajo del título; con 30 px de margen más el gap
@@ -5704,10 +5704,11 @@ function css() {
       margin:0; text-align:center;
       font:400 11px/1.35 ui-sans-serif, system-ui, sans-serif; color:#8b7e6b;
     }
-    /* El botón de criar va debajo de la pista, con 30 px de aire (20 de margen
-       más los 10 del gap); la nota, si está vacía, no ocupa ni su hueco. */
+    /* El botón de criar va debajo de la pista con 20 px de aire (10 de margen
+       más los 10 del gap) y deja 34 px hasta el borde de la hoja; la nota, si
+       está vacía, no ocupa ni su hueco. */
     .bw-criar-ok { min-width:170px; }
-    #bw-modal-criadero .bw-modal-acciones { margin-top:20px; }
+    #bw-modal-criadero .bw-modal-acciones { margin-top:10px; }
     #bw-modal-criadero .bw-desc-nota { min-height:0; }
     #bw-modal-criadero .bw-desc-nota:empty { display:none; }
   </style>`;
