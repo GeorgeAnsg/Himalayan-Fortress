@@ -2025,13 +2025,16 @@ function abrirLanzar(ops) {
      con el monstruo y su círculo de nivel. Se arrastran a la calle donde
      quieras soltarlas. */
   const chipLanzadera = (i) => {
-    const nv = lanzaderasModal[i]?.nivel ?? null;
+    const mon = lanzaderasModal[i];
+    const nv = mon?.nivel ?? null;
     if (!nv) return "";
+    const imgNv = nivelImgDe(mon);
+    const nvLabel = mon?.vuela ? "✦" : nv;
     const dos = lanzaderasModal.filter(Boolean).length > 1;
-    const titulo = `Monstruo ${nv} de la lanzadera ${i + 1}: arrástralo a una calle`;
+    const titulo = `${mon?.vuela ? "Aves de bruma" : `Monstruo ${nv}`} de la lanzadera ${i + 1}: arrástralo a una calle`;
     return `<div class="bw-lz-mia" data-lanzadera="${i}" role="button" tabindex="0"
                  aria-label="${esc(titulo)}" title="${esc(titulo)}"` +
-      `><img src="${imgMonstruo(nv, false, true)}" alt=""><b class="bw-lz-mia-nv">${nv}</b>` +
+      `><img src="${imgMonstruo(imgNv, false, true)}" alt=""><b class="bw-lz-mia-nv">${nvLabel}</b>` +
       `${dos ? `<span class="bw-lz-mia-l">L${i + 1}</span>` : ""}</div>`;
   };
 
