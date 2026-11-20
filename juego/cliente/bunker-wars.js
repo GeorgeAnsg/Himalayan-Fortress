@@ -3137,14 +3137,16 @@ function abrirCriadero(boxInicial = null) {
   const libre = libresEnBox(boxCriadero) > 0;
 
   /* Cuadrados de jaula, como los del búnker: el monstruo dentro, su nombre
-     debajo y el coste en la esquina. Nada de cartas de papel. */
+     debajo, el coste a la izquierda y la fuerza a la derecha. Nada de cartas
+     de papel. */
   const celda = (m) => {
     const monedas = monedasDe(m);
     const puede = monedas <= energiaMesa && libre;
     return `
       <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
         <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
-        <b class="bw-criar-coste">${monedas}</b>
+        <b class="bw-criar-coste" title="Cuesta ${monedas} moneda${monedas === 1 ? "" : "s"}">${monedas}</b>
+        <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}"><img src="${BASE_IMG}/iconos/espadas.png" alt="">${m.puntos}</b>
         <span class="bw-criar-nombre">${esc(m.nombre)}</span>
       </button>`;
   };
@@ -4645,7 +4647,7 @@ function css() {
     .box-panel .bw-panel-label, .manuscritos-panel .bw-panel-label,
     .torres-panel .bw-panel-label, .mapa-panel .bw-panel-label,
     .aliados-panel .bw-panel-label, .disparo-panel .bw-panel-label,
-    .envio-panel .bw-panel-label {
+    .envio-panel .bw-panel-label, #bw-modal-criadero .bw-panel-label {
       font:700 18px/1.25 ui-serif, Georgia, serif;
       text-transform:none; letter-spacing:.01em;
       color:#f4ecdd; text-align:center;
@@ -5622,8 +5624,9 @@ function css() {
       margin:0; max-width:min(340px,90vw); text-align:center;
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
-    /* Criadero: toggle de jaula y cartas de papel para elegir el monstruo */
-    /* Mismo ancho que la rejilla de cartas (76 % del modal). */
+    /* Criadero: toggle de jaula y cuadrados para elegir el monstruo */
+    /* Los dos botones van en una sola línea, así que el toggle puede ser más
+       ancho que la rejilla de cuadrados. */
     .bw-criar-toggle { display:flex; gap:8px; width:76%; margin:0 auto; }
     /* Jaula y huecos libres en la misma línea: el toggle no crece de alto, y
        los dos botones miden lo mismo aunque uno diga "2 libres". */
@@ -5641,10 +5644,12 @@ function css() {
     }
     .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
     /* Monstruos criables en cuadrados de jaula: dos por fila, con el bicho
-       dentro, su nombre debajo y lo que cuesta en la esquina. */
+       dentro, su nombre debajo, el coste a la izquierda y la fuerza a la
+       derecha. Un 30 % más pequeños que la primera versión (140 → ~98 px de
+       lado en un móvil normal) para que el modal quepa entero de alto. */
     .bw-criar-grid {
       display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
-      gap:8px; width:min(300px,74%); margin:0 auto;
+      gap:8px; width:min(210px,56%); margin:0 auto;
     }
     .bw-criar-celda { position:relative; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
     .bw-criar-celda .bw-box-img { height:84%; max-width:84%; }
@@ -5663,6 +5668,17 @@ function css() {
       font:800 10px/1 ui-monospace, monospace;
       box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
     }
+    /* La fuerza del monstruo, a la derecha y en el borgoña de los ataques: las
+       espadas y el número, como la pastilla de nivel de las jaulas. */
+    .bw-criar-fuerza {
+      position:absolute; top:3px; right:3px; z-index:2;
+      height:17px; padding:0 4px 0 3px; box-sizing:border-box;
+      display:flex; align-items:center; gap:2px; border-radius:9px;
+      background:rgba(122,16,16,.96); color:#fff;
+      font:800 10px/1 ui-monospace, monospace;
+      box-shadow:0 0 0 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35);
+    }
+    .bw-criar-fuerza img { width:11px; height:11px; object-fit:contain; }
     .bw-criar-celda.sel { outline:2px solid #e0a33f; outline-offset:1px; }
     .bw-criar-celda.sel .bw-criar-nombre { background:#e0a33f; }
     /* El que no se puede criar (sin monedas o jaula llena) queda apagado bajo
@@ -5678,13 +5694,21 @@ function css() {
     #bw-modal-criadero { background:rgba(8,7,5,.55); }
     /* La cabecera del criadero es la de los paneles (X incluida) y el pie la
        misma línea de botón que el resto de modales. */
-    #bw-modal-criadero .bw-modal { width:100%; }
-    #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:2px; }
-    /* El botón de criar va debajo de las cartas, como el de descartar, y sube
-       sobre el hueco de la nota (que casi siempre está vacía). */
+    /* El criadero necesita más alto que el 50 % de las otras hojas para que
+       la parrilla no se salga por arriba ni por abajo; aun así nunca pasa de
+       la pantalla (la hoja acaba justo encima del menú). */
+    #bw-modal-criadero .bw-modal {
+      width:100%; gap:10px;
+      max-height:calc(100vh - var(--alto-nav, 34px) - 12px);
+    }
+    /* 14 px + el gap dejan la línea del título 4 px por encima del toggle. */
+    #bw-modal-criadero .bw-panel-head { width:100%; margin-bottom:14px; }
+    /* El botón de criar va debajo de los cuadrados; la nota, si está vacía,
+       no ocupa ni el renglón ni su hueco. */
     .bw-criar-ok { min-width:170px; }
-    #bw-modal-criadero .bw-modal-acciones { margin-top:-6px; }
+    #bw-modal-criadero .bw-modal-acciones { margin-top:0; }
     #bw-modal-criadero .bw-desc-nota { min-height:0; }
+    #bw-modal-criadero .bw-desc-nota:empty { display:none; }
   </style>`;
 }
 
