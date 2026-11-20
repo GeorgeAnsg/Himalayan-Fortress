@@ -143,10 +143,13 @@ const PLANTILLAS_BUNKER = [
   { tipo:"recursos_i", efecto:"monedas4", coste:2, ganancia:4, titulo: "Monedas 4", descripcion: "Paga 2 monedas y 1 decreto: recibes 4 monedas al momento (ganas 2)." },
   { tipo:"recursos_i", efecto:"monedas6", coste:3, ganancia:6, titulo: "Monedas 6", descripcion: "Paga 3 monedas y 1 decreto: recibes 6 monedas al momento (ganas 3)." },
   { tipo:"recursos_i", efecto:"monedas6", coste:3, ganancia:6, titulo: "Monedas 6", descripcion: "Paga 3 monedas y 1 decreto: recibes 6 monedas al momento (ganas 3)." },
-  { tipo:"armeria",     nivel:2, coste:2, titulo: "ARMERÍA 2", descripcion: "Puedes armar torretas de ataque 1 en un espacio habilitado." },
+  /* La armería y el criadero arrancan en nivel 1. Las cartas +1 suben un nivel
+     cada una, pero con techo: armería hasta 2 y criadero hasta 3. Para el
+     nivel 3 de armería y el 4 de criadero están las cartas de salto, que
+     ponen el nivel de golpe. */
+  { tipo:"armeria_up",   nivel:2, coste:2, titulo: "Armería +1", descripcion: "Sube un nivel la armería, hasta el nivel 2. Para el nivel 3 está la carta ARMERÍA 3." },
   { tipo:"armeria",     nivel:3, coste:2, titulo: "ARMERÍA 3", descripcion: "Puedes armar torretas de ataque 2 en un espacio habilitado." },
-  { tipo:"laboratorio", nivel:2, coste:2, titulo: "CRIADERO 2", descripcion: "Te permite criar rastreadores y carroñeros en la jaula." },
-  { tipo:"laboratorio", nivel:3, coste:2, titulo: "CRIADERO 3", descripcion: "Te permite criar rastreadores, carroñeros y yetis en la jaula." },
+  { tipo:"laboratorio_up", nivel:3, coste:2, titulo: "Criadero +1", descripcion: "Sube un nivel el criadero, hasta el nivel 3. Para el nivel 4 está la carta CRIADERO 4." },
   { tipo:"laboratorio", nivel:4, coste:2, titulo: "CRIADERO 4", descripcion: "Te permite criar rastreadores, carroñeros, yetis y colosos de hielo en la jaula." },
   /* Textos copiados de las cartas físicas: no inventar efectos ni redacciones. */
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
@@ -185,6 +188,7 @@ const TOPE_RECURSOS = 4;
 // Una copia de cada carta — mazo sin duplicados
 const COPIAS_BUNKER = {
   recursos: 1, decreto: 1, recursos_mix: 1, recursos_i: 1,
+  armeria_up: 2, laboratorio_up: 3,
   armeria: 1, laboratorio: 1, ciencia: 1, ciencia_i: 1, dicho: 1,
 };
 
@@ -233,6 +237,9 @@ function cartasUtiles(j) {
     if (!n) return;
     if (p.tipo === "armeria" && p.nivel <= (j.bunker.armeria ?? 0)) return;
     if (p.tipo === "laboratorio" && p.nivel <= (j.bunker.laboratorio ?? 0)) return;
+    /* Las +1 desaparecen del mazo cuando su edificio ya está en el techo. */
+    if (p.tipo === "armeria_up"     && (j.bunker.armeria ?? 1) >= 2) return;
+    if (p.tipo === "laboratorio_up" && (j.bunker.laboratorio ?? 1) >= 3) return;
     if (p.tipo === "ciencia" && tieneCiencia(j, p.efecto)) return;
     for (let k = 0; k < n; k++) cartas.push({ ...p, plantilla: i, uid: uid("cb") });
   });
@@ -1689,6 +1696,12 @@ function legalesAcciones(e, jugadorId) {
         acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid, edificio: "armeria",
                    texto: `Jugar ${nombre} · armería a nivel ${(j.bunker.armeria ?? 0) + 1}` });
       }
+    } else if (carta.tipo === "armeria_up") {
+      acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid,
+                 texto: `Jugar ${nombre} · armería a nivel ${Math.min(2, (j.bunker.armeria ?? 1) + 1)}` });
+    } else if (carta.tipo === "laboratorio_up") {
+      acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid,
+                 texto: `Jugar ${nombre} · criadero a nivel ${Math.min(3, (j.bunker.laboratorio ?? 1) + 1)}` });
     } else {
       acc.push({ tipo: "mejorar_bunker", cartaId: carta.uid, texto: `Jugar ${nombre}` });
     }
@@ -1851,7 +1864,9 @@ function botValorCarta(c) {
   if (c.tipo === "recursos") return 100;
   if (c.tipo === "recursos_i") return 88;
   if (c.tipo === "armeria") return 96;
+  if (c.tipo === "armeria_up") return 94;
   if (c.tipo === "laboratorio") return 72;
+  if (c.tipo === "laboratorio_up") return 74;
   if (c.efecto === "subir_recursos") return 98;
   if (c.efecto === "subir_armeria") return 95;
   if (c.efecto === "subir_lab_o_arm") return 92;
@@ -2034,6 +2049,8 @@ function puedeJugarCarta(j, carta) {
   if (carta.tipo === "laboratorio") {
     return carta.nivel === j.bunker.laboratorio + 1;
   }
+  if (carta.tipo === "armeria_up")     return (j.bunker.armeria ?? 1) < 2;
+  if (carta.tipo === "laboratorio_up") return (j.bunker.laboratorio ?? 1) < 3;
   if (carta.tipo === "recursos")     { return true; }
   if (carta.tipo === "decreto")      { return true; }
   if (carta.tipo === "recursos_mix") { return true; }
@@ -2310,6 +2327,14 @@ function aplicarMejoraBunker(j, carta, e, evs, reemplazo, accion) {
   }
   if (carta.tipo === "armeria")     { j.bunker.armeria     = carta.nivel; return; }
   if (carta.tipo === "laboratorio") { j.bunker.laboratorio = carta.nivel; return; }
+  if (carta.tipo === "armeria_up") {
+    j.bunker.armeria = Math.min(2, (j.bunker.armeria ?? 1) + 1);
+    return;
+  }
+  if (carta.tipo === "laboratorio_up") {
+    j.bunker.laboratorio = Math.min(3, (j.bunker.laboratorio ?? 1) + 1);
+    return;
+  }
   if (carta.tipo === "ciencia") {
     if (cienciaLlena(j)) {
       const fuera = j.bunker.ciencia.find(c => c.efecto === reemplazo);

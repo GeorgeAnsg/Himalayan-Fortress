@@ -3757,6 +3757,9 @@ function defsCarta(c) {
     recursos_i:    { emoji: "⚡", label: c.titulo ?? "Monedas",  cls: "recursos",  costo: c.coste },
     armeria:       { emoji: "🔧", label: c.titulo ?? `Armería nv${c.nivel ?? ""}`,   cls: "armeria",       costo: c.coste },
     laboratorio:   { emoji: "🧪", label: c.titulo ?? `Criadero nv${c.nivel ?? ""}`,  cls: "laboratorio",   costo: c.coste },
+    /* Suben un nivel con techo: armería hasta 2 y criadero hasta 3. */
+    armeria_up:    { emoji: "🔧", label: c.titulo ?? "Armería +1",  cls: "armeria",      costo: c.coste },
+    laboratorio_up:{ emoji: "🧪", label: c.titulo ?? "Criadero +1", cls: "laboratorio",  costo: c.coste },
     ciencia:       { emoji: "🔬", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Ciencia",    cls: "ciencia",    costo: c.coste },
     ciencia_i:     { emoji: "⚗️", label: c.titulo ?? NOMBRES_EFECTO[c.efecto] ?? c.efecto ?? "Inmediata",  cls: "ciencia_i",  costo: c.coste },
     /* Dichos: no se juegan, solo se descartan. */
@@ -3789,6 +3792,8 @@ function imgCarta(tipo, nivel) {
     recursos_i:   "recursos",
     armeria:      "armeria",
     laboratorio:  "laboratorio",
+    armeria_up:     "armeria",
+    laboratorio_up: "laboratorio",
     ciencia:      "ciencia",
     ciencia_i:    "ciencia",
     /* Los dichos comparten el pergamino de los decretos. */
@@ -3804,6 +3809,8 @@ function cartaValida(c, bunker) {
   if (!bunker) return true;
   if (c.tipo === "armeria")     return c.nivel === (bunker.armeria ?? 0) + 1;
   if (c.tipo === "laboratorio") return c.nivel === (bunker.laboratorio ?? 0) + 1;
+  if (c.tipo === "armeria_up")     return (bunker.armeria ?? 1) < 2;
+  if (c.tipo === "laboratorio_up") return (bunker.laboratorio ?? 1) < 3;
   if (c.tipo === "recursos")    return true;
   if (c.tipo === "decreto")     return true;
   if (c.tipo === "recursos_mix") return true;
