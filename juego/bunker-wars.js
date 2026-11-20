@@ -928,7 +928,7 @@ function faseAvance(e, jugadorId, evs) {
           s.posiciones[dest1] = f;
           s.posiciones[pos - 1] = null;
         }
-        /* Si ambas están ocupadas, no avanza. */
+          /* Si ambas están ocupadas, no avanza. */
         continue;
       }
       const defensor = s.posiciones[pos];
@@ -945,6 +945,24 @@ function faseAvance(e, jugadorId, evs) {
       } else {
         s.posiciones[pos - 1] = null;
         evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
+      }
+    }
+  }
+
+  /* Segunda pasada: voladores que llegaron a pos 3 en este mismo avance
+     entran al búnker ahora, igual que los que ya estaban al empezar. */
+  for (const s of j.senderos) {
+    const f = s.posiciones[3];
+    if (f?.tipo === "atacante" && f.vuela) {
+      j.puntosMonsters += f.nivel;
+      s.posiciones[3] = null;
+      j.entradasBunker = [...(j.entradasBunker ?? []),
+        { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
+      evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+      if (j.puntosMonsters > 20) {
+        j.vivo = false;
+        marcarEliminado(e, jugadorId);
+        evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });
       }
     }
   }
