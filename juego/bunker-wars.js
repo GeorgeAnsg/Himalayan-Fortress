@@ -32,6 +32,7 @@ function uid(p) { return `${p}${ARRANQUE}${++_seq}`; }
 // ── Niveles válidos ───────────────────────────────────────────────────────
 const NIVELES = [1, 2, 3, 5, 7];
 const COSTE_MONSTRUO = { 1: 0, 2: 1, 3: 2, 5: 3, 7: 3 };
+const COSTE_MONSTRUO_VOLADOR = 1;
 /* Cartas de Destino que meten monstruos en los caminos. */
 const AMENAZAS = new Set(["amenaza", "amenaza_triple", "amenaza_doble", "amenaza_rival", "amenaza_mixta"]);
 /* Estas cartas actúan sobre la mesa entera: con un Destino compartido se
@@ -907,11 +908,26 @@ function faseAvance(e, jugadorId, evs) {
   /* Avanzar atacantes: de pos 2→3, 1→2, 0→1. Si en la casilla de delante hay
      un monstruo tuyo que le defiende, el atacante ataca con las mismas reglas
      de combate: el que llega ataca y gana los empates. Antes se quedaba quieto
-     al lado del defensor y parecía que la mesa se había olvidado del choque. */
+     al lado del defensor y parecía que la mesa se había olvidado del choque.
+     Los voladores (vuela:true) saltan defensores y avanzan 2 casillas. */
   for (const s of j.senderos) {
     for (let pos = 3; pos > 0; pos--) {
       const f = s.posiciones[pos - 1];
       if (f?.tipo !== "atacante") continue;
+      if (f.vuela) {
+        /* Volador: salta defensores, avanza 2 casillas si puede, 1 si no. */
+        const dest2 = pos + 1; // 2 pasos adelante (pos es la siguiente)
+        const dest1 = pos;
+        if (dest2 <= 3 && !s.posiciones[dest2]) {
+          s.posiciones[dest2] = f;
+          s.posiciones[pos - 1] = null;
+        } else if (!s.posiciones[dest1]) {
+          s.posiciones[dest1] = f;
+          s.posiciones[pos - 1] = null;
+        }
+        /* Si ambas están ocupadas, no avanza. */
+        continue;
+      }
       const defensor = s.posiciones[pos];
       if (!defensor) {
         s.posiciones[pos] = f;
@@ -1013,6 +1029,7 @@ function avanzarMonstruosPropios(j, evs) {
         continue;
       }
       if (delante.tipo !== "atacante") continue;
+      if (delante.vuela) continue; // los voladores no combaten con defensores
       if (!resolverCombate(f, delante).monstruoSobrevive) {
         s.posiciones[pos + 1] = null;
         evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
@@ -1443,6 +1460,20 @@ function faseAcciones(e, jugadorId, accion, evs) {
       break;
     }
 
+    case "crear_volador": {
+      const boxPedido = accion.boxIdx === 0 || accion.boxIdx === 1 ? accion.boxIdx : null;
+      const orden = boxPedido === null
+        ? [1, 0, 3, 2]
+        : boxPedido === 0 ? [1, 0] : [3, 2];
+      const boxIdx = orden.find((i) => !j.box[i]) ?? -1;
+      if (boxIdx < 0 || j.energia < COSTE_MONSTRUO_VOLADOR) break;
+      j.energia -= COSTE_MONSTRUO_VOLADOR;
+      j.accionesRestantes--;
+      j.box[boxIdx] = { id: uid("m"), tipo: "monstruo", nivel: 1, vuela: true, dueno: j.id };
+      evs.push({ tipo: "crear", texto: `${j.nombre} crea ave de la bruma en la jaula ${boxDeIndice(boxIdx) + 1} (${COSTE_MONSTRUO_VOLADOR} moneda).`, a: jugadorId });
+      break;
+    }
+
     case "construir_torreta": {
       const pos = accion.posicion ?? accion.sendero;
       if (!TORRE_POS.includes(pos)) break;
@@ -1821,6 +1852,10 @@ function legalesAcciones(e, jugadorId) {
                    texto: `Crear monstruo ${nv} en la jaula ${boxIdx + 1} · 1 decreto + ${coste} ${coste === 1 ? "moneda" : "monedas"}` });
       }
     }
+    if (j.energia >= COSTE_MONSTRUO_VOLADOR) {
+      acc.push({ tipo: "crear_volador", boxIdx,
+                 texto: `Crear ave de la bruma en la jaula ${boxIdx + 1} · ${COSTE_MONSTRUO_VOLADOR} moneda` });
+    }
   }
   normalizarTorres(j);
   j.bunker.torres.forEach((t, i) => {
@@ -2025,6 +2060,9 @@ function botPuntuarAccion(e, j, a) {
 
     case "crear_monstruo":
       return 600 + (Number(a.nivel) || 1) * 20;
+
+    case "crear_volador":
+      return 580; // un poco menos que un monstruo nv1 normal
 
     case "mover_a_lanzadera":
       return 640;

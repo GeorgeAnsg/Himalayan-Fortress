@@ -2672,7 +2672,8 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
          que aún no tienen arte caen en la del nivel 1. */
-      const img = imgMonstruo(nivelDe(f), esAtacante);
+      const imgNivel = f.vuela ? "volador" : nivelDe(f);
+      const img = imgMonstruo(imgNivel, esAtacante);
       /* Monstruo recién llegado que aún no ha sido anunciado: se esconde hasta
          que animarLlegadaEnviados lo haga emerger de la niebla en el avance. */
       /* Solo se esconde la que va a salir de la bruma al empezar TU avance: en
@@ -3023,7 +3024,7 @@ function pintarBox(priv) {
       const i = b * 2 + k;
       const m = box[i];
       return m
-        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="Monstruo ${m.nivel} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo"><b class="bw-box-nv">${m.nivel}</b></div>`
+        ? `<div class="bw-box-slot lleno" data-mon-id="${esc(m.id)}" data-box="${b}" title="${m.vuela ? "Ave de la bruma" : `Monstruo ${m.nivel}`} (jaula ${b + 1}, hueco ${k + 1}): toca para enviarlo"><img src="${imgMonstruo(m.vuela ? "volador" : m.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo"><b class="bw-box-nv">${m.vuela ? "✦" : m.nivel}</b></div>`
         : `<div class="bw-box-slot vacio" data-box="${b}" title="Jaula ${b + 1}, hueco ${k + 1} libre: toca para criar"><span class="bw-box-x">+</span></div>`;
     }).join("");
     /* La jaula 1 alimenta el camino izquierdo y el central; la 2, el central
@@ -3512,10 +3513,11 @@ function abrirModalAcciones() {
 
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
-  { nivel: 1, nombre: "Rastreador",      puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza" },
-  { nivel: 2, nombre: "Carroñero",       puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza" },
-  { nivel: 3, nombre: "Yeti",            puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza" },
-  { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza" },
+  { nivel: 1,        nombre: "Rastreador",       puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza" },
+  { nivel: 2,        nombre: "Carroñero",        puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza" },
+  { nivel: 3,        nombre: "Yeti",             puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza" },
+  { nivel: 5,        nombre: "Coloso de hielo",  puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza" },
+  { nivel: "volador",nombre: "Ave de la bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", vuela: true },
 ];
 
 /* Jaula a la que va la cría: la del hueco del box por el que se entra, así que
@@ -3559,15 +3561,15 @@ function abrirCriadero(boxInicial = null) {
      de papel. Lo que el criadero todavía no permite criar deja el mismo
      cuadrado, redondo y a trazos, sin nada dentro. */
   const celda = (m) => {
-    if (m.nivel > max) {
+    if (!m.vuela && m.nivel > max) {
       return `<div class="bw-criar-item"><div class="bw-box-slot bw-criar-hueco" title="Criadero ${ROMANOS[nivelCriadero] || nivelCriadero}: todavía no se puede criar ${esc(m.nombre)}"></div></div>`;
     }
-    const monedas = monedasDe(m);
+    const monedas = m.vuela ? m.coste : monedasDe(m);
     const puede = monedas <= energiaMesa && libre;
     return `
       <div class="bw-criar-item">
-        <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}" title="${esc(m.texto)}"${puede ? "" : " disabled"}>
-          <img src="${imgMonstruo(m.nivel, false, true)}" class="bw-box-img" alt="">
+        <button type="button" class="bw-box-slot lleno bw-criar-celda" data-nivel="${m.nivel}"${m.vuela ? ' data-volador="1"' : ""} title="${esc(m.texto)}"${puede ? "" : " disabled"}>
+          <img src="${imgMonstruo(m.vuela ? "volador" : m.nivel, false, true)}" class="bw-box-img" alt="">
           <b class="bw-criar-fuerza" title="Fuerza ${m.puntos}">${m.puntos}</b>
           <span class="bw-criar-nombre">${esc(m.nombre)}</span>
         </button>
@@ -3597,9 +3599,11 @@ function abrirCriadero(boxInicial = null) {
   const nota = fondo.querySelector(".bw-desc-nota");
   const marcar = () => {
     const sel = fondo.querySelector(".bw-criar-celda.sel");
-    const m = sel ? lista.find(x => x.nivel === Number(sel.dataset.nivel)) : null;
+    const esVolador = sel?.dataset.volador === "1";
+    const m = sel ? lista.find(x => esVolador ? x.vuela : x.nivel === Number(sel.dataset.nivel)) : null;
     ok.disabled = !m;
-    ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
+    const monedas = m ? (m.vuela ? m.coste : monedasDe(m)) : 0;
+    ok.textContent = m ? `Criar ${m.nombre} · ${monedas}` : "Criar";
     nota.textContent = libre ? "" : `La jaula ${ROMANOS[boxCriadero + 1]} está llena: saca un monstruo antes de criar.`;
   };
   marcar();
@@ -3622,7 +3626,11 @@ function abrirCriadero(boxInicial = null) {
     const sel = fondo.querySelector(".bw-criar-celda.sel");
     if (!sel || !enviarAccion) return;
     ok.disabled = true;
-    const r = await enviarAccion({ tipo: "crear_monstruo", nivel: Number(sel.dataset.nivel), boxIdx: boxCriadero });
+    const esVolador = sel.dataset.volador === "1";
+    const accion = esVolador
+      ? { tipo: "crear_volador", boxIdx: boxCriadero }
+      : { tipo: "crear_monstruo", nivel: Number(sel.dataset.nivel), boxIdx: boxCriadero };
+    const r = await enviarAccion(accion);
     if (r?.error) {
       aviso(r.error, { error: true });
       marcar();
@@ -4160,6 +4168,10 @@ function montarMusica() {
    (4 y 6, que no existen en el bestiario) usan la del 1. */
 const MONSTRUOS_CON_ARTE = new Set([1, 2, 3, 5, 7]);
 function imgMonstruo(nivel, atras = false, jaula = false) {
+  if (nivel === "volador") {
+    const vista = jaula ? "j" : atras ? "t" : "f";
+    return `${BASE_IMG}/monstruos/volador-${vista}.png`;
+  }
   const n = Number(nivel);
   const arte = MONSTRUOS_CON_ARTE.has(n) ? n : 1;
   /* Tres vistas por nivel: de frente (f), de espaldas (t) y dentro de la reja
