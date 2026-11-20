@@ -3513,11 +3513,11 @@ function abrirModalAcciones() {
 
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
-  { nivel: 1,        nombre: "Rastreador",       puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza" },
-  { nivel: 2,        nombre: "Carroñero",        puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza" },
-  { nivel: 3,        nombre: "Yeti",             puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza" },
-  { nivel: 5,        nombre: "Coloso de hielo",  puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza" },
-  { nivel: "volador",nombre: "Ave de la bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", vuela: true },
+  { nivel: 1,        nombre: "Rastreador",       puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza",  stats: "1 de ataque · 1 de avance" },
+  { nivel: "volador",nombre: "Ave de la bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", stats: "1 de ataque · 2 de avance", vuela: true },
+  { nivel: 2,        nombre: "Carroñero",        puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza",  stats: "2 de ataque · 1 de avance" },
+  { nivel: 3,        nombre: "Yeti",             puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza",  stats: "3 de ataque · 1 de avance" },
+  { nivel: 5,        nombre: "Coloso de hielo",  puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza",  stats: "5 de ataque · 1 de avance" },
 ];
 
 /* Jaula a la que va la cría: la del hueco del box por el que se entra, así que
@@ -3597,6 +3597,7 @@ function abrirCriadero(boxInicial = null) {
 
   const ok = fondo.querySelector(".bw-criar-ok");
   const nota = fondo.querySelector(".bw-desc-nota");
+  const pista = fondo.querySelector(".bw-criar-pista");
   const marcar = () => {
     const sel = fondo.querySelector(".bw-criar-celda.sel");
     const esVolador = sel?.dataset.volador === "1";
@@ -3604,6 +3605,7 @@ function abrirCriadero(boxInicial = null) {
     ok.disabled = !m;
     const monedas = m ? (m.vuela ? m.coste : monedasDe(m)) : 0;
     ok.textContent = m ? `Criar ${m.nombre} · ${monedas}` : "Criar";
+    pista.textContent = m?.stats ?? "Elige el monstruo que quieres criar";
     nota.textContent = libre ? "" : `La jaula ${ROMANOS[boxCriadero + 1]} está llena: saca un monstruo antes de criar.`;
   };
   marcar();
@@ -3686,11 +3688,13 @@ function pintarManuscritos() {
 
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
+      ${fila("Ave de la bruma", "Volador", "1 pto · 1 mon. · avanza 2 · vuela sobre defensores · solo torres la destruyen")}
       ${fila("Carroñero", "Nv 2", "2 ptos · 1 mon.")}
       ${fila("Yeti", "Nv 3", "3 ptos · 2 mon.")}
       ${fila("Coloso de hielo", "Nv 5", "5 ptos · 3 mon.")}
       ${fila("Devorador de cumbres", "Nv 7", "7 ptos · no se crea")}
       ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
+      ${parrafo("El Ave de la bruma es especial: vuela sobre los monstruos defensores (no combate con ellos), avanza 2 peldaños por turno y solo puede ser destruida por las torres.")}
     `)}
 
     ${seccion("Criadero", `
@@ -6166,11 +6170,11 @@ function css() {
        como mucho, y en pantallas más estrechas encogen con la fila, que nunca
        pasa del ancho del modal. */
     .bw-criar-grid {
-      display:grid; grid-template-columns:repeat(4, minmax(0, 1fr));
+      display:flex; flex-wrap:wrap; justify-content:center;
       gap:8px; width:min(340px,100%); margin:0 auto;
-      /* 10 px a cada lado para que la fila no toque el borde del modal. */
       padding:0 10px; box-sizing:border-box;
     }
+    .bw-criar-grid .bw-criar-item { width:calc(33.33% - 6px); flex-shrink:0; }
     /* Cada monstruo es una columna: su cuadrado y, debajo, lo que cuesta. */
     .bw-criar-item { display:flex; flex-direction:column; gap:3px; min-width:0; }
     .bw-criar-celda { position:relative; width:100%; aspect-ratio:1 / 1; padding:0; cursor:pointer; }
