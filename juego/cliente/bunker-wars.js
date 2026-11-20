@@ -1920,9 +1920,26 @@ function abrirLanzar(ops) {
     if (accion.tipo !== "lanzar") { rivalLanzarElegido = null; cerrar(); return; }
     /* La hoja no se cierra: pierde la lanzadera que acaba de salir y se vuelve
        a pintar con la que queda. */
+    const nvLanzado = lanzaderasModal[accion.lanzadera]?.nivel ?? null;
     lanzaderasModal = lanzaderasModal.map((m, i) => (i === accion.lanzadera ? null : m));
     opsModal = opsModal.filter(a => a.lanzadera !== accion.lanzadera);
+    /* La que acaba de salir se queda a la vista en la calle donde la has
+       dejado: con la segunda en la mano se ve dónde fue la primera. */
+    marcarLanzado(accion.sendero, nvLanzado);
     actualizarChips();
+  };
+
+  /* Pinta el monstruo recién lanzado en la entrada de su calle, como lo pinta
+     el tablero del rival (turquesa, de cara al fuerte). */
+  const marcarLanzado = (calle, nv) => {
+    if (!nv) return;
+    const hueco = fondo.querySelector(
+      `.bw-torre[data-calle="${Number(calle)}"] .bw-torre-slots .bw-torre-slot:last-child`);
+    if (!hueco) return;
+    hueco.className = "bw-box-slot lleno bw-torre-slot atacante";
+    hueco.title = `Atacante nivel ${nv} en el peldaño 1`;
+    hueco.innerHTML = `<img src="${imgMonstruo(nv, true)}" class="bw-box-img" alt="monstruo">`
+      + `<b class="bw-box-nv">${nv}</b><span class="bw-torre-step">1</span>`;
   };
 
   /* Lo que la hoja puede ofrecer ahora mismo. Va aparte porque la hoja ya no
@@ -5820,7 +5837,10 @@ function css() {
       bottom:var(--alto-nav, 34px);
       width:100%; max-height:85vh; margin:0;
       border-radius:16px 16px 0 0; border-bottom:0;
-      background-color:rgba(27,23,19,.97);
+      /* Opaca del todo: con un 3 % de transparencia, el repintado del tablero
+         de debajo se veía a través de la hoja y el fondo parecía difuminarse
+         y volver cada vez que se enviaba una lanzadera. */
+      background-color:#1b1713; border-color:#3b3530;
       pointer-events:auto;
     }
     /* Cabecera igual que la de Torres: título, aire y una línea fina debajo. */
