@@ -1034,7 +1034,7 @@ function prepararSalidasLanzadera(raiz, movidas) {
     ficha.style.cssText = `left:${hasta.l}%;top:${hasta.t}%;z-index:4;pointer-events:none`;
     ficha.dataset.ol = desde.l;
     ficha.dataset.ot = desde.t;
-    ficha.innerHTML = `<img src="${imgMonstruo(nivelImgDe(m), false)}" alt="" class="ficha-img"><b class="ficha-nv">${m.vuela ? "✦" : m.nivel}</b>`;
+    ficha.innerHTML = htmlFicha(m, false);
     fichas.append(ficha);
     registro(`sale a lanzadera · E${calle + 1}·${paso + 1} · nv${m.nivel}`);
   }
@@ -1134,12 +1134,13 @@ function animarEntradaBunker(raiz, entradas) {
   };
   requestAnimationFrame(seguir);
 
-  entradas.forEach(({ l, t, nivel, vuela }, i) => {
+  entradas.forEach((entrada, i) => {
+    const { l, t, nivel } = entrada;
     const ficha = document.createElement("div");
     ficha.className = "ficha atacante bw-entrando";
     ficha.style.left = `${l}%`;
     ficha.style.top = `${t}%`;
-    ficha.innerHTML = `<img src="${imgMonstruo(vuela ? "volador" : nivel, true)}" alt="" class="ficha-img"><b class="ficha-nv">${nivel}</b>`;
+    ficha.innerHTML = htmlFicha(entrada, true);
     const nube = document.createElement("div");
     nube.className = "bw-nube bw-nube-puerta";
     nube.style.left = `${l}%`;
@@ -2026,16 +2027,15 @@ function abrirLanzar(ops) {
      quieras soltarlas. */
   const chipLanzadera = (i) => {
     const mon = lanzaderasModal[i];
-    const nv = mon?.nivel ?? null;
-    if (!nv) return "";
-    const imgNv = nivelImgDe(mon);
-    const nvLabel = mon?.vuela ? "✦" : nv;
+    if (!mon?.nivel) return "";
     const dos = lanzaderasModal.filter(Boolean).length > 1;
-    const titulo = `${mon?.vuela ? "Aves de bruma" : `Monstruo ${nv}`} de la lanzadera ${i + 1}: arrástralo a una calle`;
+    const titulo = `${mon.vuela ? "Aves de bruma" : `Monstruo ${mon.nivel}`} de la lanzadera ${i + 1}: arrástralo a una calle`;
+    const innerImg = mon.vuela
+      ? `<img src="${imgMonstruo("volador", false, true)}" alt=""><b class="bw-lz-mia-nv">✦</b>`
+      : `<img src="${imgMonstruo(mon.nivel, false, true)}" alt=""><b class="bw-lz-mia-nv">${mon.nivel}</b>`;
     return `<div class="bw-lz-mia" data-lanzadera="${i}" role="button" tabindex="0"
                  aria-label="${esc(titulo)}" title="${esc(titulo)}"` +
-      `><img src="${imgMonstruo(imgNv, false, true)}" alt=""><b class="bw-lz-mia-nv">${nvLabel}</b>` +
-      `${dos ? `<span class="bw-lz-mia-l">L${i + 1}</span>` : ""}</div>`;
+      `>${innerImg}${dos ? `<span class="bw-lz-mia-l">L${i + 1}</span>` : ""}</div>`;
   };
 
   /* Arrastrar una lanzadera a una calle, o tocarla y tocar la calle. El
@@ -2677,8 +2677,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
          que aún no tienen arte caen en la del nivel 1. */
-      const imgNivel = f.vuela ? "volador" : nivelDe(f);
-      const img = imgMonstruo(imgNivel, esAtacante);
+      const img = f.vuela ? imgMonstruo("volador", esAtacante) : imgMonstruo(nivelDe(f), esAtacante);
       /* Monstruo recién llegado que aún no ha sido anunciado: se esconde hasta
          que animarLlegadaEnviados lo haga emerger de la niebla en el avance. */
       /* Solo se esconde la que va a salir de la bruma al empezar TU avance: en
@@ -2689,7 +2688,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* La que no se va a animar ya cuenta como vista: así no se la vuelve a
          esconder en un repintado posterior de la misma jornada. */
       if (!ocultoHastaAvance && f.id && paso === 0 && esAtacante) llegadasAnunciadas.add(f.id);
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${f.vuela ? "✦" : nivelDe(f)}</b></div>`;
     })
   ).join("");
 
@@ -2789,7 +2788,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
     const ini = LOSAS[l.calle][l.origen];
     const fin = LOSAS[l.calle][l.destino];
     return       `<div class="ficha fantasma ${l.esAtacante ? "atacante" : "mia"}${tocaMesa ? " ver" : ""}" data-lucha="${k}" data-grupo="${l.grupo}" data-ganador="${esc(l.ganadorId ?? "")}" data-dl="${fin.l}" data-dt="${fin.t}" data-nivel="${l.nivel}" style="left:${ini.l}%;top:${ini.t}%">
-          <img src="${imgMonstruo(l.nivel, l.esAtacante)}" alt="" class="ficha-img"><b class="ficha-nv">${l.nivel}</b>
+          ${htmlFicha(l, l.esAtacante)}
         </div>
         <div class="bw-nube" data-nube="${k}" style="left:${fin.l}%;top:${fin.t}%"><img src="${BASE_IMG}/nube-combate.png" alt=""></div>`;
   }).join("");
@@ -2817,9 +2816,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   /* Lanzaderas */
   const lanzHtml = [{l:"37.1",t:"77.7"},{l:"63.3",t:"77.9"}].map((pos, i) => {
     const l = lanzaderas[i];
-    const dentro = l
-      ? `<img src="${imgMonstruo(nivelImgDe(l), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(l)}</b>`
-      : "";
+    const dentro = l ? htmlFichaLanzadera(l) : "";
     return `<div class="lanzadera${l ? " lanzadera-llena" : ""}" data-lanzadera="${i + 1}" style="left:${pos.l}%;top:${pos.t}%">${dentro}</div>`;
   }).join("")
   /* Cola de lanzadera: se apilan justo detrás de la lanzadera (misma X, un
@@ -2833,7 +2830,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
     const pos = i === 0
       ? { l: "37.1", t: "calc(77.7% - 7.7 * var(--u))" }
       : { l: "63.3", t: "calc(77.9% - 7.7 * var(--u))" };
-    return `<div class="lanzadera lanzadera-llena lanzadera-cola" data-cola="${i + 1}" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t};z-index:1;pointer-events:none;opacity:.82"><img src="${imgMonstruo(nivelImgDe(c), false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nivelDe(c)}</b></div>`;
+    return `<div class="lanzadera lanzadera-llena lanzadera-cola" data-cola="${i + 1}" title="En espera de lanzadera (${i + 1})" style="left:${pos.l}%;top:${pos.t};z-index:1;pointer-events:none;opacity:.82">${htmlFichaLanzadera(c)}</div>`;
   }).join("");
 
   /* Losas */
@@ -2857,7 +2854,10 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
     /* Un monstruo en el box se pinta como en el tablero: imagen de frente
        (defendiendo) y la pastilla con su fuerza a la derecha. */
     return `<div class="fort-slot${mon ? " fort-slot-lleno" : " fort-slot-vacio"}${i % 2 === 0 ? " fort-slot-arriba" : ""}" data-box="${i < 2 ? 0 : 1}"${mon?.id ? ` data-mon-id="${esc(mon.id)}"` : ""} style="left:${pos.l};top:${pos.t}">${
-      mon ? `<img src="${imgMonstruo(nivelImgDe(mon), false, true)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel ?? "?"}</b>` : `<span class="fort-slot-x">+</span>`
+      mon ? (mon.vuela
+        ? `<img src="${imgMonstruo("volador", false, true)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">✦</b>`
+        : `<img src="${imgMonstruo(mon.nivel, false, true)}" class="fort-slot-img" alt=""><b class="fort-slot-nv">${mon.nivel}</b>`)
+        : `<span class="fort-slot-x">+</span>`
     }</div>`;
   }).join("");
 
@@ -4176,7 +4176,6 @@ function montarMusica() {
 /* Láminas de monstruo disponibles por nivel. Los niveles sin arte propio
    (4 y 6, que no existen en el bestiario) usan la del 1. */
 const MONSTRUOS_CON_ARTE = new Set([1, 2, 3, 5, 7]);
-const nivelImgDe = (f) => f?.vuela ? "volador" : (f?.nivel ?? f?.fuerza ?? 1);
 
 function imgMonstruo(nivel, atras = false, jaula = false) {
   if (nivel === "volador") {
@@ -4189,6 +4188,26 @@ function imgMonstruo(nivel, atras = false, jaula = false) {
      de la jaula (j). En jaulas y lanzaderas se usa siempre la de jaula. */
   const vista = jaula ? "j" : atras ? "t" : "f";
   return `${BASE_IMG}/monstruos/m${arte}-${vista}.png`;
+}
+
+/* HTML interno de una ficha de monstruo o del ave de bruma.
+   Dos funciones separadas para que cada tipo tenga su propio camino. */
+function htmlFichaVolador(atras = false, jaula = false) {
+  return `<img src="${imgMonstruo("volador", atras, jaula)}" alt="" class="ficha-img"><b class="ficha-nv">✦</b>`;
+}
+function htmlFichaMonstruo(m, atras = false, jaula = false) {
+  const nv = m?.nivel ?? m?.fuerza ?? 1;
+  return `<img src="${imgMonstruo(nv, atras, jaula)}" alt="" class="ficha-img"><b class="ficha-nv">${nv}</b>`;
+}
+/* Punto de entrada: elige la función según m.vuela. */
+function htmlFicha(m, atras = false, jaula = false) {
+  return m?.vuela ? htmlFichaVolador(atras, jaula) : htmlFichaMonstruo(m, atras, jaula);
+}
+/* Igual para el interior de lanzadera/cola (clase distinta para el badge). */
+function htmlFichaLanzadera(m) {
+  if (m?.vuela) return `<img src="${imgMonstruo("volador", false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">✦</b>`;
+  const nv = m?.nivel ?? m?.fuerza ?? 1;
+  return `<img src="${imgMonstruo(nv, false, true)}" class="lanzadera-img" alt="monstruo"><b class="lanzadera-nv">${nv}</b>`;
 }
 
 /* Alzado de la torre según su nivel; el 1 si faltara el arte. */
