@@ -897,7 +897,7 @@ function entrarAlBunker(j, e, evs) {
     j.puntosMonsters += f.nivel;
     s.posiciones[3] = null;
     j.entradasBunker = [...(j.entradasBunker ?? []),
-      { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
+      { id: uid("b"), calle: s.id, nivel: f.nivel, ...(f.vuela ? { vuela: true } : {}) }].slice(-8);
     evs.push({ tipo: "entrada", texto: `¡${f.vuela ? "Aves de bruma" : `Monstruo ${f.nivel}`} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
     if (j.puntosMonsters > 20) {
       j.vivo = false;
@@ -912,41 +912,42 @@ function entrarAlBunker(j, e, evs) {
    de nivel ≤ suyo, sobrevolando los de nivel mayor. Si no hay hueco, entran al búnker. */
 function avanzarAtacantes(j, e, evs, soloVuela = false) {
   for (const s of j.senderos) {
-    for (let pos = 3; pos > 0; pos--) {
+    /* pos=4 cubre el índice 3 (última casilla antes del búnker), solo para voladores. */
+    for (let pos = 4; pos > 0; pos--) {
       const f = s.posiciones[pos - 1];
       if (f?.tipo !== "atacante") continue;
       if (soloVuela && !f.vuela) continue;
+      /* pos=4 (índice 3) solo aplica a voladores; el resto lo recoge entrarAlBunker. */
+      if (pos === 4 && !f.vuela) continue;
       if (f.vuela) {
-        let aterrizó = false;
-        for (let dest = pos; dest <= 3; dest++) {
+        /* dest=4 significa entrada al búnker. */
+        for (let dest = pos; dest <= 4; dest++) {
+          if (dest > 3) {
+            s.posiciones[pos - 1] = null;
+            j.puntosMonsters += f.nivel;
+            j.entradasBunker = [...(j.entradasBunker ?? []),
+              { id: uid("b"), calle: s.id, nivel: f.nivel, vuela: true }].slice(-8);
+            evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+            if (j.puntosMonsters > 20) {
+              j.vivo = false;
+              marcarEliminado(e, j.id);
+              evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
+            }
+            break;
+          }
           const ocupante = s.posiciones[dest];
           if (!ocupante) {
             s.posiciones[dest] = f;
             s.posiciones[pos - 1] = null;
-            aterrizó = true;
             break;
           }
           if (ocupante.tipo === "monstruo" && f.nivel >= ocupante.nivel) {
             s.posiciones[dest] = f;
             s.posiciones[pos - 1] = null;
             evs.push({ tipo: "combate", texto: `Las aves de bruma destruyen al monstruo ${ocupante.nivel} de ${j.nombre} en el peldaño ${dest + 1} de la escalera ${s.id}.` });
-            aterrizó = true;
             break;
           }
           /* Defensor más fuerte o atacante: sobrevuela y sigue buscando. */
-        }
-        if (!aterrizó) {
-          /* Sin hueco: entra directamente al búnker. */
-          s.posiciones[pos - 1] = null;
-          j.puntosMonsters += f.nivel;
-          j.entradasBunker = [...(j.entradasBunker ?? []),
-            { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
-          evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
-          if (j.puntosMonsters > 20) {
-            j.vivo = false;
-            marcarEliminado(e, j.id);
-            evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
-          }
         }
         continue;
       }
@@ -973,13 +974,14 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
 function faseAvance(e, jugadorId, evs) {
   const j = e.jugadores[jugadorId];
 
-  /* Paso 1: atacantes en pos 3 entran al búnker. */
+  /* Paso 1: atacantes en pos 3 (de antes) entran al búnker. */
   entrarAlBunker(j, e, evs);
-  /* Paso 2: todos avanzan 1 casilla. */
+  /* Paso 2: todos avanzan 1 acción (voladores pueden entrar al búnker directamente). */
   avanzarAtacantes(j, e, evs);
-  /* Paso 3 (voladores): segundo avance + entrada si llegan a pos 3. */
-  entrarAlBunker(j, e, evs);
+  /* Paso 3: voladores reciben su segunda acción. No hay entrarAlBunker intermedio
+     para que el volador que llegó a pos 3 tenga su segunda acción disponible. */
   avanzarAtacantes(j, e, evs, true);
+  /* Paso 4: recoge los atacantes normales en pos 3 y los voladores que entraron. */
   entrarAlBunker(j, e, evs);
 
   e.fase = "defensores";
