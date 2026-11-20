@@ -3284,7 +3284,7 @@ function pintarManuscritos() {
       ${fila("Recursos 2", "+2 monedas, +1 decreto", "2 mon.")}
       ${fila("Recursos 3", "+3 monedas, +1 decreto", "3 mon.")}
       ${fila("Recursos 4", "+4 monedas, +2 decretos", "4 mon.")}
-      ${parrafo("Caben 4 cartas de recursos y pueden repetirse. La ciencia ocupa 2 huecos: disparar por 1 menos, crear monstruos por 1 menos y torres que hacen su nivel en cualquier escalera, 8 monedas cada una.")}
+      ${parrafo("Las cartas de recursos no tienen tope: cada una suma su producción. La ciencia ocupa 2 huecos: disparar por 1 menos, crear monstruos por 1 menos, torres que hacen su nivel en cualquier escalera y torres que no se pueden bombardear, 8 monedas cada una.")}
     `)}
 
     ${seccion("Cartas de ciencia instantánea", `
@@ -3298,7 +3298,7 @@ function pintarManuscritos() {
       ${fila("Subir criadero — sube un nivel el criadero", "3 dec.", "")}
       ${fila("Subir recursos — +1 moneda y +1 decreto por turno de forma permanente", "4 dec.", "")}
       ${fila("Criadero o armería — sube un nivel el criadero o la armería a tu elección", "4 dec.", "")}
-      ${fila("Purga — aniquila los monstruos de los peldaños 3 y 4 de tus escaleras", "8 dec.", "")}
+      ${fila("Purga — aniquila los monstruos de los peldaños 3 y 4 de tus escaleras", "12 dec.", "")}
     `)}
 
     ${seccion("Fases del turno", `
@@ -3375,6 +3375,7 @@ const NOMBRES_EFECTO = {
   torreta_barata:       "Disparar barato",
   monstruo_barato:      "Monstruos baratos",
   torreta_universal:    "Torres universales",
+  proteccion_torres:    "Protección ancestral",
   purga:                "Purga",
   subir_rango:          "Subir rango",
   convertir_aliado:     "Convertir aliado",

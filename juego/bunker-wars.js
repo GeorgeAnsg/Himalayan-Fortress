@@ -152,7 +152,8 @@ const PLANTILLAS_BUNKER = [
   { tipo:"ciencia",     efecto:"torreta_barata",    coste:8, titulo: "Disparar barato",  descripcion: "Disparar torretas cuesta una moneda menos." },
   { tipo:"ciencia",     efecto:"monstruo_barato",   coste:8, titulo: "Monstruos baratos", descripcion: "Crear monstruos cuesta una moneda menos del valor del monstruo." },
   { tipo:"ciencia",     efecto:"torreta_universal", coste:8, titulo: "Torres universales", descripcion: "Tus torres hacen el daño correspondiente a su nivel en cualquier escalera." },
-  { tipo:"ciencia_i",   efecto:"purga",             coste:8, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los 2 peldaños más cercanos a tu fortaleza, tanto los tuyos como los atacantes." },
+  { tipo:"ciencia",     efecto:"proteccion_torres", coste:8, titulo: "Protección ancestral", descripcion: "Ninguna carta de Destino ni ningún rival puede bajar el nivel de tus torres." },
+  { tipo:"ciencia_i",   efecto:"purga",             coste:12, titulo: "Purga", descripcion: "Aniquila todos los monstruos de los 2 peldaños más cercanos a tu fortaleza, tanto los tuyos como los atacantes." },
   { tipo:"ciencia_i",   efecto:"subir_rango",       coste:2, titulo: "Subir rango", descripcion: "Sube un rango el nivel de un monstruo hasta nivel 5 como máximo." },
   { tipo:"ciencia_i",   efecto:"bajar_nivel_enemigo",coste:2, titulo: "Bajar rango", descripcion: "Baja un rango el nivel de un monstruo enemigo que esté atacando tu búnker." },
   { tipo:"ciencia_i",   efecto:"evolucionar_torreta",coste:2, titulo: "Evolucionar torre", descripcion: "Evoluciona una torre al siguiente nivel." },
@@ -1664,6 +1665,8 @@ function legalesAcciones(e, jugadorId) {
     } else if (carta.efecto === "bombardear") {
       Object.values(e.jugadores).forEach(enemigo => {
         if (enemigo.id === j.id) return;
+        /* Protección ancestral: sus torres no se pueden bajar ni destruir. */
+        if (tieneCiencia(enemigo, "proteccion_torres")) return;
         normalizarTorres(enemigo);
         enemigo.bunker.torres.forEach((t, i) => {
           if (!t) return;
@@ -1856,6 +1859,7 @@ function botValorCarta(c) {
   if (c.efecto === "evolucionar_torreta") return 88;
   if (c.efecto === "subir_laboratorio") return 70;
   if (c.efecto === "purga") return 86;
+  if (c.efecto === "proteccion_torres") return 84;
   if (c.efecto === "convertir_aliado") return 84;
   if (c.efecto === "bajar_nivel_enemigo") return 82;
   if (c.efecto === "subir_rango") return 80;
@@ -2166,6 +2170,7 @@ function objetivoDe(e, j, efecto, accion) {
     case "bombardear": {
       const enemigo = Object.values(e.jugadores).find(p => p.id === o.enemigoId);
       if (!enemigo) return null;
+      if (tieneCiencia(enemigo, "proteccion_torres")) return null;
       const pos = o.posicion;
       const t = enemigo.bunker.torres?.[(pos ?? 0) - 1];
       return t ? { enemigo, torre: t, pos } : null;
@@ -2269,6 +2274,10 @@ function aplicarCienciaInmediata(j, carta, evs, accion, e) {
       return true;
     }
     case "bombardear": {
+      if (tieneCiencia(o.enemigo, "proteccion_torres")) {
+        evs.push({ tipo: "torre", texto: `La protección ancestral de ${o.enemigo.nombre} aguanta el bombardeo.` });
+        return false;
+      }
       if (o.torre.nivel <= 1) {
         o.enemigo.bunker.torres[o.pos - 1] = null;
         evs.push({ tipo: "torre", texto: `${j.nombre} bombardea y destruye la torre ${o.pos} de ${o.enemigo.nombre}.` });
