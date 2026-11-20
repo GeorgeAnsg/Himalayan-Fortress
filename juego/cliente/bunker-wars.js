@@ -3276,12 +3276,26 @@ function pintarManuscritos() {
       ${cuerpo}
     </section>`;
   const parrafo = (txt) => `<p class="man-p">${esc(txt)}</p>`;
+  /* Una fase del turno: título en negrita y el detalle detrás, en el mismo
+     párrafo. Así el texto largo fluye y no se sale del panel. */
+  const paso = (tit, txt) => `<div class="man-paso"><b>${esc(tit)}</b> ${esc(txt)}</div>`;
 
   return `
     <div class="bw-panel-head">
       <div class="bw-panel-label">Reglas</div>
       <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
     </div>
+
+    ${seccion("Fases del turno", `
+      ${paso("1. Lanzaderas", "Lanzas los monstruos cargados a las escaleras de un rival.")}
+      ${paso("2. Avance atacantes", "Los atacantes de tus escaleras suben un peldaño. Si hay un defensor delante, pelean.")}
+      ${paso("3. Avance defensores", "Tus monstruos bajan un peldaño hacia la lanzadera.")}
+      ${paso("4. Carta de Destino", "Se revela la carta del ciclo y se resuelve: avistamientos, calma, eventos o un daño a tus torres.")}
+      ${paso("5. Decretos", "Gastas tus 2 decretos —y los que den las cartas— en lo que explico debajo.")}
+      ${paso("6. Descarte", "Tiras 1 o 2 cartas y robas hasta volver a tener 4 en la mano.")}
+      ${parrafo("Con cada decreto puedes hacer una cosa: jugar una carta de la mano, disparar con las torres (el daño se paga en monedas), criar un monstruo (1 decreto + sus monedas), construir una torre (1 decreto + 1 moneda), subir una torre de nivel (1 decreto + 2 monedas) o avanzar un monstruo tuyo (1 decreto + 1 moneda).")}
+      ${parrafo("Un monstruo que llega al final de su escalera espera en la lanzadera hasta que lo lances. Si un atacante sube desde el cuarto peldaño, entra en la fortaleza y suma sus puntos: con más de 20, tu fortaleza cae.")}
+    `)}
 
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
@@ -3293,17 +3307,18 @@ function pintarManuscritos() {
     `)}
 
     ${seccion("Criadero", `
-      ${fila("Criadero 1", "crea hasta Nv 1", "")}
+      ${fila("Criadero 1", "crea hasta Nv 1", "de serie")}
       ${fila("Criadero 2", "crea hasta Nv 2", "2 mon.")}
       ${fila("Criadero 3", "crea hasta Nv 3", "2 mon.")}
       ${fila("Criadero 4", "crea hasta Nv 5", "2 mon.")}
-      ${parrafo("Se sube en orden y la carta cuesta 2 monedas. El nivel 7 nunca sale del criadero: solo llega por Destino o subiendo de rango.")}
+      ${parrafo("Arrancas en el nivel 1. Las cartas Criadero +1 (2 monedas) suben un nivel cada una, pero solo llegan hasta el 3: para el 4 hace falta la carta CRIADERO 4, que desbloquea los colosos. El devorador de cumbres nunca sale del criadero: solo llega por Destino o subiendo de rango.")}
     `)}
 
     ${seccion("Armería", `
-      ${fila("Armería 1", "torres Nv 1", "")}
+      ${fila("Armería 1", "torres Nv 1", "de serie")}
       ${fila("Armería 2", "torres Nv 2", "2 mon.")}
       ${fila("Armería 3", "torres Nv 3", "2 mon.")}
+      ${parrafo("Arrancas en el nivel 1. Las cartas Armería +1 (2 monedas) suben un nivel cada una y solo llegan hasta el 2; el nivel 3 lo da la carta ARMERÍA 3.")}
       ${parrafo("Las tres torres se construyen en la peana del búnker, una por escalera: 1 moneda construirlas y 2 más por cada subida de nivel (nivel II, 3 en total; nivel III, 5).")}
     `)}
 
@@ -3321,34 +3336,27 @@ function pintarManuscritos() {
     `)}
 
     ${seccion("Recursos y ciencia", `
-      ${fila("Recursos 1", "+1 moneda", "1 mon.")}
-      ${fila("Recursos 2", "+2 monedas, +1 decreto", "2 mon.")}
-      ${fila("Recursos 3", "+3 monedas, +1 decreto", "3 mon.")}
-      ${fila("Recursos 4", "+4 monedas, +2 decretos", "4 mon.")}
-      ${parrafo("Las cartas de recursos no tienen tope: cada una suma su producción. La ciencia ocupa 2 huecos: disparar por 1 menos, crear monstruos por 1 menos, torres que hacen su nivel en cualquier escalera y torres que no se pueden bombardear, 8 monedas cada una.")}
+      ${fila("Recursos 1 ×4", "+1 moneda por turno", "1 mon.")}
+      ${fila("Recursos 2 ×2", "+2 monedas por turno", "2 mon.")}
+      ${fila("Decreto 1 ×2", "+1 decreto por turno", "2 mon.")}
+      ${fila("Recursos mixta ×2", "+1 moneda y +1 decreto", "3 mon.")}
+      ${fila("Monedas 4 ×2", "pagas 2 y recibes 4 al momento", "2 mon.")}
+      ${fila("Monedas 6 ×2", "pagas 3 y recibes 6 al momento", "3 mon.")}
+      ${parrafo("Las cartas de recursos no tienen tope: cada una suma su producción. La ciencia ocupa 2 huecos y hay cuatro, 8 monedas cada una: Disparar barato, Monstruos baratos, Torres universales y Protección ancestral (nadie, ni carta de Destino ni rival, puede bajar el nivel de tus torres).")}
     `)}
 
     ${seccion("Cartas de ciencia instantánea", `
-      ${fila("Subir rango — sube un nivel a un monstruo hasta nv 5", "2 dec.", "")}
-      ${fila("Convertir aliado — convierte en aliado un atacante de nv 5 o inferior", "2 dec.", "")}
-      ${fila("Bajar rango — baja un nivel a un monstruo enemigo en tus escaleras", "2 dec.", "")}
-      ${fila("Evolucionar torre — sube una torre al siguiente nivel", "2 dec.", "")}
-      ${fila("Torre de nivel 2 — construye una torre nv 2 sin necesitar Armería 2", "3 dec.", "")}
-      ${fila("Monstruo de nivel 3 — crea un yeti en un box sin necesitar Criadero 3", "3 dec.", "")}
-      ${fila("Subir armería — sube un nivel la armería", "3 dec.", "")}
-      ${fila("Subir criadero — sube un nivel el criadero", "3 dec.", "")}
-      ${fila("Subir recursos — +1 moneda y +1 decreto por turno de forma permanente", "4 dec.", "")}
-      ${fila("Criadero o armería — sube un nivel el criadero o la armería a tu elección", "4 dec.", "")}
-      ${fila("Purga — aniquila los monstruos de los peldaños 3 y 4 de tus escaleras", "12 dec.", "")}
-    `)}
-
-    ${seccion("Fases del turno", `
-      ${fila("1. Lanzaderas", "Lanza los monstruos de tus lanzaderas a las escaleras enemigas.", "")}
-      ${fila("2. Avance atacantes", "Los atacantes en las escaleras rivales suben un peldaño. Si hay un defensor, pelean.", "")}
-      ${fila("3. Avance defensores", "Tus monstruos bajan un peldaño hacia la lanzadera.", "")}
-      ${fila("4. Carta de Destino", "Se revela una carta: puede traer amenazas, bonificaciones o eventos.", "")}
-      ${fila("5. Acciones", "Juegas cartas de tu mano: recursos, ciencia, construir torres, criar monstruos…", "")}
-      ${parrafo("Un monstruo que llega al último peldaño de la lanzadera espera ahí hasta que lo lances. Si un atacante pasa el peldaño 4 de una escalera, entra en la fortaleza y suma sus puntos de daño.")}
+      ${fila("Purga — aniquila los monstruos de los peldaños 3 y 4 de tus escaleras", "12 mon.", "")}
+      ${fila("Bombardear — baja un nivel a una torre enemiga (la destruye si era de nivel 1)", "3 mon.", "")}
+      ${fila("Subir rango — sube un nivel a un monstruo hasta nv 5", "2 mon.", "")}
+      ${fila("Bajar rango — baja un nivel a un atacante de tus escaleras", "2 mon.", "")}
+      ${fila("Evolucionar torre — sube una torre al siguiente nivel", "2 mon.", "")}
+      ${fila("Torre de nivel 2 — construye una torre nv 2 sin necesitar Armería 2", "3 mon.", "")}
+      ${fila("Monstruo de nivel 3 — crea un yeti en un box sin necesitar Criadero 3", "3 mon.", "")}
+      ${fila("Subir armería — sube un nivel la armería", "3 mon.", "")}
+      ${fila("Subir criadero — sube un nivel el criadero", "3 mon.", "")}
+      ${fila("Criadero o armería — sube un nivel el criadero o la armería a tu elección", "4 mon.", "")}
+      ${parrafo("El precio de arriba es en monedas. Jugar cualquier carta, también estas, gasta además 1 decreto.")}
     `)}
 
     ${seccion("Equipos y mapa", `
@@ -4685,7 +4693,9 @@ function css() {
       left:0 !important; right:0 !important;
       margin:0 !important;
       border-radius:16px 16px 0 0 !important;
-      max-height:50vh; overflow-y:auto;
+      /* Nunca se sale de lado: lo que no quepa se corta antes que dejar el
+         panel con scroll horizontal. */
+      max-height:50vh; overflow-y:auto; overflow-x:hidden;
       z-index:290 !important;
     }
     /* El panel de jaulas flota justo encima del menú, con el ribete de piedra
@@ -5345,7 +5355,9 @@ function css() {
     .bw-destino-grande .bw-carta-grande-desc strong { font-weight:800; }
 
     /* ── Manuscritos ── */
-    .man-sec { margin-bottom:14px; }
+    /* 10 px de aire a cada lado del contenido: sin ellos, los textos y las
+       tablas de dos columnas quedaban pegados al borde del panel. */
+    .man-sec { margin-bottom:14px; padding:0 10px; }
     .man-sec:last-child { margin-bottom:2px; }
     .man-tit {
       font:700 12px/1.2 ui-serif,serif; color:#e8d9b8;
@@ -5361,9 +5373,16 @@ function css() {
     .man-b { color:#b7a992; font-weight:700; text-align:right; white-space:nowrap; }
     .man-c { color:#8b7e6b; text-align:right; min-width:52px; }
     .man-p { margin:6px 0 0; font-size:11.5px; line-height:1.45; color:#c2b6a0; }
+    /* Una fase del turno: el título en negrita y el detalle detrás, en el
+       mismo párrafo, para que el texto largo fluya y no se salga del panel. */
+    .man-paso {
+      font-size:12px; line-height:1.4; color:#d8cdb8;
+      padding:3px 0; overflow-wrap:anywhere;
+    }
+    .man-paso b { color:#f4ecdd; font-weight:700; }
 
     /* ── Modal de descarte: las cartas de papel del modal de una, en 2×2 ── */
-    .bw-desc-modal { width:min(90vw,400px); }
+    .bw-desc-modal { width:min(90vw,400px); overflow-x:hidden; }
     .bw-desc-tit {
       font:800 15px/1.2 ui-serif,serif; color:#f4ecdd; text-align:center;
       letter-spacing:.07em; text-transform:uppercase;
@@ -5704,6 +5723,8 @@ function css() {
     .bw-criar-grid {
       display:grid; grid-template-columns:repeat(4, minmax(0, 1fr));
       gap:8px; width:min(340px,100%); margin:0 auto;
+      /* 10 px a cada lado para que la fila no toque el borde del modal. */
+      padding:0 10px; box-sizing:border-box;
     }
     /* Cada monstruo es una columna: su cuadrado y, debajo, lo que cuesta. */
     .bw-criar-item { display:flex; flex-direction:column; gap:3px; min-width:0; }
