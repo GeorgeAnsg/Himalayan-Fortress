@@ -907,21 +907,50 @@ function entrarAlBunker(j, e, evs) {
   }
 }
 
-/* Un paso de avance para todos los atacantes (o solo los voladores si soloVuela). */
-function avanzarAtacantes(j, evs, soloVuela = false) {
+/* Un paso de avance para todos los atacantes (o solo los voladores si soloVuela).
+   Los voladores buscan el primer hueco libre hacia adelante, destruyendo defensores
+   de nivel ≤ suyo, sobrevolando los de nivel mayor. Si no hay hueco, entran al búnker. */
+function avanzarAtacantes(j, e, evs, soloVuela = false) {
   for (const s of j.senderos) {
     for (let pos = 3; pos > 0; pos--) {
       const f = s.posiciones[pos - 1];
       if (f?.tipo !== "atacante") continue;
       if (soloVuela && !f.vuela) continue;
       if (f.vuela) {
-        /* Volador: salta defensores, avanza 1 casilla. */
-        if (!s.posiciones[pos]) {
-          s.posiciones[pos] = f;
+        let aterrizó = false;
+        for (let dest = pos; dest <= 3; dest++) {
+          const ocupante = s.posiciones[dest];
+          if (!ocupante) {
+            s.posiciones[dest] = f;
+            s.posiciones[pos - 1] = null;
+            aterrizó = true;
+            break;
+          }
+          if (ocupante.tipo === "monstruo" && f.nivel >= ocupante.nivel) {
+            s.posiciones[dest] = f;
+            s.posiciones[pos - 1] = null;
+            evs.push({ tipo: "combate", texto: `Las aves de bruma destruyen al monstruo ${ocupante.nivel} de ${j.nombre} en el peldaño ${dest + 1} de la escalera ${s.id}.` });
+            aterrizó = true;
+            break;
+          }
+          /* Defensor más fuerte o atacante: sobrevuela y sigue buscando. */
+        }
+        if (!aterrizó) {
+          /* Sin hueco: entra directamente al búnker. */
           s.posiciones[pos - 1] = null;
+          j.puntosMonsters += f.nivel;
+          j.entradasBunker = [...(j.entradasBunker ?? []),
+            { id: uid("b"), calle: s.id, nivel: f.nivel }].slice(-8);
+          evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+          if (j.puntosMonsters > 20) {
+            j.vivo = false;
+            marcarEliminado(e, j.id);
+            evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
+          }
         }
         continue;
       }
+      /* Atacante normal: avanza 1 casilla, combate si hay defensor. */
       const defensor = s.posiciones[pos];
       if (!defensor) {
         s.posiciones[pos] = f;
@@ -947,10 +976,10 @@ function faseAvance(e, jugadorId, evs) {
   /* Paso 1: atacantes en pos 3 entran al búnker. */
   entrarAlBunker(j, e, evs);
   /* Paso 2: todos avanzan 1 casilla. */
-  avanzarAtacantes(j, evs);
+  avanzarAtacantes(j, e, evs);
   /* Paso 3 (voladores): segundo avance + entrada si llegan a pos 3. */
   entrarAlBunker(j, e, evs);
-  avanzarAtacantes(j, evs, true);
+  avanzarAtacantes(j, e, evs, true);
   entrarAlBunker(j, e, evs);
 
   e.fase = "defensores";
