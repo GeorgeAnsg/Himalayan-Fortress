@@ -3423,6 +3423,14 @@ function pintarManuscritos() {
       ${parrafo("Un monstruo que llega al final de su escalera espera en la lanzadera hasta que lo lances. Si un atacante sube desde el cuarto peldaño, entra en la fortaleza y suma sus puntos: con más de 20, tu fortaleza cae.")}
     `)}
 
+    ${seccion("Destino", `
+      ${fila("Luna 1", "Se ha avistado un rastreador", "1 rastreador")}
+      ${fila("Luna 2", "Se han avistado 2 rastreadores", "2 rastreadores")}
+      ${fila("Luna 3", "Calma", "no aparece nadie")}
+      ${fila("Luna 4", "2 rastreadores avistados", "2 rastreadores")}
+      ${parrafo("La carta es la misma para toda la mesa y se revela una vez por luna. Este primer ciclo va fijo, para que todas las partidas arranquen igual. Desde la luna 5 el mazo se baraja y solo salen las cartas del tramo de la luna: tramo 2 en las lunas 5 a 8 y tramo 3 desde la 9.")}
+    `)}
+
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
       ${fila("Carroñero", "Nv 2", "2 ptos · 1 mon.")}

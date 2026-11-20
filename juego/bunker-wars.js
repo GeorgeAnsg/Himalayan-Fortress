@@ -118,9 +118,10 @@ const PLANTILLAS_DESTINO = [
    se repartieron antes de que los eventos lo tuvieran. */
 const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null]));
 
-/* Apertura fija de las cuatro primeras lunas: rastreador, calma, dos
-   rastreadores y calma. El arranque es el momento más frágil de la partida y
-   una carta fea en la luna 1 la decidía; así todas las mesas empiezan igual.
+/* Apertura fija de las cuatro primeras lunas: rastreador, dos rastreadores,
+   calma y dos rastreadores. El arranque es el momento más frágil de la
+   partida y una carta fea en la luna 1 la decidía; así todas las mesas
+   empiezan igual.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
 const APERTURA_DESTINO = { 1: "a01", 2: "a03", 3: "d21", 4: "a03b" };
