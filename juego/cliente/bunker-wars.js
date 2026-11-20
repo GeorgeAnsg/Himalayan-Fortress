@@ -3106,15 +3106,19 @@ const BESTIARIO_UI = [
   { nivel: 5, nombre: "Coloso de hielo", puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza" },
 ];
 
-/* Box al que va la cría. Se predefine al abrir el criadero desde un hueco,
-   pero el jugador puede cambiarlo en el propio modal. */
+/* Jaula a la que va la cría: la del hueco del box por el que se entra, así que
+   el criadero no necesita preguntarla. */
 let boxCriadero = 0;
 
-/* Modal del criadero: una cartita por monstruo permitido, con su imagen, lo
-   que cuesta en monedas, lo que hace y un botón grande de criar. Arriba, el
-   toggle de box (predefinido si se entra desde un hueco del box). */
+/* Modal del criadero: los cuatro monstruos del bestiario con su imagen, lo que
+   cuesta criarlos, lo que hacen y un botón grande de criar. La jaula es la del
+   «+» por el que se ha entrado; si se abre desde el edificio, la primera que
+   tenga un hueco libre. */
 function abrirCriadero(boxInicial = null) {
-  if (boxInicial === 0 || boxInicial === 1) boxCriadero = boxInicial;
+  const libresEnBox = (b) => (boxActual ?? []).slice(b * 2, b * 2 + 2).filter((m) => !m).length;
+  boxCriadero = (boxInicial === 0 || boxInicial === 1)
+    ? boxInicial
+    : (libresEnBox(0) > 0 ? 0 : 1);
   document.getElementById("bw-modal-criadero")?.remove();
   if (!tocaMesa || faseMesa !== "acciones") {
     aviso("Solo se cría en tu fase de decretos.", { error: true });
@@ -3124,7 +3128,6 @@ function abrirCriadero(boxInicial = null) {
     aviso("Ya no te quedan decretos este turno.", { error: true });
     return;
   }
-  const libresEnBox = (b) => (boxActual ?? []).slice(b * 2, b * 2 + 2).filter((m) => !m).length;
   if (libresEnBox(0) === 0 && libresEnBox(1) === 0) {
     aviso("Las jaulas están llenas: saca un monstruo antes de criar.", { error: true });
     return;
@@ -3167,9 +3170,6 @@ function abrirCriadero(boxInicial = null) {
         <div class="bw-panel-label">Criadero ${ROMANOS[criaderoMesa || 1] || (criaderoMesa || 1)}</div>
         <button class="bw-panel-x" type="button" data-cerrar-criadero aria-label="Cerrar">×</button>
       </div>
-      <div class="bw-criar-toggle">
-        ${[0, 1].map((b) => { const n = libresEnBox(b); return `<button type="button" class="bw-criar-box${b === boxCriadero ? " activo" : ""}" data-box="${b}">Jaula ${ROMANOS[b + 1]}<span>(${n} ${n === 1 ? "libre" : "libres"})</span></button>`; }).join("")}
-      </div>
       <div class="bw-criar-grid">${lista.map(celda).join("")}</div>
       <p class="bw-desc-nota"></p>
       <div class="bw-modal-acciones">
@@ -3185,8 +3185,7 @@ function abrirCriadero(boxInicial = null) {
     const m = sel ? lista.find(x => x.nivel === Number(sel.dataset.nivel)) : null;
     ok.disabled = !m;
     ok.textContent = m ? `Criar ${m.nombre} · ${monedasDe(m)}` : "Criar";
-    /* La jaula elegida ya se ve en el toggle: aquí solo lo que no se ve. */
-    nota.textContent = libre ? "" : `La jaula ${ROMANOS[boxCriadero + 1]} está llena: cambia de jaula o saca un monstruo.`;
+    nota.textContent = libre ? "" : `La jaula ${ROMANOS[boxCriadero + 1]} está llena: saca un monstruo antes de criar.`;
   };
   marcar();
 
@@ -3203,15 +3202,6 @@ function abrirCriadero(boxInicial = null) {
   const cerrar = () => fondo.remove();
   fondo.addEventListener("click", (ev) => { if (ev.target === fondo) cerrar(); });
   fondo.querySelector("[data-cerrar-criadero]").addEventListener("click", cerrar);
-
-  /* Toggle de jaula: se puede cambiar siempre, también si se entró por un hueco. */
-  for (const tb of fondo.querySelectorAll(".bw-criar-box")) {
-    tb.addEventListener("click", () => {
-      const b = Number(tb.dataset.box);
-      if (b === boxCriadero) return;
-      abrirCriadero(b);
-    });
-  }
 
   ok.addEventListener("click", async () => {
     const sel = fondo.querySelector(".bw-criar-celda.sel");
@@ -5631,24 +5621,8 @@ function css() {
       margin:0; max-width:min(340px,90vw); text-align:center;
       font:400 11.5px/1.4 ui-sans-serif, system-ui, sans-serif; color:#b7a992;
     }
-    /* Criadero: toggle de jaula y cuadrados para elegir el monstruo. El toggle
-       mide lo mismo que la fila de cuadrados. */
-    .bw-criar-toggle { display:flex; gap:8px; width:min(312px,100%); margin:0 auto; }
-    /* Jaula y huecos libres en la misma línea: el toggle no crece de alto, y
-       los dos botones miden lo mismo aunque uno diga "2 libres". */
-    .bw-criar-toggle .bw-criar-box {
-      flex:1 1 0; min-width:0; box-sizing:border-box; display:flex; flex-direction:row; align-items:baseline; justify-content:center; gap:4px;
-      padding:6px 6px; border-radius:9px; cursor:pointer; white-space:nowrap;
-      font:700 13px/1.1 ui-sans-serif, system-ui, sans-serif;
-      color:#cfc4ad; background:rgba(244,236,221,.10);
-      border:1px solid rgba(244,236,221,.25);
-    }
-    .bw-criar-toggle .bw-criar-box span { font-weight:400; font-size:10px; color:#8b7e6b; }
-    .bw-criar-toggle .bw-criar-box.activo {
-      background:linear-gradient(180deg,#d8dfe5,#9daab5 55%,#8595a1);
-      color:#12161a; border-color:transparent;
-    }
-    .bw-criar-toggle .bw-criar-box.activo span { color:#3a4048; }
+    /* Criadero: la fila de cuadrados para elegir el monstruo. La jaula no se
+       pregunta, porque es la del «+» por el que se abre el modal. */
     /* Los cuatro monstruos del bestiario en una fila de cuatro cuadrados, del
        mismo tamaño que los peldaños del panel de torres: 72 px de lado como
        mucho (min(72 px, 22 vw)), y en pantallas más estrechas encogen con la
