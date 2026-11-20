@@ -2393,8 +2393,8 @@ function claveDestino(d) {
 /* ── Lo que lee el jugador en la carta de Destino ──────────────────────────
    Dos capas: el nombre y el relato con ambientación (lo que se ve en la
    carta) y, debajo en pequeño, la regla exacta (textoDestino). */
-const BESTIARIO = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso de hielo", 7: "devorador de cumbres" };
-const BESTIARIO_PL = { 1: "rastreadores", 2: "carroñeros", 3: "yetis", 5: "colosos de hielo", 7: "devoradores de cumbres" };
+const BESTIARIO = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso de hielo", 7: "devorador de cumbres", volador: "aves de bruma" };
+const BESTIARIO_PL = { 1: "rastreadores", 2: "carroñeros", 3: "yetis", 5: "colosos de hielo", 7: "devoradores de cumbres", volador: "aves de bruma" };
 
 /* A la fortaleza se sube: tres escaleras, la de la izquierda, la central y la
    de la derecha. El camino 1 es el de la izquierda. */
@@ -2477,14 +2477,16 @@ function relatoDestino(d) {
 
 function imgDestino(d) {
   const n = d.nivelReal ?? d.nivel ?? 1;
-  const nv = n >= 5 ? 3 : n;
+  const esVolador = n === "volador";
+  const nv = esVolador ? 1 : (n >= 5 ? 3 : n);
+  const imgMon = esVolador ? "volador" : `monstruo-nv${nv}`;
   const mapa = {
-    amenaza: `monstruo-nv${nv}`,
-    amenaza_triple: `monstruo-nv${nv}`,
-    amenaza_doble: `monstruo-nv${nv}`,
-    amenaza_rival: `monstruo-nv${nv}`,
-    amenaza_mixta: `monstruo-nv${nv}`,
-    colocar_monstruos: `monstruo-nv${nv}`,
+    amenaza: imgMon,
+    amenaza_triple: imgMon,
+    amenaza_doble: imgMon,
+    amenaza_rival: imgMon,
+    amenaza_mixta: imgMon,
+    colocar_monstruos: imgMon,
     calma: "defensa",
     buscar_bunker: "recursos",
     aniquilar_entrada: "ataque",

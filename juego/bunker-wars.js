@@ -64,9 +64,9 @@ const PLANTILLAS_DESTINO = [
      derecha). `nivelPropio` la salta la rebaja de la luna blanca: si no, el
      carroñero entraría como rastreador. */
   { id:"a03", tipo:"amenaza_mixta", tramo:1, tramoMax:1, nivel:2,
-    niveles:[1, 2, 1], nivelPropio:true,
-    titulo:"Se ha avistado un carroñero",
-    descripcion:"Un carroñero baja por la escalera central; dos rastreadores aparecen por los lados." },
+    niveles:[1, 2, "volador"], nivelPropio:true,
+    titulo:"Un carroñero, un rastreador y aves de bruma",
+    descripcion:"Un rastreador por la izquierda, un carroñero por el centro y aves de bruma por la derecha." },
   { id:"a03b", tipo:"amenaza", nivel:1, cantidad:2, prio:[2,1,3], tramo:1, tramoMax:1,
     titulo:"2 rastreadores avistados",
     descripcion:"Dos rastreadores aparecen en el comienzo de tus escaleras." },
@@ -135,7 +135,7 @@ const TRAMO_DESTINO = new Map(PLANTILLAS_DESTINO.map(p => [p.id, p.tramo ?? null
    que el comienzo no sea una cuesta plana.
    Estas copias no salen del mazo ni van al descarte: desde la luna 5 el ciclo
    sigue exactamente como estaba. */
-const APERTURA_DESTINO = { 1: "a01", 2: "a01v", 3: "d21", 4: "a03b" };
+const APERTURA_DESTINO = { 1: "a01", 2: "a03", 3: "d21", 4: "a03b" };
 
 function crearMazoDestino(nJugadores, e) {
   return barajar(PLANTILLAS_DESTINO.map(p => ({ ...p, uid: uid("dc") })), e);
@@ -2610,6 +2610,7 @@ function comprobarFin(e) {
 
 // ── Resolución de cartas de Destino ───────────────────────────────────────
 function nivelRealEnemigo(e, nivel) {
+  if (nivel === "volador") return "volador";
   return e.nivelEnemigo === 1 ? Math.min(1, nivel) : nivel;
 }
 
@@ -2675,7 +2676,7 @@ function planificarMixta(senderos, carta) {
   return puestos;
 }
 
-const NOMBRE_NIVEL = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso de hielo", 7: "devorador de cumbres" };
+const NOMBRE_NIVEL = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso de hielo", 7: "devorador de cumbres", volador: "aves de bruma" };
 
 function describirMixta(puestos) {
   if (!puestos.length) return "Un carroñero y dos rastreadores buscan hueco en las escaleras, pero no lo encuentran.";
