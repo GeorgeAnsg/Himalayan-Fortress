@@ -83,9 +83,9 @@ export function pintar(contenedor, opciones) {
   const lanzaderaMovidas = (lanzaderasMesa ?? []).flatMap((m, i) => {
     if (!m?.id) return [];
     const boxIdx = boxAntes.findIndex((x) => x?.id === m.id);
-    if (boxIdx >= 0 && boxIdx < 4) return [{ id: m.id, nivel: m.nivel, boxIdx, lanzadera: i }];
+    if (boxIdx >= 0 && boxIdx < 4) return [{ id: m.id, nivel: m.nivel, vuela: m.vuela, boxIdx, lanzadera: i }];
     const prevPos = fichasPrevias.get(m.id);
-    return prevPos ? [{ id: m.id, nivel: m.nivel, lanzadera: i, desdePath: prevPos }] : [];
+    return prevPos ? [{ id: m.id, nivel: m.nivel, vuela: m.vuela, lanzadera: i, desdePath: prevPos }] : [];
   });
   /* Los que ya estaban en el camino y este repintado salen hacia la lanzadera:
      hacen el último tramo como una ficha más, en su turno, y solo después se
@@ -95,7 +95,7 @@ export function pintar(contenedor, opciones) {
   const colaMovidas = (privada?.colaLanzaderas ?? []).flatMap((m, i) => {
     if (!m?.id) return [];
     const prevPos = fichasPrevias.get(m.id);
-    return prevPos ? [{ id: m.id, nivel: m.nivel, cola: i, desdePath: prevPos }] : [];
+    return prevPos ? [{ id: m.id, nivel: m.nivel, vuela: m.vuela, cola: i, desdePath: prevPos }] : [];
   });
   const salidasLanzadera = [
     ...lanzaderaMovidas.filter((m) => m.desdePath && m.desdePath.paso > 0),
@@ -1034,7 +1034,7 @@ function prepararSalidasLanzadera(raiz, movidas) {
     ficha.style.cssText = `left:${hasta.l}%;top:${hasta.t}%;z-index:4;pointer-events:none`;
     ficha.dataset.ol = desde.l;
     ficha.dataset.ot = desde.t;
-    ficha.innerHTML = `<img src="${imgMonstruo(nivelImgDe(m), false)}" alt="" class="ficha-img"><b class="ficha-nv">${m.nivel}</b>`;
+    ficha.innerHTML = `<img src="${imgMonstruo(nivelImgDe(m), false)}" alt="" class="ficha-img"><b class="ficha-nv">${m.vuela ? "✦" : m.nivel}</b>`;
     fichas.append(ficha);
     registro(`sale a lanzadera · E${calle + 1}·${paso + 1} · nv${m.nivel}`);
   }
