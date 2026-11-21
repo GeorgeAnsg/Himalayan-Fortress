@@ -17,10 +17,14 @@ export function pintarCaido(raiz, { mesa, alSalir }) {
   const ids = Object.keys(jugadores);
   const total = ids.length;
   const eliminados = publica.eliminados ?? [];
-  /* El primero que cae es el último de la mesa; el siguiente, el penúltimo. */
+  const vivos = ids.filter((id) => (jugadores[id] ?? {}).vivo !== false).length;
+  /* El primero que cae es el último de la mesa; el siguiente, el penúltimo.
+     Los que caen en la misma luna comparten puesto. */
   const puestoDe = (id) => {
-    const i = eliminados.findIndex((x) => x.jugadorId === id);
-    return i < 0 ? null : total - i;
+    const caida = eliminados.find((x) => x.jugadorId === id);
+    if (!caida) return null;
+    const despues = eliminados.filter((x) => (x.luna ?? 0) > (caida.luna ?? 0)).length;
+    return vivos + despues + 1;
   };
   const miPuesto = puestoDe(mesa.tu);
 
@@ -83,6 +87,7 @@ export function pintarCaido(raiz, { mesa, alSalir }) {
 export function pintar(raiz, { mesa, alRevancha, alSalir }) {
   const puestos = mesa.final?.puestos ?? [];
   const ganador = puestos[0];
+  const primeros = puestos.filter((p) => p.puesto === ganador?.puesto);
   const anfitrion = mesa.jugadores.find((j) => j.id === mesa.anfitrion);
 
   const nodo = h(`
@@ -90,9 +95,11 @@ export function pintar(raiz, { mesa, alRevancha, alSalir }) {
       <p class="subtitulo" style="margin-bottom:4px">Madriguera <span class="mono">${esc(mesa.codigo)}</span></p>
       <h1 class="titulo">Se acabó</h1>
       <p class="nota" style="margin-bottom:18px">
-        ${ganador
-          ? `Gana <strong style="color:var(--plata-claro)">${esc(ganador.nombre)}</strong>${ganador.tu ? " (tú)" : ""}.`
-          : "Partida terminada."}
+        ${primeros.length > 1
+          ? `Empate: <strong style="color:var(--plata-claro)">${primeros.map((p) => esc(p.nombre)).join(", ")}</strong>.`
+          : ganador
+            ? `Gana <strong style="color:var(--plata-claro)">${esc(ganador.nombre)}</strong>${ganador.tu ? " (tú)" : ""}.`
+            : "Partida terminada."}
       </p>
 
       <div class="podio">
@@ -105,6 +112,13 @@ export function pintar(raiz, { mesa, alRevancha, alSalir }) {
           </div>`).join("")}
         ${puestos.length === 0 ? `<div class="vacio">No hay resultados guardados.</div>` : ""}
       </div>
+
+      <p class="nota" style="margin-top:14px">
+        Gana el último búnker en pie. Si la partida llega a la luna 25, gana
+        quien menos puntos tenga: los puntos son la suma de niveles de los
+        monstruos que entraron en tu búnker. Los que caen en la misma ronda
+        empatan.
+      </p>
 
       <div class="acciones">
         ${mesa.soyAnfitrion

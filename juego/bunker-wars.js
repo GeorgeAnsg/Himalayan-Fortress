@@ -915,10 +915,16 @@ const bunkerWars = {
     const j = e.jugadores[jugadorId];
     if (!j) return e;
     j.vivo = false;
+    marcarEliminado(e, jugadorId);
     for (const s of j.senderos) s.posiciones = [null, null, null, null];
     j.lanzaderas = [null, null];
-    if (e.orden[e.turnoIdx] === jugadorId) avanzarTurno(e);
-    comprobarFin(e);
+    if (e.orden[e.turnoIdx] === jugadorId) {
+      const lunaAntes = e.luna;
+      avanzarTurno(e);
+      comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
+    } else {
+      comprobarFin(e);
+    }
     return e;
   },
 };
@@ -1228,8 +1234,10 @@ function resolverAutomaticas(e, evs) {
        la mesa se queda esperando jugadas de un muerto y no hay forma de
        seguir: nadie tiene jugadas legales. */
     if (!e.jugadores[id]?.vivo) {
+      const lunaAntes = e.luna;
       if (avanzarTurno(e)) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
       e.fase = "lanzar";
+      comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
       continue;
     }
     if (e.fase === "lanzar") {
@@ -1839,9 +1847,10 @@ function cerrarTurnoYAvanzar(e, jugadorId, evs) {
      en el aviso de «Es tu turno» y a partir de aquí cuentan los nuevos. */
   const quienCierra = e.jugadores[jugadorId];
   if (quienCierra) quienCierra.avisosTorre = [];
+  const lunaAntes = e.luna;
   const lunaRoja = avanzarTurno(e);
   e.fase = "lanzar";
-  comprobarFin(e);
+  comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
   if (!e.final) {
     const sigJugador = e.jugadores[e.orden[e.turnoIdx]];
     if (lunaRoja) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
@@ -2742,36 +2751,77 @@ function avanzarTurno(e) {
   return lunaRoja;
 }
 
-function comprobarFin(e) {
+/* Clasificación final. En «todos»: primero los que siguen en pie (si la
+   partida acaba por lunas, gana quien menos puntos acumule) y después los
+   caídos, del último al primero. Los que caen en la misma luna empatan. En
+   «equipos» se mantiene el orden de siempre: primero los equipos con gente
+   viva y después por puntos totales. */
+function puestosFinal(e) {
+  const indice = (id) => e.orden.indexOf(id);
+  const filas = e.orden.map((id) => {
+    const j = e.jugadores[id];
+    const caida = (e.eliminados ?? []).find((x) => x.jugadorId === id);
+    return {
+      jugadorId: id,
+      equipo: j.equipo ?? null,
+      puntos: j.puntosMonsters ?? 0,
+      vivo: !!j.vivo,
+      luna: caida?.luna ?? null,
+    };
+  });
+  let orden;
+  let mismoPuesto = () => false;
+  if (e.modo === "equipos") {
+    const totales = new Map();
+    for (const f of filas) {
+      totales.set(f.equipo, (totales.get(f.equipo) ?? 0) + f.puntos);
+    }
+    orden = [...filas].sort((a, b) => {
+      const va = a.vivo ? 0 : 1;
+      const vb = b.vivo ? 0 : 1;
+      if (va !== vb) return va - vb;
+      return (totales.get(a.equipo) ?? 0) - (totales.get(b.equipo) ?? 0)
+        || a.puntos - b.puntos
+        || indice(a.jugadorId) - indice(b.jugadorId);
+    });
+  } else {
+    const vivos = filas.filter((f) => f.vivo)
+      .sort((a, b) => a.puntos - b.puntos || indice(a.jugadorId) - indice(b.jugadorId));
+    const caidos = filas.filter((f) => !f.vivo)
+      .sort((a, b) => {
+        const la = a.luna == null ? 0 : a.luna;
+        const lb = b.luna == null ? 0 : b.luna;
+        return lb - la || indice(a.jugadorId) - indice(b.jugadorId);
+      });
+    orden = [...vivos, ...caidos];
+    mismoPuesto = (a, b) => a.vivo === b.vivo
+      && (a.vivo ? a.puntos === b.puntos : a.luna === b.luna);
+  }
+  let puesto = 1;
+  orden.forEach((f, i) => {
+    if (i > 0 && !mismoPuesto(orden[i - 1], f)) puesto = i + 1;
+    f.puesto = puesto;
+  });
+  return orden.map((f) => ({ jugadorId: f.jugadorId, puntos: f.puntos, puesto: f.puesto }));
+}
+
+/* `rondaCerrada` lo pone el cierre de turno cuando el orden vuelve a empezar
+   (también al saltarse el turno de un muerto, si eso cierra la luna). Hasta
+   entonces la partida sigue aunque quede un solo búnker: los que aún no han
+   jugado pueden caer en esta misma ronda y empatar. Antes la muerte del
+   primero cortaba la ronda y los demás no llegaban a jugarla. */
+function comprobarFin(e, { rondaCerrada = false } = {}) {
   if (e.final) return;
   const vivos = e.orden.filter(id => e.jugadores[id]?.vivo);
   if (e.modo === "equipos") {
     const equiposVivos = new Set(vivos.map(id => e.jugadores[id].equipo));
-    if (equiposVivos.size > 1 && e.luna <= 25) return;
-    const totales = new Map();
-    for (const id of e.orden) {
-      const equipo = e.jugadores[id].equipo;
-      totales.set(equipo, (totales.get(equipo) ?? 0) + e.jugadores[id].puntosMonsters);
+    if (!vivos.length || e.luna > 25 || (equiposVivos.size <= 1 && rondaCerrada)) {
+      e.final = { puestos: puestosFinal(e) };
     }
-    const vivosSet = new Set(vivos);
-    const puestos = [...e.orden]
-      .map(id => ({ jugadorId: id, puntos: e.jugadores[id].puntosMonsters, equipo: e.jugadores[id].equipo }))
-      .sort((a, b) => {
-        const aVivo = vivosSet.has(a.jugadorId) ? 0 : 1;
-        const bVivo = vivosSet.has(b.jugadorId) ? 0 : 1;
-        if (aVivo !== bVivo) return aVivo - bVivo;
-        const ta = totales.get(a.equipo) ?? 0;
-        const tb = totales.get(b.equipo) ?? 0;
-        return ta - tb || a.puntos - b.puntos || e.orden.indexOf(a.jugadorId) - e.orden.indexOf(b.jugadorId);
-      });
-    e.final = { puestos };
     return;
   }
-  if (vivos.length <= 1 || e.luna > 25) {
-    const puestos = [...e.orden]
-      .map(id => ({ jugadorId: id, puntos: e.jugadores[id].puntosMonsters }))
-      .sort((a, b) => a.puntos - b.puntos);
-    e.final = { puestos };
+  if (!vivos.length || e.luna > 25 || (vivos.length <= 1 && rondaCerrada)) {
+    e.final = { puestos: puestosFinal(e) };
   }
 }
 

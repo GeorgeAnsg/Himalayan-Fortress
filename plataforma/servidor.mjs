@@ -257,7 +257,7 @@ function vistaPara(sala, usuarioId) {
         puestos: sala.datos.final.puestos.map((p, i) => {
           const j = jugadores.find((x) => x.id === p.jugadorId);
           return {
-            puesto: i + 1,
+            puesto: p.puesto ?? i + 1,
             jugadorId: p.jugadorId,
             nombre: j?.nombre ?? "—",
             avatar: j?.avatar ?? "0",
