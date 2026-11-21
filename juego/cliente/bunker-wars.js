@@ -1161,6 +1161,10 @@ function animarEntradaBunker(raiz, entradas) {
     vida.style.left = `${l}%`;
     vida.style.top = `${t}%`;
     vida.innerHTML = `<b class="ficha-nv">${nivel ?? 1}</b>`;
+    /* Escondida hasta que el monstruo llegue a la puerta: si se pinta desde el
+       principio, el círculo rojo aparece antes de que acabe la caminata y
+       luego sube sin que nadie haya entrado todavía. */
+    vida.style.visibility = "hidden";
     marco.append(ficha, nube, vida);
 
     /* De una en una, como las demás fichas de la jornada. Primero la caminata
@@ -1181,6 +1185,8 @@ function animarEntradaBunker(raiz, entradas) {
       );
     }
     setTimeout(() => {
+      /* Ya ha llegado: ahora sí salen el humo y la vida que se lleva. */
+      vida.style.visibility = "visible";
       nube.classList.add("on");
       ficha.animate?.(
         [
