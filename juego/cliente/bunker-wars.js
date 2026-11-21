@@ -2870,6 +2870,44 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const f = fichaEn(s[i], paso);
       if (f?.id) vivos.add(f.id);
     }
+    /* El ave que mata puede seguir de largo: hace dos acciones, así que deja
+       el muerto en un peldaño y su segunda acción la lleva más allá. En ese
+       caso no está ni en la casilla del muerto ni en la de delante, y la
+       muerte se perdía sin fantasma ni nube. Se busca por la foto anterior:
+       un ave del otro bando que venía de detrás, ha pasado de largo y tenía
+       nivel para matarla. También vale si acabó en la lanzadera o entró en el
+       búnker en la misma jugada. */
+    const asesinoQuePasoDeLargo = (calle, paso, esAtacante, nivel) => {
+      const dirK = esAtacante ? -1 : 1; // hacia dónde avanza el que la mata
+      const vieneDeDetras = (previo) => !!previo && previo.calle === calle
+        && (previo.paso - paso) * dirK < 0;
+      const nivelVale = (n) => (n ?? 1) >= (nivel ?? 1);
+      for (let pasoK = 0; pasoK < 4; pasoK++) {
+        const k = fichaEn(s[calle], pasoK);
+        if (!k?.vuela || !k.id) continue;
+        if ((k.tipo === "atacante") === esAtacante) continue;
+        if ((pasoK - paso) * dirK <= 0) continue;
+        if (!nivelVale(k.nivel) || !vieneDeDetras(fotoPrevia.get(k.id))) continue;
+        return { id: k.id, tipo: k.tipo };
+      }
+      /* Salió a la lanzadera con la misma jugada. */
+      for (const m of lanzaderas ?? []) {
+        if (!m?.vuela || !m.id) continue;
+        if ((0 - paso) * dirK < 0) continue;
+        if (!nivelVale(m.nivel) || !vieneDeDetras(fotoPrevia.get(m.id))) continue;
+        return { id: m.id, tipo: "monstruo" };
+      }
+      /* Entró en el búnker con la misma jugada. */
+      for (const en of j?.entradas ?? []) {
+        if (!en?.ficha || !en.vuela || entradasHechasBunker.has(en.id)) continue;
+        if (en.calle - 1 !== calle || !nivelVale(en.nivel)) continue;
+        if ((3 - paso) * dirK < 0) continue;
+        if (!vieneDeDetras(fotoPrevia.get(en.ficha))) continue;
+        return { id: en.ficha, tipo: "atacante" };
+      }
+      return null;
+    };
+
     for (const [id, antes] of fotoPrevia) {
       if (vivos.has(id)) continue;
       /* La caída se enseña una sola vez: la ficha sale de la foto. */
@@ -2903,6 +2941,19 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* Si su casilla la ocupa ahora un rival, ese ha ganado y se le ve entrar;
          si está vacía, murió al atacar la casilla de delante. */
       const destino = esRival(suCasilla) ? paso : (esRival(delante) ? paso + (esAtacante ? 1 : -1) : null);
+      /* El que la ha matado puede haberse ido más allá de este peldaño. */
+      if (destino == null) {
+        const asesino = asesinoQuePasoDeLargo(antes.calle, paso, esAtacante, antes.nivel);
+        if (asesino) {
+          luchas.push({
+            calle: antes.calle, origen: paso, destino: paso,
+            nivel: antes.nivel, vuela: antes.vuela, esAtacante,
+            ganadorId: asesino.id,
+            grupo: asesino.tipo === "atacante" ? "atacantes" : "defensores",
+          });
+          continue;
+        }
+      }
       if (destino == null || destino < 0 || destino > 3) {
         /* Se ha ido sin que nadie la haya comido: la ha quitado una carta
            (Purga, aniquilar…). Se le deja el humo del combate en la casilla,
