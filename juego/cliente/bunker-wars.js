@@ -1172,7 +1172,7 @@ function animarAniquiladas(raiz, lista) {
     const copia = document.createElement("div");
     copia.className = `ficha bw-aniquilada ${a.esAtacante ? "atacante" : "mia"}`;
     copia.style.cssText = `left:${pos.l}%;top:${pos.t}%;z-index:6;pointer-events:none`;
-    copia.innerHTML = `<img src="${imgMonstruo(a.nivel, a.esAtacante)}" alt="" class="ficha-img"><b class="ficha-nv">${a.nivel}</b>`;
+    copia.innerHTML = `<img src="${imgMonstruo(a.vuela ? "volador" : a.nivel, a.esAtacante)}" alt="" class="ficha-img"><b class="ficha-nv">${a.nivel}</b>`;
     fichas.append(copia);
     const nube = document.createElement("div");
     nube.className = "bw-nube";
@@ -2069,7 +2069,7 @@ function abrirLanzar(ops) {
     /* El nivel se apunta antes de esperar: el repintado que llega con el estado
        nuevo mete la reserva de la cola en el hueco que deja la lanzadera, así
        que después ya no está el monstruo que acabas de mandar. */
-    const nvLanzado = lanzaderasModal[accion.lanzadera]?.nivel ?? null;
+    const monLanzado = lanzaderasModal[accion.lanzadera] ?? null;
     enviando = true;
     fondo.classList.add("enviando");
     const r = await enviarAccion(accion);
@@ -2091,7 +2091,7 @@ function abrirLanzar(ops) {
       && !(a.rivalId === accion.rivalId && a.sendero === accion.sendero));
     /* La que acaba de salir se queda a la vista en la calle donde la has
        dejado: con la segunda en la mano se ve dónde fue la primera. */
-    marcarLanzado(accion.rivalId, accion.sendero, nvLanzado);
+    marcarLanzado(accion.rivalId, accion.sendero, monLanzado);
     actualizarChips();
   };
 
@@ -2101,21 +2101,21 @@ function abrirLanzar(ops) {
   const lanzados = new Map();
   const pintarLanzados = (rivalId) => {
     if (rivalId == null) return;
-    for (const [clave, nv] of lanzados) {
+    for (const [clave, mon] of lanzados) {
       const [de, calle] = clave.split(":");
       if (de !== String(rivalId)) continue;
       const hueco = fondo.querySelector(
         `.bw-torre[data-calle="${calle}"] .bw-torre-slots .bw-torre-slot:last-child`);
       if (!hueco || hueco.classList.contains("atacante")) continue;
       hueco.className = "bw-box-slot lleno bw-torre-slot atacante";
-      hueco.title = `Atacante nivel ${nv} en el peldaño 1`;
-      hueco.innerHTML = `<img src="${imgMonstruo(nv, true)}" class="bw-box-img" alt="monstruo">`
-        + `<b class="bw-box-nv">${nv}</b><span class="bw-torre-step">1</span>`;
+      hueco.title = `${mon.vuela ? "Aves de bruma" : `Atacante nivel ${mon.nivel}`} en el peldaño 1`;
+      hueco.innerHTML = `<img src="${imgMonstruo(mon.vuela ? "volador" : mon.nivel, true)}" class="bw-box-img" alt="monstruo">`
+        + `<b class="bw-box-nv">${mon.nivel}</b><span class="bw-torre-step">1</span>`;
     }
   };
-  const marcarLanzado = (rivalId, calle, nv) => {
-    if (!nv) return;
-    lanzados.set(`${rivalId}:${Number(calle)}`, nv);
+  const marcarLanzado = (rivalId, calle, mon) => {
+    if (!mon?.nivel) return;
+    lanzados.set(`${rivalId}:${Number(calle)}`, { nivel: mon.nivel, vuela: !!mon.vuela });
     pintarLanzados(rivalId);
   };
 
@@ -2921,7 +2921,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const delante = fichaEn(s[antes.calle], paso + (esAtacante ? 1 : -1));
       /* Muerte sin pelea: humo en su casilla y nada de deslizamiento. */
       if (sinLucha.has(id)) {
-        aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
+        aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante, vuela: !!antes.vuela });
         continue;
       }
       /* El atacante de la casilla 1 ha caído contra el monstruo que se va a la
@@ -2962,7 +2962,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
            lanzadera, no ha muerto. */
         const loQuitaUnaCarta = !suCasilla && !delante && !entraron.has(id)
           && (esAtacante ? paso !== 3 : paso >= 2);
-        if (loQuitaUnaCarta) aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
+        if (loQuitaUnaCarta) aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante, vuela: !!antes.vuela });
         continue;
       }
       const ganador = fichaEn(s[antes.calle], destino);
@@ -3391,8 +3391,17 @@ function pintarAliados(aliados, peticiones = [], enviosPendientes = []) {
     const cosas = [];
     if (g.monedas) cosas.push(`${g.monedas} moneda${g.monedas === 1 ? "" : "s"}`);
     if (g.decretos) cosas.push(`${g.decretos} decreto${g.decretos === 1 ? "" : "s"}`);
-    const niveles = (g.monstruos ?? []).map((m) => m?.nivel ?? m).filter((n) => Number(n) > 0);
-    if (niveles.length) cosas.push(`${niveles.length} monstruo${niveles.length === 1 ? "" : "s"} de nivel ${niveles.join(", ")}`);
+    const mons = (g.monstruos ?? []).map((m) => (typeof m === "object"
+      ? { nivel: m?.nivel, vuela: !!m?.vuela }
+      : { nivel: m, vuela: false })).filter((m) => Number(m.nivel) > 0);
+    if (mons.length) {
+      const aves = mons.filter((m) => m.vuela).length;
+      const resto = mons.filter((m) => !m.vuela);
+      const partes = [];
+      if (aves) partes.push(`${aves} ${aves === 1 ? "ave de bruma" : "aves de bruma"}`);
+      if (resto.length) partes.push(`${resto.length} monstruo${resto.length === 1 ? "" : "s"} de nivel ${resto.map((m) => m.nivel).join(", ")}`);
+      cosas.push(partes.join(" y "));
+    }
     slots.push(`<div class="bw-aliados-slot bw-aliados-slot-envio">
       <b>${esc(g.deNombre ?? "Un aliado")}</b>
       <span>Te envía ${esc(unir(cosas))}.</span>
@@ -3651,9 +3660,11 @@ function bloqueTorres(torres, senderos = [], { interactivo = true, marcar = null
         : interactivo && !marca
           ? ` data-mover-slot data-sendero="${sendero?.id ?? i + 1}" data-posicion="${paso}" data-nivel="${nivelFicha}" data-ficha="${esc(f.id ?? "")}"`
           : ""}${marca?.attrs ?? ""}`;
-      const titulo = marca?.titulo ?? (atacante
-        ? `Atacante nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para disparar" : ""}`
-        : `${interactivo ? "Tu monstruo" : "Monstruo"} nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para avanzar o atacar" : ""}`);
+      const titulo = marca?.titulo ?? (f.vuela
+        ? `Aves de bruma en el peldaño ${numero}${interactivo ? (atacante ? ": toca para disparar" : ": se mueven solas") : ""}`
+        : atacante
+          ? `Atacante nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para disparar" : ""}`
+          : `${interactivo ? "Tu monstruo" : "Monstruo"} nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para avanzar o atacar" : ""}`);
       return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}${marca ? " objetivo" : ""}"${attrs} title="${titulo}"><img src="${imgMonstruo(f.vuela ? "volador" : nivelFicha, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivelFicha}</b><span class="bw-torre-step">${numero}</span></div>`;
     };
     const attrsTorre = interactivo
@@ -4223,7 +4234,13 @@ function mostrarRegalo(regalos) {
   const items = [];
   if (totales.monedas) items.push({ tipo: "moneda", img: pilaCoins(totales.monedas), nv: totales.monedas });
   if (totales.decretos) items.push({ tipo: "decreto", img: pilaDecrees(totales.decretos), nv: totales.decretos });
-  for (const nivel of niveles) items.push({ tipo: "monstruo", img: imgMonstruo(nivel), nv: nivel });
+  for (const m of niveles) {
+    /* Las cajas nuevas apuntan nivel y vuela; las partidas viejas solo el
+       nivel. Un ave se enseña con su lámina de volador, no con el zorro. */
+    const nv = typeof m === "number" ? m : m?.nivel;
+    const vuela = typeof m === "object" && !!m?.vuela;
+    items.push({ tipo: "monstruo", img: imgMonstruo(vuela ? "volador" : nv), nv: nv ?? 1 });
+  }
   /* Una caja por cosa: una si manda una, dos si manda dos, tres si manda tres. */
   const cuadros = items.map((it) => `<div class="bw-box-slot bw-regalo-cuadro ${it.tipo}">
       <img class="bw-box-img" src="${esc(it.img)}" alt="">
@@ -5079,7 +5096,7 @@ function abrirMonstruo({ sendero, posicion, id, nivel }) {
   panel.className = "bw-panel envio-panel";
   panel.innerHTML = `
     <div class="bw-panel-head">
-      <div class="bw-panel-label">${tipo === "atacar" ? "Atacar" : "Avanzar"}</div>
+      <div class="bw-panel-label">${vuela ? "Aves de bruma" : tipo === "atacar" ? "Atacar" : "Avanzar"}</div>
       <button class="bw-panel-x" type="button" data-cerrar-mover aria-label="Cerrar">×</button>
     </div>
     <div class="bw-envio-cuerpo">
@@ -5093,7 +5110,9 @@ function abrirMonstruo({ sendero, posicion, id, nivel }) {
         ? `<div class="bw-envio-lista">
              <button type="button" class="bw-modal-usar" data-mover>${plan.tipo === "atacar" ? "Atacar" : "Avanzar"}<small>1 moneda + 1 decreto</small></button>
            </div>`
-        : `<p class="bw-modal-pie">Ese monstruo no se puede mover ahora.</p>`}
+        : `<p class="bw-modal-pie">${vuela
+            ? "Las aves de bruma se mueven solas: dos peldaños en cada avance, matan a lo de su nivel y sobrevuelan a lo más fuerte. Solo las torres u otra ave las paran."
+            : "Ese monstruo no se puede mover ahora."}</p>`}
     </div>`;
 
   const tapados = [...document.querySelectorAll("body > .bw-panel")]

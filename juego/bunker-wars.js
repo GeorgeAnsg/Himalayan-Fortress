@@ -1145,7 +1145,10 @@ function avanzarMonstruosPropios(j, e, evs) {
             const delante = s.posiciones[k];
             if (!delante) { destino = k; break; }
             /* Un monstruo propio corta el paso: a los tuyos no se sobrevuela. */
-            if (delante.tipo !== "atacante") break;
+            if (delante.tipo !== "atacante") {
+              evs.push({ tipo: "espera", texto: `${j.nombre}: su ave de bruma espera en el peldaño ${posActual + 1} de la escalera ${s.id}: el monstruo ${delante.nivel} va delante.` });
+              break;
+            }
             if (f.nivel >= delante.nivel) {
               s.posiciones[k] = null;
               evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel}${deQuien(e, delante)} en el peldaño ${k + 1} de la escalera ${s.id}.` });
@@ -1153,6 +1156,7 @@ function avanzarMonstruosPropios(j, e, evs) {
               break;
             }
             /* Más fuerte que el ave: lo sobrevuela y sigue buscando hueco. */
+            evs.push({ tipo: "vuelo", texto: `${j.nombre}: su ave de bruma sobrevuela al atacante ${delante.nivel}${deQuien(e, delante)} en el peldaño ${k + 1} de la escalera ${s.id}.` });
           }
           if (destino === null) break;
           s.posiciones[posActual] = null;
@@ -1445,8 +1449,10 @@ function entregarRegalos(e, jugadorId, evs) {
          libre más cercano al búnker y, si no, hacia la entrada. */
       const hueco = huecoEnCaminos(j);
       if (hueco) {
-        hueco.posiciones[hueco.pos] = { id: uid("r"), nivel: m.nivel, dueno: jugadorId };
-        calles.push(m.nivel);
+        /* También puede ser un ave regalada: se queda volando igual que en
+           una jaula, y con su tipo, o el motor la ignoraría en el avance. */
+        hueco.posiciones[hueco.pos] = { id: uid("r"), tipo: "monstruo", nivel: m.nivel, dueno: jugadorId, ...(m.vuela ? { vuela: true } : {}) };
+        calles.push({ nivel: m.nivel, vuela: !!m.vuela });
         continue;
       }
       sobran.push(m);
@@ -1466,9 +1472,9 @@ function entregarRegalos(e, jugadorId, evs) {
         de: g.deNombre ?? "Un aliado",
         monedas: g.monedas ?? 0,
         decretos: g.decretos ?? 0,
-        monstruos: recibidos.map((m) => m.nivel),
+        monstruos: recibidos.map((m) => ({ nivel: m.nivel, vuela: !!m.vuela })),
         calles,
-        sobran: sobran.map((m) => m.nivel),
+        sobran: sobran.map((m) => ({ nivel: m.nivel, vuela: !!m.vuela })),
       }];
       console.log(`[regalo] ${j.nombre} recibe de ${g.deNombre ?? g.de}: ${recibidos.length} en jaulas, ${calles.length} en calles, ${sobran.length} sin hueco`);
       evs.push({
@@ -1770,7 +1776,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.accionesRestantes--;
       marcarMuerteSinLucha(j, f);
       s.posiciones[accion.posicion] = null;
-      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye al atacante ${f.nivel} con torretas en el peldaño ${accion.posicion + 1} de la escalera ${accion.sendero}.`, a: jugadorId });
+      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye ${f.vuela ? "las aves de bruma" : `al atacante ${f.nivel}`} con torretas en el peldaño ${accion.posicion + 1} de la escalera ${accion.sendero}.`, a: jugadorId });
       break;
     }
   }
@@ -2048,7 +2054,7 @@ function legalesAcciones(e, jugadorId) {
       if (f?.tipo !== "atacante") return;
       const coste = costeDisparo(j, s.id, f.nivel);
       if (coste >= 0 && j.energia >= coste) {
-        acc.push({ tipo: "atacar_monstruo", sendero: s.id, posicion: i, texto: `Disparar a atacante ${f.nivel} (escalera ${s.id}, peldaño ${i + 1}) · ${coste}e` });
+        acc.push({ tipo: "atacar_monstruo", sendero: s.id, posicion: i, texto: `Disparar a ${f.vuela ? "las aves de bruma" : `atacante ${f.nivel}`} (escalera ${s.id}, peldaño ${i + 1}) · ${coste}e` });
       }
     });
   }
