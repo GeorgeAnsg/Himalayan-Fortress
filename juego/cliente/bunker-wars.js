@@ -744,11 +744,17 @@ function animarFichas(raiz, { diferir = true } = {}) {
     const finT = el.style.top;
     const atacante = esAjena(el);
     const entra = el.dataset.entra === "1";
+    /* Casilla de la que viene y si vuela: un volador hace dos acciones en la
+       misma fase y su viaje se cuenta en dos tramos. */
+    const desde = el.dataset.desde == null || el.dataset.desde === "" ? null : Number(el.dataset.desde);
+    const vuela = el.dataset.vuela === "1";
     el.removeAttribute("data-ol");
     el.removeAttribute("data-ot");
     el.removeAttribute("data-entra");
+    el.removeAttribute("data-desde");
+    el.removeAttribute("data-vuela");
     if (diferir) { el.style.left = `${ol}%`; el.style.top = `${ot}%`; }
-    pendientes.push({ el, ol, ot, finL, finT, atacante, entra });
+    pendientes.push({ el, ol, ot, finL, finT, atacante, entra, desde, vuela });
     movidas++;
     if (atacante) ajenas++;
   }
@@ -782,11 +788,49 @@ function animarFichas(raiz, { diferir = true } = {}) {
     });
   };
 
+  /* Planes de los viajes de dos casillas (voladores). Se rellenan más abajo,
+     cuando ya se sabe en qué casilla ha habido pelea. */
+  const planes = new Map();
+  const MS_HUMO_PASO = 560;  // parada en la casilla donde ha matado, para ver la nube
+  const SUAVE = "cubic-bezier(.45,.05,.3,1)";
+
   const reproducirLista = (lista, retardoBase = 0) => {
     const retrasos = retrasosDe(lista, retardoBase);
     lista.forEach(({ el, ol, ot, finL, finT, entra, pelea }, i) => {
       const retardo = retrasos[i];
       const mover = () => {
+        /* Volador con dos acciones: el salto se parte en sus dos tramos, con
+           una pausa en la casilla donde ha matado. La nube de cada pelea sale
+           al llegar a la suya, no las dos a la vez al final del salto. */
+        const plan = planes.get(el);
+        if (plan) {
+          const trayecto = [{
+            left: `${plan.paradas[0].l}%`, top: `${plan.paradas[0].t}%`,
+            offset: 0, easing: SUAVE,
+          }];
+          plan.marcas.forEach((m, k) => {
+            trayecto.push({ left: `${m.losa.l}%`, top: `${m.losa.t}%`, offset: m.fin / plan.total });
+            if (k < plan.marcas.length - 1) {
+              trayecto.push({
+                left: `${m.losa.l}%`, top: `${m.losa.t}%`,
+                offset: (m.fin + m.espera) / plan.total, easing: SUAVE,
+              });
+            }
+          });
+          const anim = el.animate?.(trayecto, {
+            duration: plan.total,
+            easing: "linear",
+            fill: "forwards",
+          });
+          if (anim) {
+            anim.onfinish = () => {
+              el.style.left = finL;
+              el.style.top = finT;
+              anim.cancel();
+            };
+          }
+          return;
+        }
         /* La ficha se queda en la casilla anterior hasta su turno; solo
            entonces se le pone el destino y se lanza el deslizamiento. Con
            delay + fill, iOS la pintaba directamente en el destino y se veía
@@ -829,7 +873,8 @@ function animarFichas(raiz, { diferir = true } = {}) {
          apaga para encenderse ya en la lanzadera. */
       if (el.dataset.puesto != null) {
         const espera = pelea ? MS_HUMO_FIN_SALIDA : MS_QUIETO_LANZADERA;
-        setTimeout(() => despedirALaLanzadera(raiz, el), retardo + MS_FICHA + espera);
+        const largo = planes.get(el)?.total ?? MS_FICHA;
+        setTimeout(() => despedirALaLanzadera(raiz, el), retardo + largo + espera);
       }
     });
   };
@@ -840,6 +885,35 @@ function animarFichas(raiz, { diferir = true } = {}) {
      espera donde estaba y el ganador se le echa encima. Después sale la nube
      de polvo, se apaga y se queda el que ha ganado. */
   const fantasmas = [...raiz.querySelectorAll(".ficha.fantasma[data-lucha]")];
+
+  /* ── El viaje de dos casillas ──
+     El motor resuelve las dos acciones del volador en la misma fase: la ficha
+     llega al pintado dos casillas más allá y las dos peleas ya cerradas. Aquí
+     se parte el viaje en tramos, uno por acción, y se apunta cuándo llega a
+     cada casilla para que su nube salga en ese momento. */
+  const peleaEnLosa = (losa) => fantasmas.some((g) =>
+    g.dataset.dl === losa.l && g.dataset.dt === losa.t);
+  for (const p of pendientes) {
+    if (!diferir || !p.vuela || p.desde == null) continue;
+    const losas = LOSAS[Number(p.el.dataset.sendero) - 1];
+    const hasta = Number(p.el.dataset.pos);
+    if (!losas || !Number.isFinite(hasta) || Math.abs(hasta - p.desde) !== 2) continue;
+    const dir = hasta > p.desde ? 1 : -1;
+    const paradas = [losas[p.desde]];
+    for (let k = p.desde + dir; ; k += dir) {
+      paradas.push(losas[k]);
+      if (k === hasta) break;
+    }
+    const marcas = [];
+    let t = 0;
+    for (let k = 1; k < paradas.length; k++) {
+      const fin = t + MS_FICHA;
+      const espera = k < paradas.length - 1 ? (peleaEnLosa(paradas[k]) ? MS_HUMO_PASO : MS_PAUSA) : 0;
+      marcas.push({ losa: paradas[k], inicio: t, fin, espera });
+      t = fin + espera;
+    }
+    planes.set(p.el, { paradas, marcas, total: t });
+  }
   /* Las salidas a lanzadera que han ganado en la casilla 1 esperan a que el
      humo del combate se vaya antes de despedirse. */
   const ganadoresDefensa = new Set(
@@ -881,12 +955,23 @@ function animarFichas(raiz, { diferir = true } = {}) {
       setTimeout(() => nube?.remove(), MS_NUBE + 420);
     }, entra);
   };
+  /* Cuándo llega el ganador a la casilla de esa pelea: si el viaje va por
+     tramos, al final del tramo que acaba en ella. */
+  const llegadaALaLosa = (p, i, g) => {
+    const base = i * (MS_FICHA + MS_PAUSA);
+    const plan = planes.get(p.el);
+    if (plan) {
+      const m = plan.marcas.find((x) => x.losa.l === g.dataset.dl && x.losa.t === g.dataset.dt);
+      if (m) return base + m.fin;
+    }
+    return base + MS_FICHA;
+  };
   const reproducirLuchas = (grupo, retardoBase = 0, movers = []) => {
     const luchasG = fantasmas.filter((g) => g.dataset.grupo === grupo);
     for (const g of luchasG) {
       const id = g.dataset.ganador;
       const i = id ? movers.findIndex((p) => p.el.dataset.fid === id) : -1;
-      const llegada = i >= 0 ? i * (MS_FICHA + MS_PAUSA) + MS_FICHA : null;
+      const llegada = i >= 0 ? llegadaALaLosa(movers[i], i, g) : null;
       setTimeout(() => pelear(g, llegada), retardoBase);
     }
     return luchasG.length;
@@ -909,21 +994,32 @@ function animarFichas(raiz, { diferir = true } = {}) {
     });
     return Math.max(0, fin - duracionGrupo(lista.length));
   };
+  /* Lo que los viajes de dos casillas alargan el grupo: sus pausas y el humo
+     de la última pelea. Sin esto la fase se cerraba a media animación. */
+  const colaRutas = (lista) => {
+    const retrasos = retrasosDe(lista, 0);
+    let fin = 0;
+    lista.forEach((p, i) => {
+      const plan = planes.get(p.el);
+      if (plan) fin = Math.max(fin, retrasos[i] + plan.total + MS_NUBE + 420);
+    });
+    return Math.max(0, fin - duracionGrupo(lista.length));
+  };
   const reproducir = (retardoBase = 0) => {
     reproducirLista(pendientes, retardoBase);
-    return colaSalidas("todos");
+    return Math.max(colaSalidas("todos"), colaRutas(pendientes));
   };
   const reproducirAtacantes = (retardoBase = 0) => {
     const lista = listaDe("atacantes");
     reproducirLista(lista, retardoBase);
     reproducirLuchas("atacantes", retardoBase, lista);
-    return colaSalidas("atacantes");
+    return Math.max(colaSalidas("atacantes"), colaRutas(lista));
   };
   const reproducirDefensores = (retardoBase = 0) => {
     const lista = listaDe("defensores");
     reproducirLista(lista, retardoBase);
     reproducirLuchas("defensores", retardoBase, lista);
-    return colaSalidas("defensores");
+    return Math.max(colaSalidas("defensores"), colaRutas(lista));
   };
 
   if (!diferir) reproducir();
@@ -2710,6 +2806,9 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       const desdeAttr = desde
         ? ` data-ol="${desde.l}" data-ot="${desde.t}"${entra ? ' data-entra="1"' : ""}`
         : "";
+      /* De qué casilla viene y si vuela: con eso el cliente parte el viaje en
+         dos tramos cuando el volador hace sus dos acciones en la misma fase. */
+      const rutaAttrs = `${movida ? ` data-desde="${antes.paso}"` : ""}${f.vuela ? ' data-vuela="1"' : ""}`;
       /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
          que aún no tienen arte caen en la del nivel 1. */
@@ -2724,7 +2823,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       /* La que no se va a animar ya cuenta como vista: así no se la vuelve a
          esconder en un repintado posterior de la misma jornada. */
       if (!ocultoHastaAvance && f.id && paso === 0 && esAtacante) llegadasAnunciadas.add(f.id);
-      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
+      return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr}${rutaAttrs} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
 
