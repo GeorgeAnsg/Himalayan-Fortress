@@ -971,9 +971,23 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
         continue;
       }
       if (defensor.tipo !== "monstruo") continue;
-      /* Un defensor volador no se deja atacar: el atacante de a pie se para en
-         su casilla hasta que el ave lo mate o lo sobrevuele. */
-      if (defensor.vuela) continue;
+      /* Un defensor volador no se deja atacar: se aparta volando al hueco más
+         cercano hacia la entrada y el atacante ocupa su casilla, así la columna
+         nunca se queda parada. Si no hay hueco donde posarse (el ave está en
+         la casilla 2 con el atacante pegado), espera ese turno: en su fase
+         siguiente el ave lo mata, lo sobrevuela y deja el camino libre. */
+      if (defensor.vuela) {
+        let hueco = null;
+        for (let k = pos - 1; k >= 0; k--) {
+          if (!s.posiciones[k]) { hueco = k; break; }
+        }
+        if (hueco === null) continue;
+        s.posiciones[hueco] = defensor;
+        s.posiciones[pos] = f;
+        s.posiciones[pos - 1] = null;
+        evs.push({ tipo: "apartar", texto: `El ave de bruma de ${j.nombre} se aparta volando al peldaño ${hueco + 1} y el atacante ${f.nivel} ocupa el peldaño ${pos + 1} de la escalera ${s.id}.` });
+        continue;
+      }
       if (f.nivel >= defensor.nivel) {
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;

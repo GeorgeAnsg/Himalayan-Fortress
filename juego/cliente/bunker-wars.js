@@ -897,7 +897,9 @@ function animarFichas(raiz, { diferir = true } = {}) {
     if (!diferir || !p.vuela || p.desde == null) continue;
     const losas = LOSAS[Number(p.el.dataset.sendero) - 1];
     const hasta = Number(p.el.dataset.pos);
-    if (!losas || !Number.isFinite(hasta) || Math.abs(hasta - p.desde) !== 2) continue;
+    /* Cualquier salto de 2 o más casillas se parte en tramos: el ave puede
+       apartarse volando 3 peldaños de golpe y antes se pintaba de un tirón. */
+    if (!losas || !Number.isFinite(hasta) || Math.abs(hasta - p.desde) < 2) continue;
     const dir = hasta > p.desde ? 1 : -1;
     const paradas = [losas[p.desde]];
     for (let k = p.desde + dir; ; k += dir) {
@@ -3847,7 +3849,7 @@ function pintarManuscritos() {
       ${fila("Coloso de hielo", "Nv 5", "5 ptos · 3 mon.")}
       ${fila("Devorador de cumbres", "Nv 7", "7 ptos · no se crea")}
       ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
-      ${parrafo("El Aves de bruma se mueve igual defendiendo que atacando: en sus dos acciones busca el primer hueco hacia delante, mata a los monstruos de su nivel o menos y sobrevuela a los más fuertes sin pelear. No se deja atacar por monstruos de a pie: solo la destruyen las torres u otra ave de bruma.")}
+      ${parrafo("El Aves de bruma se mueve igual defendiendo que atacando: en sus dos acciones busca el primer hueco hacia delante, mata a los monstruos de su nivel o menos y sobrevuela a los más fuertes sin pelear. No se deja atacar por monstruos de a pie: solo la destruyen las torres u otra ave de bruma. Si un atacante llega a su casilla, el ave se aparta volando al hueco libre más cercano hacia la entrada y el atacante ocupa esa casilla, así la escalera nunca se queda parada.")}
     `)}
 
     ${seccion("Criadero", `
