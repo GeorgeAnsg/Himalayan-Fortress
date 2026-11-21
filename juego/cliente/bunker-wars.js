@@ -1146,7 +1146,16 @@ function animarEntradaBunker(raiz, entradas) {
     nube.style.left = `${l}%`;
     nube.style.top = `${t}%`;
     nube.innerHTML = `<img src="${BASE_IMG}/nube-combate.png" alt="">`;
-    marco.append(ficha, nube);
+    /* La vida que se lleva va en su propia capa, por encima de la nube: dentro
+       de la ficha se apagaba con el monstruo y la nube (más grande y con más
+       z-index) la tapaba casi todo el camino, así que el círculo rojo no
+       llegaba a verse subir. */
+    const vida = document.createElement("div");
+    vida.className = "bw-vida";
+    vida.style.left = `${l}%`;
+    vida.style.top = `${t}%`;
+    vida.innerHTML = `<b class="ficha-nv">${nivel ?? 1}</b>`;
+    marco.append(ficha, nube, vida);
 
     /* De una en una, como las demás fichas de la jornada. */
     const arranque = i * (MS_FICHA / 2);
@@ -1165,7 +1174,7 @@ function animarEntradaBunker(raiz, entradas) {
       /* La pastilla del nivel, que ya venía con el monstruo, es la vida que se
          lleva: se suelta de la ficha, sube y crece mientras se apaga. Se
          respeta el desplazamiento de cada nivel (el 1 va 5 px más abajo). */
-      const pastilla = ficha.querySelector(".ficha-nv");
+      const pastilla = vida.querySelector(".ficha-nv");
       const sube = (v) => `translate(-50%, calc(-50% - ${nivel === 1 ? 15 : 20}px - ${v} * var(--u)))`;
       pastilla?.animate?.(
         [
@@ -1180,6 +1189,7 @@ function animarEntradaBunker(raiz, entradas) {
     setTimeout(() => {
       nube.remove();
       ficha.remove();
+      vida.remove();
       if (!marco.childElementCount) capa.remove();
     }, acaba);
   });
@@ -2777,7 +2787,11 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       entradasHechasBunker.add(en.id);
       /* Al abrir la app a media partida no se repiten las que ya pasaron. */
       if (entradasPrimerPintado) continue;
-      const puerta = (LOSAS[en.calle - 1] ?? LOSAS[0])[3];
+      /* La puerta es la losa base, la que está justo debajo de las torres: la
+         losa [3] es el último peldaño del sendero y la entrada salía una
+         casilla atrás, con su nube en el camino. */
+      const calle = LOSAS[en.calle - 1] ?? LOSAS[0];
+      const puerta = calle[4] ?? calle[3];
       entradas.push({ l: puerta.l, t: puerta.t, nivel: en.nivel, vuela: en.vuela });
     }
     entradasPrimerPintado = false;
@@ -7259,6 +7273,15 @@ function cssAdicional() {
     /* Al entrar, la pastilla del nivel se lleva la animación con la ficha:
        no se toca ni abre nada mientras sube. */
     .ficha.bw-entrando .ficha-nv { pointer-events:none }
+    /* La pastilla de la vida que se lleva la entrada, en su capa: misma caja
+       que una ficha para que la pastilla caiga en el mismo sitio, pero sin
+       imagen y por encima de la nube, para que se la vea subir y crecer. */
+    .bw-vida {
+      position:absolute; width:calc(7 * var(--u)); aspect-ratio:1;
+      margin:calc(-3.5 * var(--u)) 0 0 calc(-3.5 * var(--u));
+      z-index:9; pointer-events:none;
+    }
+    .bw-vida .ficha-nv { pointer-events:none }
     .ficha.fantasma .ficha-img {
       filter:drop-shadow(0 calc(.8 * var(--u)) calc(1.4 * var(--u)) rgba(0,0,0,.6));
     }
