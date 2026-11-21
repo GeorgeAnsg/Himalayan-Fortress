@@ -3667,7 +3667,7 @@ function abrirModalAcciones() {
 /* Bestiario para el criadero: lo que es cada nivel y lo que cuesta criarlo. */
 const BESTIARIO_UI = [
   { nivel: 1,        nombre: "Rastreador",       puntos: 1, coste: 0, texto: "1 de vida · 1 de fuerza",  stats: "1 de ataque · 1 de avance" },
-  { nivel: "volador",nombre: "Aves de bruma",  puntos: 1, coste: 1, texto: "Vuela sobre defensores · avanza 2 · solo torres la destruyen", stats: "1 de ataque · 2 de avance", vuela: true },
+  { nivel: "volador",nombre: "Aves de bruma",  puntos: 1, coste: 1, texto: "Avanza 2 · mata a los de su nivel y sobrevuela a los mayores · solo torres u otra ave la matan", stats: "1 de ataque · 2 de avance", vuela: true },
   { nivel: 2,        nombre: "Carroñero",        puntos: 2, coste: 1, texto: "2 de vida · 2 de fuerza",  stats: "2 de ataque · 1 de avance" },
   { nivel: 3,        nombre: "Yeti",             puntos: 3, coste: 2, texto: "3 de vida · 3 de fuerza",  stats: "3 de ataque · 1 de avance" },
   { nivel: 5,        nombre: "Coloso de hielo",  puntos: 5, coste: 3, texto: "5 de vida · 5 de fuerza",  stats: "5 de ataque · 1 de avance" },
@@ -3841,13 +3841,13 @@ function pintarManuscritos() {
 
     ${seccion("Bestiario", `
       ${fila("Rastreador", "Nv 1", "1 pto · gratis")}
-      ${fila("Aves de bruma", "Volador", "1 pto · 1 mon. · avanza 2 · vuela sobre defensores · solo torres la destruyen")}
+      ${fila("Aves de bruma", "Volador", "1 pto · 1 mon. · avanza 2 · mata a los de su nivel y sobrevuela a los mayores · solo torres u otra ave la matan")}
       ${fila("Carroñero", "Nv 2", "2 ptos · 1 mon.")}
       ${fila("Yeti", "Nv 3", "3 ptos · 2 mon.")}
       ${fila("Coloso de hielo", "Nv 5", "5 ptos · 3 mon.")}
       ${fila("Devorador de cumbres", "Nv 7", "7 ptos · no se crea")}
       ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
-      ${parrafo("El Aves de bruma es especial: vuela sobre los monstruos defensores (no combate con ellos), avanza 2 peldaños por turno y solo puede ser destruida por las torres.")}
+      ${parrafo("El Aves de bruma se mueve igual defendiendo que atacando: en sus dos acciones busca el primer hueco hacia delante, mata a los monstruos de su nivel o menos y sobrevuela a los más fuertes sin pelear. No se deja atacar por monstruos de a pie: solo la destruyen las torres u otra ave de bruma.")}
     `)}
 
     ${seccion("Criadero", `

@@ -971,6 +971,9 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
         continue;
       }
       if (defensor.tipo !== "monstruo") continue;
+      /* Un defensor volador no se deja atacar: el atacante de a pie se para en
+         su casilla hasta que el ave lo mate o lo sobrevuele. */
+      if (defensor.vuela) continue;
       if (f.nivel >= defensor.nivel) {
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
@@ -1073,30 +1076,31 @@ function avanzarMonstruosPropios(j, evs) {
       const f = s.posiciones[pos + 1];
       if (f?.tipo !== "monstruo") continue;
       if (f.vuela) {
-        /* Volador propio: 2 acciones iguales que el atacante volador.
-           Cada acción avanza 1 casilla hacia la entrada; si hay atacante, lucha. */
+        /* El ave se mueve igual defendiendo que atacando: en cada una de sus
+           dos acciones busca el primer hueco hacia la entrada, mata a lo que
+           esté a su nivel o por debajo y sobrevuela a lo más fuerte. Nunca la
+           mata un monstruo de a pie: solo las torres u otra ave. */
         let posActual = pos + 1;
         for (let accion = 0; accion < 2; accion++) {
           if (posActual <= 0) break;
-          const delante = s.posiciones[posActual - 1];
-          if (!delante) {
-            s.posiciones[posActual - 1] = f;
-            s.posiciones[posActual] = null;
-            posActual--;
-          } else if (delante.tipo === "atacante" && !delante.vuela) {
-            const { enemigoMuere, monstruoSobrevive } = resolverCombate(f, delante);
-            s.posiciones[posActual] = null;
-            if (monstruoSobrevive) {
-              s.posiciones[posActual - 1] = f;
-              posActual--;
-              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel} en el peldaño ${posActual + 1} de la escalera ${s.id}.` });
-            } else {
-              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave muere al atacar al atacante ${delante.nivel} en el peldaño ${posActual} de la escalera ${s.id}.` });
+          let destino = null;
+          for (let k = posActual - 1; k >= 0; k--) {
+            const delante = s.posiciones[k];
+            if (!delante) { destino = k; break; }
+            /* Un monstruo propio corta el paso: a los tuyos no se sobrevuela. */
+            if (delante.tipo !== "atacante") break;
+            if (f.nivel >= delante.nivel) {
+              s.posiciones[k] = null;
+              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel} en el peldaño ${k + 1} de la escalera ${s.id}.` });
+              destino = k;
               break;
             }
-          } else {
-            break; // bloqueado por otro monstruo propio o atacante volador
+            /* Más fuerte que el ave: lo sobrevuela y sigue buscando hueco. */
           }
+          if (destino === null) break;
+          s.posiciones[posActual] = null;
+          s.posiciones[destino] = f;
+          posActual = destino;
         }
         continue;
       }
@@ -1610,6 +1614,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       // Solo se puede caer sobre la casilla 4 si está libre o si hay un
       // atacante: en ese caso sale directo a atacarle.
       if (ocupante && ocupante.tipo !== "atacante") break;
+      if (ocupante?.vuela && !m.vuela) break;
       j.energia--;
       j.accionesRestantes--;
       j.box[boxIdx] = null;
@@ -1636,6 +1641,9 @@ function faseAcciones(e, jugadorId, accion, evs) {
       if (posDest >= posOrigen || posDest < 0) break;
       const mMon = s.posiciones[posOrigen];
       const ocupante = s.posiciones[posDest];
+      /* Las aves no se dejan atacar: un monstruo de a pie no puede caer sobre
+         una. Solo las torres u otra ave la paran. */
+      if (ocupante?.vuela && !mMon.vuela) break;
       if (ocupante && ocupante.tipo === "atacante") {
         // El monstruo se mueve encima del atacante: ataca él, por categorías
         const { enemigoMuere, monstruoSobrevive } = resolverCombate(mMon, ocupante);
@@ -1976,7 +1984,7 @@ function legalesAcciones(e, jugadorId) {
         if (!f) {
           acc.push({ tipo: "mover_a_sendero", monstruoId: m.id, sendero: s.id, posicion: POS_DESPLIEGUE,
                      texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 (1 moneda)` });
-        } else if (f.tipo === "atacante") {
+        } else if (f.tipo === "atacante" && !f.vuela) {
           acc.push({ tipo: "mover_a_sendero", monstruoId: m.id, sendero: s.id, posicion: POS_DESPLIEGUE,
                      texto: `Monstruo ${m.nivel} → C${s.id} casilla 4 · atacar atacante ${f.nivel} (1 moneda)` });
         }
@@ -1995,6 +2003,7 @@ function legalesAcciones(e, jugadorId) {
         for (let destino = 0; destino < origen; destino++) {
           const f = s.posiciones[destino];
           if (f && f.tipo !== "atacante") continue;
+          if (f?.vuela && !m.vuela) continue;
           acc.push({
             tipo: "avanzar_monstruo", monstruoId: m.id, sendero: s.id, posicion: destino,
             texto: f
