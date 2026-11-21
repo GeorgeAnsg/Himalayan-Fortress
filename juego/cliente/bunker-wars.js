@@ -772,7 +772,10 @@ function animarFichas(raiz, { diferir = true } = {}) {
     el.removeAttribute("data-vuela");
     el.removeAttribute("data-aparte");
     if (diferir) { el.style.left = `${ol}%`; el.style.top = `${ot}%`; }
-    pendientes.push({ el, ol, ot, finL, finT, atacante, entra, desde, vuela });
+    /* Si acaba más arriba en el mapa que donde empezó, va en contra de la
+       marcha de los defensores: es el ave que se aparta subiendo. */
+    const sube = (parseFloat(finT) || 0) < (parseFloat(ot) || 0);
+    pendientes.push({ el, ol, ot, finL, finT, atacante, sube, entra, desde, vuela });
     movidas++;
     if (atacante) ajenas++;
   }
@@ -782,11 +785,16 @@ function animarFichas(raiz, { diferir = true } = {}) {
      Los atacantes suben hacia la fortaleza, o sea que el de delante es el que
      está más arriba en el mapa (menos top). Mis monstruos bajan hacia la
      lanzadera: empiezan los de la casilla 1, la más alejada de la fortaleza,
-     y siguen 2, 3 y 4 (la más cercana). */
+     y siguen 2, 3 y 4 (la más cercana).
+     El ave que se aparta de un monstruo de a pie hace lo contrario que él: si
+     el monstruo baja un peldaño, ella sube al que él deja. Por eso va la
+     última de su calle: primero baja el monstruo (es la fase de los
+     defensores) y después el ave pasa por encima. */
   pendientes.sort((a, b) => {
     const da = parseFloat(a.ot) || 0;
     const db = parseFloat(b.ot) || 0;
     if (a.atacante !== b.atacante) return a.atacante ? -1 : 1;
+    if (a.sube !== b.sube) return a.sube ? 1 : -1;
     return a.atacante ? da - db : db - da;
   });
 
