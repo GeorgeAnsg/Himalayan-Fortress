@@ -925,6 +925,12 @@ const bunkerWars = {
 
 // ── Fase AVANCE ───────────────────────────────────────────────────────────
 
+/* Quién manda una ficha, para que la crónica diga siempre de quién es. */
+const deQuien = (e, f) => {
+  const n = f?.dueno ? e?.jugadores?.[f.dueno]?.nombre : null;
+  return n ? ` de ${n}` : "";
+};
+
 /* Procesa los atacantes en pos 3: entran al búnker. */
 function entrarAlBunker(j, e, evs) {
   for (const s of j.senderos) {
@@ -934,7 +940,7 @@ function entrarAlBunker(j, e, evs) {
     s.posiciones[3] = null;
     j.entradasBunker = [...(j.entradasBunker ?? []),
       { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, ...(f.vuela ? { vuela: true } : {}) }].slice(-8);
-    evs.push({ tipo: "entrada", texto: `¡${f.vuela ? "Aves de bruma" : `Monstruo ${f.nivel}`} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+    evs.push({ tipo: "entrada", texto: `¡${f.vuela ? `Aves de bruma${deQuien(e, f)} entran` : `Monstruo ${f.nivel}${deQuien(e, f)} entra`} en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
     if (j.puntosMonsters > (e.vidas ?? VIDAS_POR_DEFECTO)) {
       j.vivo = false;
       marcarEliminado(e, j.id);
@@ -963,7 +969,7 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
             j.puntosMonsters += f.nivel;
             j.entradasBunker = [...(j.entradasBunker ?? []),
               { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, vuela: true }].slice(-8);
-            evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
+            evs.push({ tipo: "entrada", texto: `¡Aves de bruma${deQuien(e, f)} entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
             if (j.puntosMonsters > (e.vidas ?? VIDAS_POR_DEFECTO)) {
               j.vivo = false;
               marcarEliminado(e, j.id);
@@ -980,10 +986,15 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
           if (ocupante.tipo === "monstruo" && f.nivel >= ocupante.nivel) {
             s.posiciones[dest] = f;
             s.posiciones[pos - 1] = null;
-            evs.push({ tipo: "combate", texto: `Las aves de bruma destruyen al monstruo ${ocupante.nivel} de ${j.nombre} en el peldaño ${dest + 1} de la escalera ${s.id}.` });
+            evs.push({ tipo: "combate", texto: `Las aves de bruma${deQuien(e, f)} destruyen al monstruo ${ocupante.nivel} de ${j.nombre} en el peldaño ${dest + 1} de la escalera ${s.id}.` });
             break;
           }
-          /* Defensor más fuerte o atacante: sobrevuela y sigue buscando. */
+          /* Defensor más fuerte o atacante: sobrevuela y sigue buscando. A la
+             crónica va el sobrevuelo: si no, el monstruo desaparecía de la
+             lista sin una línea que dijera por qué no había pelea. */
+          if (ocupante.tipo === "monstruo") {
+            evs.push({ tipo: "vuelo", texto: `El ave de bruma${deQuien(e, f)} sobrevuela al monstruo ${ocupante.nivel} de ${j.nombre} en el peldaño ${dest + 1} de la escalera ${s.id}.` });
+          }
         }
         continue;
       }
@@ -1017,16 +1028,16 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
         s.posiciones[hueco] = defensor;
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "apartar", texto: `El ave de bruma de ${j.nombre} se aparta volando al peldaño ${hueco + 1} y el atacante ${f.nivel} ocupa el peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "apartar", texto: `El ave de bruma de ${j.nombre} se aparta volando al peldaño ${hueco + 1} y el atacante ${f.nivel}${deQuien(e, f)} ocupa el peldaño ${pos + 1} de la escalera ${s.id}.` });
         continue;
       }
       if (f.nivel >= defensor.nivel) {
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel} destruye al monstruo ${defensor.nivel} de ${j.nombre} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El atacante ${f.nivel}${deQuien(e, f)} destruye al monstruo ${defensor.nivel} de ${j.nombre} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
       } else {
         s.posiciones[pos - 1] = null;
-        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `El monstruo ${defensor.nivel} de ${j.nombre} destruye al atacante ${f.nivel}${deQuien(e, f)} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
       }
     }
   }
@@ -1056,7 +1067,7 @@ function faseAvance(e, jugadorId, evs) {
    entrada no puede lanzarse en el mismo turno. */
 function faseDefensores(e, jugadorId, evs) {
   const j = e.jugadores[jugadorId];
-  if (j?.vivo) avanzarMonstruosPropios(j, evs);
+  if (j?.vivo) avanzarMonstruosPropios(j, e, evs);
   e.fase = "carta";
   comprobarFin(e);
   return { estado: e, eventos: evs };
@@ -1116,7 +1127,7 @@ function lanzaderasCargadas(e, jugadorId) {
    mismas reglas que al moverlo a mano; si tiene otro monstruo tuyo, espera su
    turno sin pelearse con él. Antes se quedaba parado en silencio, que parecía
    que la mesa se había olvidado de él. */
-function avanzarMonstruosPropios(j, evs) {
+function avanzarMonstruosPropios(j, e, evs) {
   for (const s of j.senderos) {
     for (let pos = 0; pos < 3; pos++) {
       const f = s.posiciones[pos + 1];
@@ -1137,7 +1148,7 @@ function avanzarMonstruosPropios(j, evs) {
             if (delante.tipo !== "atacante") break;
             if (f.nivel >= delante.nivel) {
               s.posiciones[k] = null;
-              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel} en el peldaño ${k + 1} de la escalera ${s.id}.` });
+              evs.push({ tipo: "combate", texto: `${j.nombre}: su ave destruye al atacante ${delante.nivel}${deQuien(e, delante)} en el peldaño ${k + 1} de la escalera ${s.id}.` });
               destino = k;
               break;
             }
@@ -1150,22 +1161,31 @@ function avanzarMonstruosPropios(j, evs) {
         }
         continue;
       }
-      const delante = s.posiciones[pos];
+      /* El ave de bruma vuela: ni se la ataca ni corta el paso. Se busca el
+         primer peldaño de delante que no sea un ave; si está libre, el
+         monstruo avanza hasta él pasando por debajo. Antes se quedaba parado
+         en silencio con el ave en la casilla de delante. */
+      let destino = pos;
+      while (destino > 0 && s.posiciones[destino]?.vuela) destino--;
+      const delante = s.posiciones[destino];
+      if (delante?.vuela) continue; // solo hay aves por delante: espera
       if (!delante) {
-        s.posiciones[pos] = f;
+        s.posiciones[destino] = f;
         s.posiciones[pos + 1] = null;
+        if (destino < pos) {
+          evs.push({ tipo: "avance_monstruo", texto: `${j.nombre}: su monstruo ${f.nivel} avanza al peldaño ${destino + 1} de la escalera ${s.id} pasando por debajo del ave de bruma.` });
+        }
         continue;
       }
       if (delante.tipo !== "atacante") continue;
-      if (delante.vuela) continue; // los voladores no combaten con defensores
       if (!resolverCombate(f, delante).monstruoSobrevive) {
         s.posiciones[pos + 1] = null;
-        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en el peldaño ${destino + 1} de la escalera ${s.id}.` });
         continue;
       }
       s.posiciones[pos + 1] = null;
-      s.posiciones[pos] = f;
-      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en la peldaño ${pos + 1} de la escalera ${s.id}.` });
+      s.posiciones[destino] = f;
+      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en el peldaño ${destino + 1} de la escalera ${s.id}.` });
     }
     // Al llegar a la casilla 1 pasa a la lanzadera que tiene al lado (o a la cola)
     if (s.posiciones[0]?.tipo === "monstruo") aLanzaderaOCola(j, s, evs);
@@ -1674,8 +1694,8 @@ function faseAcciones(e, jugadorId, accion, evs) {
         const { enemigoMuere, monstruoSobrevive } = resolverCombate(m, ocupante);
         s.posiciones[POS_DESPLIEGUE] = monstruoSobrevive ? { ...m } : ocupante;
         evs.push(enemigoMuere
-          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado a la escalera ${accion.sendero} destruye al atacante ${ocupante.nivel}.`, a: jugadorId }
-          : { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado a la escalera ${accion.sendero} muere contra el atacante ${ocupante.nivel}.`, a: jugadorId });
+          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado al peldaño 4 de la escalera ${accion.sendero} destruye al atacante ${ocupante.nivel}.`, a: jugadorId }
+          : { tipo: "combate", texto: `${j.nombre}: monstruo ${m.nivel} lanzado al peldaño 4 de la escalera ${accion.sendero} muere contra el atacante ${ocupante.nivel}.`, a: jugadorId });
       }
       break;
     }
@@ -1704,8 +1724,8 @@ function faseAcciones(e, jugadorId, accion, evs) {
            se borraban los dos y parecía que un nivel 1 mataba a un nivel 7. */
         s.posiciones[posDest] = monstruoSobrevive ? { ...mMon } : ocupante;
         evs.push(enemigoMuere
-          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId }
-          : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
+          ? { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} destruye al atacante ${ocupante.nivel} en el peldaño ${posDest + 1} de la escalera ${accion.sendero}.`, a: jugadorId }
+          : { tipo: "combate", texto: `${j.nombre}: monstruo ${mMon.nivel} muere al atacar al atacante ${ocupante.nivel} en el peldaño ${posDest + 1} de la escalera ${accion.sendero}.`, a: jugadorId });
         // Si el monstruo llega a pos 0, pasa a la lanzadera (o cola)
         if (posDest === 0 && monstruoSobrevive) aLanzaderaOCola(j, s, evs);
       } else if (!ocupante) {
@@ -1713,7 +1733,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
         j.accionesRestantes--;
         s.posiciones[posDest] = { ...mMon };
         s.posiciones[posOrigen] = null;
-        evs.push({ tipo: "avance_monstruo", texto: `${j.nombre} avanza el monstruo ${mMon.nivel} en la escalera ${accion.sendero}.`, a: jugadorId });
+        evs.push({ tipo: "avance_monstruo", texto: `${j.nombre} avanza el monstruo ${mMon.nivel} al peldaño ${posDest + 1} de la escalera ${accion.sendero}.`, a: jugadorId });
         if (posDest === 0) aLanzaderaOCola(j, s, evs);
       }
       break;
@@ -1732,7 +1752,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.accionesRestantes--;
       marcarMuerteSinLucha(j, f);
       s.posiciones[accion.posicion] = null;
-      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye atacante ${f.nivel} con torretas en la escalera ${accion.sendero}.`, a: jugadorId });
+      evs.push({ tipo: "destruir", texto: `${j.nombre} destruye al atacante ${f.nivel} con torretas en el peldaño ${accion.posicion + 1} de la escalera ${accion.sendero}.`, a: jugadorId });
       break;
     }
   }

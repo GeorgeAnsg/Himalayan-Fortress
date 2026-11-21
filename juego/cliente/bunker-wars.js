@@ -32,7 +32,7 @@ export function pintar(contenedor, opciones) {
   /* La música es de este juego y vive fuera de #pantalla: se monta una vez y
      sobrevive a los repintados del turno. */
   montarMusica();
-  const { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll, alFinal } = opciones;
+  const { publica, privada, jugadores, tu, acciones, alAccion, alSalir, scroll, alFinal, log } = opciones;
   if (!publica) { contenedor.innerHTML = "Cargando…"; return; }
   /* Se guarda la última vista para poder volver desde la fortaleza de un
      rival sin pedirle nada a la app. */
@@ -252,6 +252,7 @@ export function pintar(contenedor, opciones) {
   document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
   document.querySelector("body > .bw-panel.torres-panel")?.remove();
   document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.cronica-panel")?.remove();
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
   document.querySelector("body > .bw-panel.aliados-panel")?.remove();
@@ -279,6 +280,9 @@ export function pintar(contenedor, opciones) {
         ? `<span class="bw-nav-badge" title="Hay peticiones de otros aliados" aria-label="Hay peticiones de otros aliados">!</span>`
         : ""}</span>
     </button>` : ""}
+    <button class="bw-nav-tab" data-tab="cronica" type="button">
+      <span>Crónica</span>
+    </button>
     <button class="bw-nav-tab" data-tab="manuscritos" type="button">
       <span>Reglas</span>
     </button>`;
@@ -320,6 +324,12 @@ export function pintar(contenedor, opciones) {
   manPanel.className = "bw-panel manuscritos-panel oculto";
   manPanel.innerHTML = pintarManuscritos();
   document.body.appendChild(manPanel);
+
+  /* Crónica: lo que ha pasado en la mesa, de la primera línea a la última. */
+  const cronicaPanel = document.createElement("div");
+  cronicaPanel.className = "bw-panel cronica-panel oculto";
+  cronicaPanel.innerHTML = pintarCronica(log);
+  document.body.appendChild(cronicaPanel);
 
   /* Torres: los tres huecos, uno por camino, con su nivel y su alzado. */
   const torresPanel = document.createElement("div");
@@ -487,6 +497,7 @@ export function pintar(contenedor, opciones) {
     document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
     document.querySelector("body > .bw-panel.torres-panel")?.remove();
     document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+    document.querySelector("body > .bw-panel.cronica-panel")?.remove();
     document.querySelector("body > .bw-panel.aliados-panel")?.remove();
     document.querySelector("body > .bw-panel.disparo-panel")?.remove();
     document.querySelector("body > .bw-panel-overlay")?.remove();
@@ -562,8 +573,11 @@ export function pintar(contenedor, opciones) {
     manPanel.classList.toggle("oculto", id !== "manuscritos");
     torresPanel.classList.toggle("oculto", id !== "torres");
     mapaPanel.classList.toggle("oculto", id !== "mapa");
+    cronicaPanel.classList.toggle("oculto", id !== "cronica");
     aliadosPanel?.classList.toggle("oculto", id !== "aliados");
     manoWrap.classList.toggle("oculto", id !== "cartas");
+    /* La crónica se abre por lo más reciente, como un chat. */
+    if (id === "cronica") cronicaPanel.scrollTop = cronicaPanel.scrollHeight;
     actualizarOverlayPaneles();
   }
       navEl2.querySelectorAll(".bw-nav-tab").forEach(tab => {
@@ -580,7 +594,7 @@ export function pintar(contenedor, opciones) {
   activarTab(tabMesa === "aliados" && !aliadosPanel ? "cartas" : tabMesa);
 
   /* La X de la cabecera cierra el panel y devuelve la mano. */
-  [boxPanel, manPanel, torresPanel, mapaPanel, ...(aliadosPanel ? [aliadosPanel] : [])].forEach((panel) => {
+  [boxPanel, manPanel, torresPanel, mapaPanel, cronicaPanel, ...(aliadosPanel ? [aliadosPanel] : [])].forEach((panel) => {
     panel.addEventListener("click", (ev) => {
       if (ev.target.closest("[data-cerrar-panel]")) activarTab("cartas");
     });
@@ -3169,6 +3183,34 @@ function pintarHud(j, priv) {
     </div>`;
 }
 
+/* ── Crónica ───────────────────────────────────────────────────────────────
+   El servidor guarda cada suceso de la partida (ataques, muertes, avances,
+   cartas, lanzamientos) y lo manda con la vista. Aquí solo se pinta, con su
+   hora y la jornada a la que pertenece. */
+function pintarCronica(entradas) {
+  const lineas = Array.isArray(entradas) ? entradas : [];
+  const filas = lineas.map((l) => {
+    const tipo = esc(l.tipo ?? "nota");
+    const hora = Number(l.t)
+      ? new Date(Number(l.t)).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const dia = Number(l.dia) && l.tipo !== "dia"
+      ? `<span class="bw-cronica-dia">D${Number(l.dia)}</span>`
+      : "";
+    return `<li class="bw-cronica-linea ${tipo}">${dia}${hora ? `<time>${hora}</time>` : ""}<span>${esc(l.texto ?? "")}</span></li>`;
+  }).join("");
+  return `
+    <div class="bw-panel-head">
+      <div class="bw-panel-label">Crónica <span class="bw-panel-sub">${lineas.length}</span></div>
+      <button class="bw-panel-x" type="button" data-cerrar-panel aria-label="Cerrar">×</button>
+    </div>
+    ${lineas.length
+      ? `<ul class="bw-cronica" data-cronica>${filas}</ul>`
+      : `<p class="bw-cronica-vacia">Todavía no ha pasado nada.</p>`}
+    <p class="bw-slot-sub" style="margin-top:10px;text-align:center">Ataques, muertes, avances, cartas y lanzamientos de toda la mesa.</p>
+  `;
+}
+
 /* ── Box de monstruos ───────────────────────────────────────────────────── */
 
 function pintarBox(priv) {
@@ -4154,7 +4196,7 @@ function mostrarRegalo(regalos) {
   });
 }
 function actualizarOverlayPaneles() {
-  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel", ".aliados-panel", ".envio-panel"];
+  const paneles = [".box-panel", ".torres-panel", ".mapa-panel", ".manuscritos-panel", ".cronica-panel", ".aliados-panel", ".envio-panel"];
   const abierto = !!disparoPanel || paneles.some((s) => {
     const p = document.querySelector(`body > .bw-panel${s}`);
     return p && !p.classList.contains("oculto");
@@ -5037,6 +5079,7 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
   document.querySelector("body > .bw-panel.manuscritos-panel")?.remove();
   document.querySelector("body > .bw-panel.torres-panel")?.remove();
   document.querySelector("body > .bw-panel.mapa-panel")?.remove();
+  document.querySelector("body > .bw-panel.cronica-panel")?.remove();
   document.querySelector("body > .bw-panel.aliados-panel")?.remove();
   document.querySelector("body > .bw-panel.disparo-panel")?.remove();
   document.querySelector("body > .bw-panel-overlay")?.remove();
@@ -5283,7 +5326,7 @@ function css() {
     /* Box panel: flota encima del nav */
     .bw-panel.box-panel, .bw-panel.acciones-panel, .bw-panel.manuscritos-panel,
     .bw-panel.torres-panel, .bw-panel.mapa-panel, .bw-panel.aliados-panel,
-    .bw-panel.disparo-panel, .bw-panel.envio-panel {
+    .bw-panel.cronica-panel, .bw-panel.disparo-panel, .bw-panel.envio-panel {
       position:fixed !important;
       bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
       left:0 !important; right:0 !important;
@@ -5297,7 +5340,8 @@ function css() {
     /* El panel de jaulas flota justo encima del menú, con el ribete de piedra
        arriba y abajo (más fino que el del modal). */
     .bw-panel.box-panel, .bw-panel.manuscritos-panel, .bw-panel.torres-panel,
-    .bw-panel.mapa-panel, .bw-panel.aliados-panel, .bw-panel.disparo-panel {
+    .bw-panel.mapa-panel, .bw-panel.aliados-panel, .bw-panel.cronica-panel,
+    .bw-panel.disparo-panel {
       padding:0 14px 22px;
       background-color:rgba(27,23,19,.97);
     }
@@ -5323,7 +5367,8 @@ function css() {
     .bw-panel-x:active { color:#fff; }
     .box-panel .bw-panel-label, .manuscritos-panel .bw-panel-label,
     .torres-panel .bw-panel-label, .mapa-panel .bw-panel-label,
-    .aliados-panel .bw-panel-label, .disparo-panel .bw-panel-label,
+    .aliados-panel .bw-panel-label, .cronica-panel .bw-panel-label,
+    .disparo-panel .bw-panel-label,
     .envio-panel .bw-panel-label, #bw-modal-criadero .bw-panel-label {
       font:700 18px/1.25 ui-serif, Georgia, serif;
       text-transform:none; letter-spacing:.01em;
@@ -5355,6 +5400,24 @@ function css() {
                        color:#b7a992; margin-bottom:10px; }
     .bw-panel-sub { font-weight:400; text-transform:none; letter-spacing:0; }
     .bw-slot-sub { font-size:10px; color:#8b7e6b; }
+    /* Crónica: una línea por suceso, con su hora y su jornada. */
+    .bw-cronica { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+    .bw-cronica-linea {
+      display:flex; gap:6px; align-items:baseline;
+      font:400 12px/1.4 ui-serif, Georgia, serif; color:#cfc2ac;
+      padding-left:8px; border-left:2px solid rgba(244,236,221,.14);
+    }
+    .bw-cronica-linea time { flex:0 0 auto; font:700 10px/1.2 ui-monospace, monospace; color:#8b7e6b; }
+    .bw-cronica-dia {
+      flex:0 0 auto; font:700 9px/1.6 ui-monospace, monospace; color:#b7a992;
+      border:1px solid rgba(244,236,221,.2); border-radius:4px; padding:0 3px;
+    }
+    .bw-cronica-linea.combate { color:#f0b3a6; border-left-color:#b0453a; }
+    .bw-cronica-linea.derrota, .bw-cronica-linea.destruir { color:#f4d2c8; border-left-color:#d9584a; }
+    .bw-cronica-linea.entrada { color:#f0cf9a; border-left-color:#d19a3f; }
+    .bw-cronica-linea.lanzamiento, .bw-cronica-linea.lanzadera { color:#bcd9ea; border-left-color:#5b8fa8; }
+    .bw-cronica-linea.dia { color:#f4ecdd; font-weight:700; border-left-color:transparent; padding-left:0; margin-top:4px; }
+    .bw-cronica-vacia { margin:0 0 6px; font:400 12px/1.4 ui-serif, Georgia, serif; color:#8b7e6b; }
     .bw-cajas { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
     .bw-torres { display:grid; grid-template-columns:repeat(3,1fr);
                  gap:clamp(10px, 4vw, 16px); align-items:start; }

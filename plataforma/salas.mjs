@@ -568,7 +568,9 @@ export class Mesas {
     const quien = sala?.datos?.jugadores?.find((j) => j.id === usuarioId)?.nombre ?? usuarioId;
     const faseAntes = sala?.datos?.estado?.fase;
     const lunaAntes = sala?.datos?.estado?.luna;
-    if (sala) console.log(`[mesa ${sala.codigo}] ${quien} → ${accion?.tipo ?? "?"} (fase ${faseAntes}, luna ${lunaAntes})`);
+    /* La jugada entera, no solo el tipo: en una partida real hay que poder
+       reconstruir quién atacó a qué, con qué carta y en qué casilla. */
+    if (sala) console.log(`[mesa ${sala.codigo}] ${quien} → ${JSON.stringify(accion ?? {})} (fase ${faseAntes}, luna ${lunaAntes})`);
     if (!sala) return { error: "No estás en ninguna madriguera." };
     if (sala.fase !== "jugando") return { error: "La partida no está en marcha." };
 
@@ -837,6 +839,10 @@ export class Mesas {
       }
     }
     sala.log.push({ t: Date.now(), tipo, texto, dia });
+    /* Cada suceso va también al log del servidor: la crónica del juego se
+       queda en la sala, pero en Coolify hace falta verla para diagnosticar
+       una partida real. */
+    console.log(`[crónica ${sala.codigo}] ${tipo}: ${texto}`);
     if (sala.log.length > MAX_LOG) sala.log.splice(0, sala.log.length - MAX_LOG);
   }
 
