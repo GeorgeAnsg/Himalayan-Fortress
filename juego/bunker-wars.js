@@ -1161,31 +1161,49 @@ function avanzarMonstruosPropios(j, e, evs) {
         }
         continue;
       }
-      /* El ave de bruma vuela: ni se la ataca ni corta el paso. Se busca el
-         primer peldaño de delante que no sea un ave; si está libre, el
-         monstruo avanza hasta él pasando por debajo. Antes se quedaba parado
-         en silencio con el ave en la casilla de delante. */
-      let destino = pos;
-      while (destino > 0 && s.posiciones[destino]?.vuela) destino--;
-      const delante = s.posiciones[destino];
-      if (delante?.vuela) continue; // solo hay aves por delante: espera
-      if (!delante) {
-        s.posiciones[destino] = f;
-        s.posiciones[pos + 1] = null;
-        if (destino < pos) {
-          evs.push({ tipo: "avance_monstruo", texto: `${j.nombre}: su monstruo ${f.nivel} avanza al peldaño ${destino + 1} de la escalera ${s.id} pasando por debajo del ave de bruma.` });
+      /* El ave de bruma vuela: ni se la ataca ni corta el paso. El monstruo
+         avanza su peldaño de siempre y el ave se aparta volando al primer
+         hueco libre, que normalmente es el que deja el propio monstruo: se
+         cruzan en el mismo segundo, el ave por el aire, y al turno siguiente
+         el ave sigue su avance. Antes el monstruo se quedaba parado en
+         silencio con el ave en la casilla de delante. */
+      const delante = s.posiciones[pos];
+      if (delante?.vuela) {
+        let hueco = null;
+        /* Primero hacia la entrada, que es donde va el ave; el peldaño que
+           deja el monstruo cuenta como libre. */
+        for (let k = pos + 1; k <= 3; k++) {
+          if (k === pos + 1 || !s.posiciones[k]) { hueco = k; break; }
         }
+        if (hueco === null) {
+          for (let k = pos - 1; k >= 0; k--) {
+            if (!s.posiciones[k]) { hueco = k; break; }
+          }
+        }
+        if (hueco === null) continue; // sin hueco donde apartarse: espera
+        /* Se apunta en la propia ficha que se apartó este turno: el cliente
+           la anima junto al monstruo, no en el grupo de los atacantes. */
+        delante.apartadaEn = `${e.luna}:${j.id}`;
+        s.posiciones[pos + 1] = null;
+        s.posiciones[pos] = f;
+        s.posiciones[hueco] = delante;
+        evs.push({ tipo: "apartar", texto: `${j.nombre}: su monstruo ${f.nivel} avanza al peldaño ${pos + 1} de la escalera ${s.id} y el ave de bruma se aparta volando al peldaño ${hueco + 1}.` });
+        continue;
+      }
+      if (!delante) {
+        s.posiciones[pos] = f;
+        s.posiciones[pos + 1] = null;
         continue;
       }
       if (delante.tipo !== "atacante") continue;
       if (!resolverCombate(f, delante).monstruoSobrevive) {
         s.posiciones[pos + 1] = null;
-        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en el peldaño ${destino + 1} de la escalera ${s.id}.` });
+        evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} muere al atacar al atacante ${delante.nivel} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
         continue;
       }
       s.posiciones[pos + 1] = null;
-      s.posiciones[destino] = f;
-      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en el peldaño ${destino + 1} de la escalera ${s.id}.` });
+      s.posiciones[pos] = f;
+      evs.push({ tipo: "combate", texto: `${j.nombre}: su monstruo ${f.nivel} destruye al atacante ${delante.nivel} en el peldaño ${pos + 1} de la escalera ${s.id}.` });
     }
     // Al llegar a la casilla 1 pasa a la lanzadera que tiene al lado (o a la cola)
     if (s.posiciones[0]?.tipo === "monstruo") aLanzaderaOCola(j, s, evs);

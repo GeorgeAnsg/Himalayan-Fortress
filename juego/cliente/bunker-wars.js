@@ -756,7 +756,10 @@ function animarFichas(raiz, { diferir = true } = {}) {
     const ot = el.dataset.ot;
     const finL = el.style.left;
     const finT = el.style.top;
-    const atacante = esAjena(el);
+    /* Un ave que se apartó del paso de un monstruo viaja en el grupo de los
+       defensores: se ve entrar al monstruo y después salir a ella. */
+    const apartada = el.dataset.aparte === "1";
+    const atacante = esAjena(el) && !apartada;
     const entra = el.dataset.entra === "1";
     /* Casilla de la que viene y si vuela: un volador hace dos acciones en la
        misma fase y su viaje se cuenta en dos tramos. */
@@ -767,6 +770,7 @@ function animarFichas(raiz, { diferir = true } = {}) {
     el.removeAttribute("data-entra");
     el.removeAttribute("data-desde");
     el.removeAttribute("data-vuela");
+    el.removeAttribute("data-aparte");
     if (diferir) { el.style.left = `${ol}%`; el.style.top = `${ot}%`; }
     pendientes.push({ el, ol, ot, finL, finT, atacante, entra, desde, vuela });
     movidas++;
@@ -2801,7 +2805,10 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       if (!f) return "";
       const pos = LOSAS[i][paso];
       const esAtacante = f.tipo === "atacante";
-      const cls = esAtacante ? (f.dueno ? "ajena" : "atacante") : "mia";
+      /* El ave que se apartó en este mismo turno se anima con los defensores:
+         primero entra el monstruo en su peldaño y ella sale volando después. */
+      const apartada = !!f.vuela && f.apartadaEn === `${lunaMesa}:${turnoMesa}`;
+      const cls = `${esAtacante ? (f.dueno ? "ajena" : "atacante") : "mia"}${f.vuela ? " vuela" : ""}${apartada ? " apartada" : ""}`;
       /* Si la ficha viene de otra casilla, se pinta en la de antes y se mueve
          a la nueva: así se ve el avance del turno. Si no la habíamos visto
          nunca y entra por el primer peldaño, sale de la casilla virtual de
@@ -2824,7 +2831,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
         : "";
       /* De qué casilla viene y si vuela: con eso el cliente parte el viaje en
          dos tramos cuando el volador hace sus dos acciones en la misma fase. */
-      const rutaAttrs = `${movida ? ` data-desde="${antes.paso}"` : ""}${f.vuela ? ' data-vuela="1"' : ""}`;
+      const rutaAttrs = `${movida ? ` data-desde="${antes.paso}"` : ""}${f.vuela ? ' data-vuela="1"' : ""}${movida && apartada ? ' data-aparte="1"' : ""}`;
       /* Icono del monstruo: de espaldas cuando sube la escalera atacando el
          fuerte y de frente cuando lo defiende. Cada nivel usa su lámina; los
          que aún no tienen arte caen en la del nivel 1. */
@@ -7423,6 +7430,9 @@ function cssAdicional() {
       margin:calc(-3.5 * var(--u)) 0 0 calc(-3.5 * var(--u));
       display:grid; place-items:center; cursor:pointer; z-index:5;
     }
+    /* El ave vuela por encima: cuando comparte peldaño con un monstruo, se la
+       ve a ella, no al monstruo. */
+    .ficha.vuela { z-index:6; }
     .ficha-img {
       /* Centrada en la caja de la ficha (el div verde) y subida lo mismo que las
          demás láminas de monstruo: esta ficha va por su cuenta, no usa la clase
