@@ -1135,11 +1135,17 @@ function animarEntradaBunker(raiz, entradas) {
   requestAnimationFrame(seguir);
 
   entradas.forEach((entrada, i) => {
-    const { l, t, nivel } = entrada;
+    const { l, t, nivel, calle = 0, desde = null } = entrada;
+    const camino = LOSAS[calle] ?? LOSAS[0];
+    /* Casillas que le quedaban hasta la 4, la de al lado de la entrada. El
+       volador gasta ahí su primera acción y la segunda ya es entrar: se le ve
+       andar antes del humo, en vez de saltar de la 3 al búnker. */
+    const pasos = desde == null ? 0 : Math.max(0, 3 - desde);
+    const origen = pasos ? camino[desde] : { l, t };
     const ficha = document.createElement("div");
     ficha.className = "ficha atacante bw-entrando";
-    ficha.style.left = `${l}%`;
-    ficha.style.top = `${t}%`;
+    ficha.style.left = `${origen.l}%`;
+    ficha.style.top = `${origen.t}%`;
     ficha.innerHTML = htmlFicha(entrada, true);
     const nube = document.createElement("div");
     nube.className = "bw-nube bw-nube-puerta";
@@ -1157,10 +1163,23 @@ function animarEntradaBunker(raiz, entradas) {
     vida.innerHTML = `<b class="ficha-nv">${nivel ?? 1}</b>`;
     marco.append(ficha, nube, vida);
 
-    /* De una en una, como las demás fichas de la jornada. */
+    /* De una en una, como las demás fichas de la jornada. Primero la caminata
+       hasta la puerta (una casilla por acción, si venía de más atrás) y solo
+       después la entrada, con el humo y la vida subiendo. */
+    const caminata = pasos * MS_FICHA;
     const arranque = i * (MS_FICHA / 2);
-    const acaba = arranque + Math.max(MS_NUBE + 420, MS_VIDA + 120);
+    const entraEn = arranque + caminata;
+    const acaba = entraEn + Math.max(MS_NUBE + 420, MS_VIDA + 120);
     finSeguir = Math.max(finSeguir, performance.now() + acaba + 100);
+    if (pasos) {
+      ficha.animate?.(
+        Array.from({ length: pasos + 1 }, (_, k) => {
+          const p = camino[desde + k] ?? { l, t };
+          return { left: `${p.l}%`, top: `${p.t}%` };
+        }),
+        { duration: caminata, delay: arranque, easing: "linear", fill: "both" },
+      );
+    }
     setTimeout(() => {
       nube.classList.add("on");
       ficha.animate?.(
@@ -1184,8 +1203,8 @@ function animarEntradaBunker(raiz, entradas) {
         ],
         { duration: MS_VIDA, easing: "linear", fill: "forwards" },
       );
-    }, arranque);
-    setTimeout(() => nube.classList.add("sale"), arranque + MS_NUBE);
+    }, entraEn);
+    setTimeout(() => nube.classList.add("sale"), entraEn + MS_NUBE);
     setTimeout(() => {
       nube.remove();
       ficha.remove();
@@ -2711,6 +2730,11 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
   const luchas = [];
   const entradas = [];
   const aniquiladas = [];
+  /* Fichas que han entrado en el búnker este turno: al desaparecer de su
+     casilla no llevan el humo de «la ha quitado una carta». El volador entra
+     con su segunda acción desde la casilla 3, y se le dejaba el humo ahí, en
+     vez de verse la entrada en la 4. */
+  const entraron = new Set((j?.entradas ?? []).map((en) => en.ficha).filter(Boolean));
   if (!opciones.sinLuchas) {
     const vivos = new Set();
     for (let i = 0; i < 3; i++) for (let paso = 0; paso < 4; paso++) {
@@ -2756,7 +2780,8 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
            sin bolas. En la puerta no: ese atacante ya se anima entrando en el
            búnker, y un monstruo mío que sale de la casilla 1 ha subido a la
            lanzadera, no ha muerto. */
-        const loQuitaUnaCarta = !suCasilla && !delante && (esAtacante ? paso !== 3 : paso >= 2);
+        const loQuitaUnaCarta = !suCasilla && !delante && !entraron.has(id)
+          && (esAtacante ? paso !== 3 : paso >= 2);
         if (loQuitaUnaCarta) aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante });
         continue;
       }
@@ -2787,12 +2812,15 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
       entradasHechasBunker.add(en.id);
       /* Al abrir la app a media partida no se repiten las que ya pasaron. */
       if (entradasPrimerPintado) continue;
-      /* La puerta es la losa base, la que está justo debajo de las torres: la
-         losa [3] es el último peldaño del sendero y la entrada salía una
-         casilla atrás, con su nube en el camino. */
-      const calle = LOSAS[en.calle - 1] ?? LOSAS[0];
-      const puerta = calle[4] ?? calle[3];
-      entradas.push({ l: puerta.l, t: puerta.t, nivel: en.nivel, vuela: en.vuela });
+      /* La entrada se ve en la casilla 4, la de al lado de la puerta. Si el
+         volador venía de más atrás (entra con su segunda acción), la ficha
+         anda las casillas que le quedaban antes de meterse: sus dos acciones. */
+      const calle = en.calle - 1;
+      const camino = LOSAS[calle] ?? LOSAS[0];
+      const puerta = camino[3];
+      const previa = en.ficha ? fotoPrevia.get(en.ficha) : null;
+      const desde = previa && previa.calle === calle && previa.paso < 3 ? previa.paso : null;
+      entradas.push({ l: puerta.l, t: puerta.t, calle, desde, nivel: en.nivel, vuela: en.vuela });
     }
     entradasPrimerPintado = false;
     /* El registro de ids no crece sin fin: si se llena, se empieza de cero. */

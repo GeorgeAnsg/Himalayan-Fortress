@@ -897,7 +897,7 @@ function entrarAlBunker(j, e, evs) {
     j.puntosMonsters += f.nivel;
     s.posiciones[3] = null;
     j.entradasBunker = [...(j.entradasBunker ?? []),
-      { id: uid("b"), calle: s.id, nivel: f.nivel, ...(f.vuela ? { vuela: true } : {}) }].slice(-8);
+      { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, ...(f.vuela ? { vuela: true } : {}) }].slice(-8);
     evs.push({ tipo: "entrada", texto: `¡${f.vuela ? "Aves de bruma" : `Monstruo ${f.nivel}`} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
     if (j.puntosMonsters > 20) {
       j.vivo = false;
@@ -926,7 +926,7 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
             s.posiciones[pos - 1] = null;
             j.puntosMonsters += f.nivel;
             j.entradasBunker = [...(j.entradasBunker ?? []),
-              { id: uid("b"), calle: s.id, nivel: f.nivel, vuela: true }].slice(-8);
+              { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, vuela: true }].slice(-8);
             evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
             if (j.puntosMonsters > 20) {
               j.vivo = false;
