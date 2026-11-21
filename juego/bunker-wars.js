@@ -52,9 +52,13 @@ const PLANTILLAS_DESTINO = [
   { id:"a01", tipo:"amenaza", nivel:1, cantidad:1, prio:[1,2,3], tramo:1, tramoMax:1,
     titulo:"Se ha avistado un rastreador",
     descripcion:"Un rastreador se arrastra desde la nieve." },
-  { id:"a01v", tipo:"amenaza", nivel:"volador", cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
+  /* Las aves tienen carta propia desde el tramo II. Antes vivían en el tramo I
+     con tope de tramo, y como las lunas 1-4 van fijas en la apertura nunca
+     llegaban a salir: en toda la partida solo entraba la de "Sombras en la
+     niebla". */
+  { id:"a01v", tipo:"amenaza", nivel:"volador", cantidad:2, prio:[3,2,1], tramo:2,
     titulo:"Aves de bruma avistadas",
-    descripcion:"Unas aves de bruma surcan el cielo por el camino de la derecha." },
+    descripcion:"Dos aves de bruma surcan el cielo y buscan hueco en las escaleras." },
   { id:"a02", tipo:"amenaza", nivel:1, cantidad:1, prio:[3,2,1], tramo:1, tramoMax:1,
     titulo:"Un rastreador",
     descripcion:"Un rastreador aparece al otro lado de la fortaleza." },
@@ -80,6 +84,9 @@ const PLANTILLAS_DESTINO = [
   { id:"a06", tipo:"amenaza", nivel:2, cantidad:2, prio:[2,1,3], tramo:2, tramoMax:2,
     titulo:"Dos carroñeros",
     descripcion:"Dos carroñeros avanzan hacia la fortaleza." },
+  { id:"a06v", tipo:"amenaza_mixta", tramo:2, nivel:2, niveles:[2, "volador", 2], nivelPropio:true,
+    titulo:"Carroñeros y aves",
+    descripcion:"Dos carroñeros avanzan por los lados y un ave de bruma cruza por el centro." },
   { id:"a07", tipo:"amenaza", nivel:3, cantidad:3, prio:[2,3,1], tramo:2,
     titulo:"Tres yetis",
     descripcion:"Tres yetis descienden rugiendo de la montaña." },
@@ -99,6 +106,12 @@ const PLANTILLAS_DESTINO = [
   { id:"a12", tipo:"amenaza", nivel:5, cantidad:2, prio:[3,2,1], tramo:3,
     titulo:"Dos colosos de hielo",
     descripcion:"Dos colosos de hielo surgen de la ventisca." },
+  { id:"a10v", tipo:"amenaza", nivel:"volador", cantidad:2, prio:[2,3,1], tramo:3,
+    titulo:"La bandada",
+    descripcion:"Una bandada de aves de bruma se abate sobre las escaleras." },
+  { id:"a11v", tipo:"amenaza_mixta", tramo:3, nivel:5, niveles:[5, "volador", 5], nivelPropio:true,
+    titulo:"Colosos y aves",
+    descripcion:"Dos colosos de hielo avanzan por los lados y un ave de bruma cruza por el centro." },
   { id:"a13", tipo:"amenaza", nivel:7, cantidad:3, prio:[2,1,3], tramo:3,
     titulo:"Tres devoradores de cumbres",
     descripcion:"Tres devoradores de cumbres descienden de las cumbres." },
@@ -2790,7 +2803,7 @@ const NOMBRE_NIVEL = { 1: "rastreador", 2: "carroñero", 3: "yeti", 5: "coloso d
 function describirMixta(puestos) {
   if (!puestos.length) return "Un carroñero y dos rastreadores buscan hueco en las escaleras, pero no lo encuentran.";
   const trozos = puestos.map(p =>
-    `un ${NOMBRE_NIVEL[p.nivel] ?? `monstruo de nivel ${p.nivel}`} por la escalera ${ESCALERA_LARGA[p.sendero] ?? "central"}`);
+    `${p.nivel === "volador" ? "unas" : "un"} ${NOMBRE_NIVEL[p.nivel] ?? `monstruo de nivel ${p.nivel}`} por la escalera ${ESCALERA_LARGA[p.sendero] ?? "central"}`);
   const lista = trozos.length === 1 ? trozos[0] : `${trozos.slice(0, -1).join(", ")} y ${trozos[trozos.length - 1]}`;
   return `Se ha avistado ${lista}.`;
 }
@@ -2826,7 +2839,7 @@ function resolverDestino(e, jugadorId, carta) {
         colocarAtacante(j.senderos, p.sendero, nv);
       }
       if (puestos.length) {
-        evs.push({ tipo: "amenaza", texto: `Destino: ${puestos.map(p => `${NOMBRE_NIVEL[p.nivel] ?? "monstruo"} nv${p.nivel} por la escalera ${p.sendero}`).join(", ")} de ${j.nombre}.` });
+        evs.push({ tipo: "amenaza", texto: `Destino: ${puestos.map(p => `${NOMBRE_NIVEL[p.nivel] ?? "monstruo"}${p.nivel === "volador" ? "" : ` nv${p.nivel}`} por la escalera ${p.sendero}`).join(", ")} de ${j.nombre}.` });
       }
       break;
     }
