@@ -202,7 +202,13 @@ function vistaPara(sala, usuarioId) {
       tipo: "vestibulo",
       version: versionAhora(),
       codigo: sala.codigo,
-      juego: { id: sala.juego, nombre: juego?.nombre ?? sala.juego, sinPersonalizacion: juego?.sinPersonalizacion ?? false },
+      juego: {
+        id: sala.juego,
+        nombre: juego?.nombre ?? sala.juego,
+        sinPersonalizacion: juego?.sinPersonalizacion ?? false,
+        /* Juegos que dejan elegir las vidas de la fortaleza en el vestíbulo. */
+        vidas: Array.isArray(juego?.vidas) ? juego.vidas : null,
+      },
       min: juego?.min ?? 2,
       max: juego?.max ?? 8,
       fase: sala.fase,
@@ -215,6 +221,7 @@ function vistaPara(sala, usuarioId) {
       personalizacion: {
         modo: sala.datos.opciones?.modo ?? "todos",
         equipos: { ...(sala.datos.opciones?.equipos ?? {}) },
+        vidas: sala.datos.opciones?.vidas ?? null,
         personajes: { ...(sala.datos.opciones?.personajes ?? {}) },
         registroTotal: sala.datos.opciones?.registroTotal ?? true,
         habsConfig: sala.datos.opciones?.habsConfig ?? null,

@@ -656,19 +656,30 @@ function jugadorInicial(info, e) {
 }
 
 // ── Contrato ──────────────────────────────────────────────────────────────
+/* Vidas del búnker que el anfitrión puede elegir en el vestíbulo. El tope se
+   guarda en la partida (`e.vidas`) y lo usan igual las reglas y el HUD. */
+const VIDAS_BUNKER = [10, 15, 20];
+const VIDAS_POR_DEFECTO = 20;
+
 const bunkerWars = {
   id: "bunker-wars",
   nombre: "PYMALS",
   min: 2,
   max: 8,
+  /* Si el juego deja elegir las vidas, el vestíbulo pinta sus botones. */
+  vidas: VIDAS_BUNKER,
   resumen: "Defiende tu búnker 25 rondas. Manda monstruos a tus rivales. El último en pie gana.",
 
   crear({ jugadores, semilla, opciones }) {
     const modo = opciones?.modo === "equipos" ? "equipos" : "todos";
     const equipos = opciones?.equipos ?? {};
+    const vidas = VIDAS_BUNKER.includes(Number(opciones?.vidas))
+      ? Number(opciones?.vidas)
+      : VIDAS_POR_DEFECTO;
     const e = {
       luna: 1,
       modo,
+      vidas,
       fase: "lanzar",
       orden: jugadores.map(j => j.id),
       turnoIdx: 0,
@@ -780,6 +791,7 @@ const bunkerWars = {
     return {
       luna: e.luna,
       modo: e.modo ?? "todos",
+      vidas: e.vidas ?? VIDAS_POR_DEFECTO,
       fase: e.fase,
       turnoActual: e.orden[e.turnoIdx],
       nivelEnemigo: e.nivelEnemigo,
@@ -899,7 +911,7 @@ function entrarAlBunker(j, e, evs) {
     j.entradasBunker = [...(j.entradasBunker ?? []),
       { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, ...(f.vuela ? { vuela: true } : {}) }].slice(-8);
     evs.push({ tipo: "entrada", texto: `¡${f.vuela ? "Aves de bruma" : `Monstruo ${f.nivel}`} entra en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
-    if (j.puntosMonsters > 20) {
+    if (j.puntosMonsters > (e.vidas ?? VIDAS_POR_DEFECTO)) {
       j.vivo = false;
       marcarEliminado(e, j.id);
       evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
@@ -928,7 +940,7 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
             j.entradasBunker = [...(j.entradasBunker ?? []),
               { id: uid("b"), ficha: f.id, calle: s.id, nivel: f.nivel, vuela: true }].slice(-8);
             evs.push({ tipo: "entrada", texto: `¡Aves de bruma entran en el búnker de ${j.nombre}! (+${f.nivel} pts)` });
-            if (j.puntosMonsters > 20) {
+            if (j.puntosMonsters > (e.vidas ?? VIDAS_POR_DEFECTO)) {
               j.vivo = false;
               marcarEliminado(e, j.id);
               evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: j.id });
@@ -2183,7 +2195,7 @@ function botElegirLanzamiento(e, j, acciones) {
     const rival = e.jugadores[a.rivalId];
     const monstruo = j.lanzaderas[a.lanzadera]?.nivel ?? 0;
     const torre = rival?.bunker?.torres?.[a.sendero - 1]?.nivel ?? 0;
-    return monstruo * 10 + (20 - (rival?.puntosMonsters ?? 0)) + (3 - torre) * 2;
+    return monstruo * 10 + ((e.vidas ?? VIDAS_POR_DEFECTO) - (rival?.puntosMonsters ?? 0)) + (3 - torre) * 2;
   };
   return lanzamientos.sort((a, b) => puntos(b) - puntos(a))[0];
 }
@@ -2877,7 +2889,7 @@ function resolverDestino(e, jugadorId, carta) {
         j.puntosMonsters += enLaPuerta.nivel;
         s.posiciones[3] = null;
         evs.push({ tipo: "entrada", texto: `¡Monstruo ${enLaPuerta.nivel} entra en el búnker de ${j.nombre}! (+${enLaPuerta.nivel} pts)` });
-        if (j.puntosMonsters > 20) {
+        if (j.puntosMonsters > (e.vidas ?? VIDAS_POR_DEFECTO)) {
           j.vivo = false;
           marcarEliminado(e, jugadorId);
           evs.push({ tipo: "derrota", texto: `El búnker de ${j.nombre} ha sido destruido.`, a: jugadorId });

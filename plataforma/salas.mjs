@@ -480,6 +480,15 @@ export class Mesas {
       this.anotar(sala, `La mesa queda en ${o.nJugadores} jugadores.`);
     }
 
+    /* Vidas del búnker: solo los juegos que las ofrecen, y solo los valores
+       que el juego declara (10, 15 o 20). */
+    if ("vidas" in datos && Array.isArray(juego?.vidas) && juego.vidas.length) {
+      const vidas = Number(datos.vidas);
+      if (!juego.vidas.includes(vidas)) return { error: "Ese número de vidas no existe." };
+      o.vidas = vidas;
+      this.anotar(sala, `Vidas del búnker: ${vidas}.`);
+    }
+
     /* Opciones de juego específicas (registroTotal, habsConfig, habsInicio). */
     if ("registroTotal" in datos) o.registroTotal = Boolean(datos.registroTotal);
     if ("habsConfig" in datos && Array.isArray(datos.habsConfig)) o.habsConfig = datos.habsConfig;
@@ -537,7 +546,7 @@ export class Mesas {
     sala.datos.estado = juego.crear({
       jugadores: jugadores.map(({ id, nombre, avatar }) => ({ id, nombre, avatar })),
       semilla: sala.semilla,
-      opciones: { modo: opciones.modo, equipos: { ...opciones.equipos }, personajes: { ...(opciones.personajes ?? {}) }, registroTotal: opciones.registroTotal, habsConfig: opciones.habsConfig, habsInicio: opciones.habsInicio },
+      opciones: { modo: opciones.modo, equipos: { ...opciones.equipos }, personajes: { ...(opciones.personajes ?? {}) }, vidas: opciones.vidas ?? null, registroTotal: opciones.registroTotal, habsConfig: opciones.habsConfig, habsInicio: opciones.habsInicio },
     });
     sala.fase = "jugando";
     this.anotar(sala, "Empieza la partida.");

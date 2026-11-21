@@ -11,6 +11,10 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
   const faltan = mesa.jugadores.length < mesa.min;
   const config = mesa.personalizacion ?? { modo: "todos", equipos: {} };
   const modo = config.modo === "equipos" ? "equipos" : "todos";
+  /* Juegos que dejan elegir las vidas (el búnker): se pintan sus botones y el
+     valor guardado, o el de por defecto del juego si aún no se ha tocado. */
+  const opcionesVidas = Array.isArray(mesa.juego?.vidas) ? mesa.juego.vidas : [];
+  const vidas = Number(config.vidas) || opcionesVidas[opcionesVidas.length - 1] || 20;
   const equipos = config.equipos ?? {};
   const equiposDistintos = new Set(mesa.jugadores.map((j, i) => {
     const n = Number(equipos[j.id]);
@@ -46,6 +50,12 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
           <button type="button" class="modo-opcion ${modo === "equipos" ? "on" : ""}"
                   data-modo="equipos" ${editable ? "" : "disabled"}>Por equipos</button>
         </div>
+        ${opcionesVidas.length ? `
+        <p class="subtitulo" style="margin:14px 0 6px">Vidas del búnker</p>
+        <div class="modo-opciones" role="group" aria-label="Vidas del búnker">
+          ${opcionesVidas.map((n) => `<button type="button" class="modo-opcion ${vidas === n ? "on" : ""}"
+                  data-vidas="${n}" ${editable ? "" : "disabled"}>${n}</button>`).join("")}
+        </div>` : ""}
       </section>`}
 
       <section class="seccion" style="margin-top:24px">
@@ -153,6 +163,14 @@ export function pintar(raiz, { mesa, alListo, alEmpezar, alSalir, alAñadirBot, 
       if (!editable) return;
       boton.disabled = true;
       personalizar({ modo: boton.dataset.modo });
+    });
+  }
+
+  for (const boton of nodo.querySelectorAll("[data-vidas]")) {
+    boton.addEventListener("click", () => {
+      if (!editable) return;
+      boton.disabled = true;
+      personalizar({ vidas: Number(boton.dataset.vidas) });
     });
   }
 

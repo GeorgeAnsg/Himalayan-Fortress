@@ -114,6 +114,7 @@ export function pintar(contenedor, opciones) {
   criaderoMesa = yo?.bunker?.laboratorio ?? 0;
   nivelEnemigoMesa = publica.nivelEnemigo ?? 1;
   lunaMesa = publica.luna ?? 1;
+  vidasMesa = Number(publica.vidas) || 20;
   /* Una línea por jugador en la barra; la tuya siempre la primera. */
   jugadoresMesa = Object.entries(tableros ?? {})
     .map(([id, p]) => ({ id, ...p }))
@@ -2228,7 +2229,7 @@ function abrirLanzar(ops) {
       const id = r.id;
       const suyas = opsModal.filter(a => a.rivalId === id);
       const bloqueado = suyas.length === 0;
-      const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+      const vida = Math.max(0, vidasMesa - (r.puntosMonsters ?? 0));
       /* Cuántos atacantes lleva encima: es lo que explica por qué sus entradas
          están cerradas y lo que no se veía en el resumen. */
       const atacantes = (r.senderos ?? []).reduce((s, sd) =>
@@ -2238,7 +2239,7 @@ function abrirLanzar(ops) {
                 title="${bloqueado ? "No puedes lanzar a " : "Lanzar a "}${esc(nombreMesa(r))}"${bloqueado ? " disabled" : ""}>
           <span class="bw-lz-rival-cab">
             <b class="bw-lz-rival-nombre">${esc(nombreMesa(r))}</b>
-            <span class="bw-lz-rival-vida">❤ ${vida} / 20</span>
+            <span class="bw-lz-rival-vida">❤ ${vida} / ${vidasMesa}</span>
           </span>
           ${callesRival(r, { bloqueado })}
           <span class="bw-lz-rival-atac">${atacantes} atacante${atacantes === 1 ? "" : "s"} en sus caminos</span>
@@ -2272,7 +2273,7 @@ function abrirLanzar(ops) {
     rivalActual = rivalId;
     elegida = null;
     const rival = jugadoresMesa.find(x => x.id === rivalId) ?? {};
-    const vida = Math.max(0, 20 - (rival.puntosMonsters ?? 0));
+    const vida = Math.max(0, vidasMesa - (rival.puntosMonsters ?? 0));
     /* Solo las lanzaderas que de verdad pueden ir a esta fortaleza. */
     const lanzaderasDe = [...new Set(opsModal.filter(a => a.rivalId === rivalId).map(a => a.lanzadera))].sort();
     /* El detalle sale desde abajo, con el mismo ribete de piedra que el panel
@@ -2283,7 +2284,7 @@ function abrirLanzar(ops) {
       <div class="bw-lz bw-lz-hoja">
         <div class="bw-lz-head bw-lz-cab-detalle">
           <b class="bw-lz-tit">Fortaleza de ${esc(nombreMesa(rival))}</b>
-          <span class="bw-lz-vida">❤ ${vida} / 20</span>
+          <span class="bw-lz-vida">❤ ${vida} / ${vidasMesa}</span>
         </div>
         <div class="bw-lz-tablero">${tableroRival(rivalId)}</div>
         <div class="bw-lz-mis${lanzaderasDe.length === 1 ? " sola" : ""}">${lanzaderasDe.map(chipLanzadera).join("")}</div>
@@ -2993,7 +2994,7 @@ function pintarHud(j, priv) {
   const tot = totalesBunker(j?.bunker);
   const energia = priv && "energia" in priv ? priv.energia : 0;
   const acciones = priv && "accionesRestantes" in priv ? priv.accionesRestantes : 0;
-  const vida = Math.max(0, 20 - (j?.puntosMonsters ?? 0));
+  const vida = Math.max(0, vidasMesa - (j?.puntosMonsters ?? 0));
   const esAliadoHud = (p) => modoMesa === "equipos" && (p?.equipo ?? 0) === miEquipoMesa;
 
   /* Las mejoras de la fortaleza: armería (torres de ataque) y criadero
@@ -3029,7 +3030,7 @@ function pintarHud(j, priv) {
     return `<div class="bw-turno${activo ? " activo" : ""}" data-jugador="${esc(p.id)}"></div>`;
   }).join("");
   const nTurnos = Math.max(1, jugadoresMesa.length);
-  const nivelVida = vida > 12 ? "alta" : vida > 6 ? "media" : "baja";
+  const nivelVida = vida > vidasMesa * 0.6 ? "alta" : vida > vidasMesa * 0.3 ? "media" : "baja";
 
   /* Tres filas: arriba las monedas, la vida y los decretos; en medio los
      cuatro huecos de la fortaleza; abajo la franja de turnos. */
@@ -3047,9 +3048,9 @@ function pintarHud(j, priv) {
         <div class="bw-hud-cuerpo">
           <div class="bw-hud-fila arriba">
             <div class="bw-hud-celda izq">${recurso("monedas", "Monedas", tot.monedas, energia)}</div>
-            <div class="bw-hud-vida ${nivelVida}" title="Vida del búnker: ${vida} de 20">
+            <div class="bw-hud-vida ${nivelVida}" title="Vida del búnker: ${vida} de ${vidasMesa}">
               <img src="${ICONO("escudo")}" alt="">
-              <b>${vida}/20</b>
+              <b>${vida}/${vidasMesa}</b>
             </div>
             <div class="bw-hud-celda der">${recurso("pergaminos", "Decretos", tot.monjes, acciones)}</div>
           </div>
@@ -3124,7 +3125,7 @@ function pintarMapa() {
   const esAliado = (p) => enEquipos && (p.equipo ?? 0) === miEquipoMesa;
   const nombreMapa = nombreMesa;
   const tarjeta = (p) => {
-    const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
+    const vida = Math.max(0, vidasMesa - (p.puntosMonsters ?? 0));
     const torres = Array.isArray(p.bunker?.torres) ? p.bunker.torres : [];
     const senderos = Array.isArray(p.senderos) ? p.senderos : [];
     const calles = [0, 1, 2].map((i) => {
@@ -3172,7 +3173,7 @@ function pintarMapa() {
 /* ── Aliados: traspaso de monedas, decretos y monstruos ────────────────── */
 function pintarAliados(aliados, peticiones = [], enviosPendientes = []) {
   const personas = aliados.map((p) => {
-    const vida = Math.max(0, 20 - (p.puntosMonsters ?? 0));
+    const vida = Math.max(0, vidasMesa - (p.puntosMonsters ?? 0));
     const huecos = Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
     return `<button type="button" class="bw-aliados-persona" data-aliado="${esc(p.id)}">
       <b>${esc(nombreMesa(p))}</b>
@@ -3329,7 +3330,7 @@ function prepararAliados(panel, aliados) {
     decretos = 0;
     mons.clear();
     form.classList.remove("oculto");
-    destino.textContent = `Para ${nombreMesa(p)} · vida ${Math.max(0, 20 - (p.puntosMonsters ?? 0))}/20`;
+    destino.textContent = `Para ${nombreMesa(p)} · vida ${Math.max(0, vidasMesa - (p.puntosMonsters ?? 0))}/${vidasMesa}`;
     pintarMons();
     refrescar();
   };
@@ -3902,6 +3903,9 @@ let faseMesa = null;
 let tocaMesa = false;
 let cienciasMesa = [];
 let lunaMesa = 1;
+/* Vidas del búnker que se eligieron en el vestíbulo (10, 15 o 20). El motor
+   manda el tope en la vista pública; todo lo que enseña la vida lo usa. */
+let vidasMesa = 20;
 let jugadoresMesa = [];
 let turnoMesa = null;
 let yoMesa = null;
@@ -4615,12 +4619,12 @@ function abrirObjetivo(efecto, cartaUid, opciones) {
     const filas = ids.map(id => {
       const r = jugadoresMesa.find(x => x.id === id) ?? { id };
       const mapa = porJugador(id);
-      const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+      const vida = Math.max(0, vidasMesa - (r.puntosMonsters ?? 0));
       return `<button type="button" class="bw-lz-rival" data-objetivo-rival="${esc(id)}"
                 title="Ver la fortaleza de ${esc(nombreMesa(r))}">
         <span class="bw-lz-rival-cab">
           <b class="bw-lz-rival-nombre">${esc(nombreMesa(r))}</b>
-          <span class="bw-lz-rival-vida">❤ ${vida} / 20</span>
+          <span class="bw-lz-rival-vida">❤ ${vida} / ${vidasMesa}</span>
         </span>
         <span class="bw-lz-calles">${callesResumen(r, mapa)}</span>
         <span class="bw-ob-cuenta">${mapa.size} monstruo${mapa.size === 1 ? "" : "s"} de nivel 3 o menos puede${mapa.size === 1 ? "" : "n"} avanzar</span>
@@ -4637,14 +4641,14 @@ function abrirObjetivo(efecto, cartaUid, opciones) {
 
   const pasoRival = (rivalId) => {
     const r = jugadoresMesa.find(x => x.id === rivalId) ?? { id: rivalId };
-    const vida = Math.max(0, 20 - (r.puntosMonsters ?? 0));
+    const vida = Math.max(0, vidasMesa - (r.puntosMonsters ?? 0));
     fondo.classList.remove("lz-inicial");
     fondo.classList.add("lz-detalle");
     fondo.innerHTML = `
       <div class="bw-lz bw-lz-hoja">
         <div class="bw-lz-head bw-lz-cab-detalle">
           <b class="bw-lz-tit">Fortaleza de ${esc(nombreMesa(r))}</b>
-          <span class="bw-lz-vida">❤ ${vida} / 20</span>
+          <span class="bw-lz-vida">❤ ${vida} / ${vidasMesa}</span>
         </div>
         <p class="bw-lz-sub">${esc(SUB_TABLERO[efecto] ?? "")}</p>
         <div class="bw-lz-tablero">${tablero(r, rivalId)}</div>
@@ -4949,6 +4953,7 @@ function pintarVistaRival(contenedor, publica, id, miPrivada) {
   criaderoMesa = rival.bunker?.laboratorio ?? 0;
   nivelEnemigoMesa = publica.nivelEnemigo ?? 1;
   lunaMesa = publica.luna ?? 1;
+  vidasMesa = Number(publica.vidas) || 20;
   vistaRival = true;
 
   const esAliadoRival = modoMesa === "equipos" && (rival?.equipo ?? 0) === miEquipoMesa;
