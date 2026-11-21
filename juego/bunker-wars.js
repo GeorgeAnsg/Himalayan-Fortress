@@ -391,19 +391,30 @@ function normalizarLanzaderas(j) {
 
 /* Mueve el monstruo de pos 0 de un sendero a la lanzadera libre; si no hay,
    lo pone en la cola (hasta 2 monstruos en espera). */
-function aLanzaderaOCola(j, s, evs) {
-  const mon = s.posiciones[0];
-  if (!mon) return;
+/* Mete un monstruo en la lanzadera de su calle o en la cola de espera.
+   Devuelve la lanzadera usada, -1 si ha quedado en la cola y null si no había
+   sitio en ninguna de las dos. */
+function ponerEnLanzadera(j, s, mon, evs) {
+  if (!mon) return null;
+  const quien = mon.vuela ? "El ave de bruma" : "Un monstruo";
   const i = lanzaderaDeSendero(j, s.id);
   if (i !== null) {
     j.lanzaderas[i] = mon;
-    s.posiciones[0] = null;
-    evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
-  } else if (j.colaLanzaderas.length < 2) {
-    j.colaLanzaderas.push(mon);
-    s.posiciones[0] = null;
-    evs.push({ tipo: "a_lanzadera", texto: `Un monstruo de ${j.nombre} queda en espera de lanzadera.` });
+    evs.push({ tipo: "a_lanzadera", texto: `${quien} de ${j.nombre} alcanza la lanzadera ${i + 1}.` });
+    return i;
   }
+  if (j.colaLanzaderas.length < 2) {
+    j.colaLanzaderas.push(mon);
+    evs.push({ tipo: "a_lanzadera", texto: `${quien} de ${j.nombre} queda en espera de lanzadera.` });
+    return -1;
+  }
+  return null;
+}
+
+function aLanzaderaOCola(j, s, evs) {
+  const mon = s.posiciones[0];
+  if (!mon) return;
+  if (ponerEnLanzadera(j, s, mon, evs) !== null) s.posiciones[0] = null;
 }
 
 /* Lanzadera que toca a cada camino: el 1 tiene al lado la 1, el 3 la 2, y el
@@ -981,7 +992,15 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
         for (let k = pos - 1; k >= 0; k--) {
           if (!s.posiciones[k]) { hueco = k; break; }
         }
-        if (hueco === null) continue;
+        if (hueco === null) {
+          /* Sin hueco donde posarse: el ave se va directa a la lanzadera y el
+             atacante ocupa su casilla. Si la lanzadera y la cola están llenas,
+             ese atacante espera el turno. */
+          if (ponerEnLanzadera(j, s, defensor, evs) === null) continue;
+          s.posiciones[pos] = f;
+          s.posiciones[pos - 1] = null;
+          continue;
+        }
         s.posiciones[hueco] = defensor;
         s.posiciones[pos] = f;
         s.posiciones[pos - 1] = null;
@@ -1609,7 +1628,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       j.box[boxIdx] = null;
       j.lanzaderas[i] = mon;
       j.accionesRestantes--;
-      evs.push({ tipo: "lanzadera", texto: `${j.nombre} mueve monstruo ${mon.nivel} de la jaula ${i + 1} a la lanzadera ${i + 1}.`, a: jugadorId });
+      evs.push({ tipo: "lanzadera", texto: `${j.nombre} mueve ${mon.vuela ? "aves de bruma" : `monstruo ${mon.nivel}`} de la jaula ${i + 1} a la lanzadera ${i + 1}.`, a: jugadorId });
       break;
     }
 
@@ -1617,6 +1636,9 @@ function faseAcciones(e, jugadorId, accion, evs) {
       const boxIdx = j.box.findIndex(m => m?.id === accion.monstruoId);
       const m = j.box[boxIdx];
       if (!m || m.nivel === 7 || j.energia < 1) break;
+      /* Las aves de bruma no se despliegan en tus escaleras: desde la jaula
+         solo van a la lanzadera, porque su papel es atacar. */
+      if (m.vuela) break;
       // Sale del box a la casilla 4 del camino, pegado al búnker y de cara a
       // los atacantes que bajan desde la casilla 1.
       if (accion.posicion !== POS_DESPLIEGUE) break;
@@ -1654,6 +1676,7 @@ function faseAcciones(e, jugadorId, accion, evs) {
       const posDest = accion.posicion;
       if (posDest >= posOrigen || posDest < 0) break;
       const mMon = s.posiciones[posOrigen];
+      if (mMon.vuela) break; // las aves solo entran en juego desde la lanzadera
       const ocupante = s.posiciones[posDest];
       /* Las aves no se dejan atacar: un monstruo de a pie no puede caer sobre
          una. Solo las torres u otra ave la paran. */
@@ -1983,14 +2006,15 @@ function legalesAcciones(e, jugadorId) {
     if (!m) return;
     const lanz = boxDeIndice(i);
     if (j.lanzaderas[lanz]) return;
-    acc.push({ tipo: "mover_a_lanzadera", monstruoId: m.id, texto: `Monstruo ${m.nivel} → lanzadera ${lanz + 1}` });
+            acc.push({ tipo: "mover_a_lanzadera", monstruoId: m.id,
+                   texto: `${m.vuela ? "Aves de bruma" : `Monstruo ${m.nivel}`} → lanzadera ${lanz + 1}` });
   });
   if (j.energia >= 1) {
     /* Se lanza a la casilla 4 del camino (la que toca al búnker, de cara a los
        atacantes) y solo a los dos caminos adyacentes a la caja del monstruo. */
     for (let i = 0; i < j.box.length; i++) {
       const m = j.box[i];
-      if (!m || m.nivel === 7) continue;
+      if (!m || m.nivel === 7 || m.vuela) continue;
       for (const idCamino of caminosDeBox(boxDeIndice(i))) {
         const s = j.senderos.find(s => s.id === idCamino);
         if (!s) continue;
@@ -2011,7 +2035,7 @@ function legalesAcciones(e, jugadorId) {
   if (j.energia >= 1) {
     for (const s of j.senderos) {
       s.posiciones.forEach((m, origen) => {
-        if (m?.tipo !== "monstruo" || origen === 0) return;
+        if (m?.tipo !== "monstruo" || origen === 0 || m.vuela) return;
         // "Mover un monstruo las posiciones que desees": cualquier casilla por
         // delante suya. Si está ocupada por un atacante, la acción es un ataque.
         for (let destino = 0; destino < origen; destino++) {
