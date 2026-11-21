@@ -3404,8 +3404,8 @@ function prepararAliados(panel, aliados) {
       return;
     }
     monsWrap.innerHTML = disponibles.map((m) => `
-      <button type="button" class="bw-aliados-mon${mons.has(m.id) ? " sel" : ""}" data-mon="${esc(m.id)}" title="Monstruo nivel ${m.nivel}">
-        <img src="${imgMonstruo(m.nivel, false, true)}" alt="monstruo"><b>${m.nivel ?? "?"}</b>
+      <button type="button" class="bw-aliados-mon${mons.has(m.id) ? " sel" : ""}" data-mon="${esc(m.id)}" title="${m.vuela ? "Aves de bruma" : `Monstruo nivel ${m.nivel}`}">
+        <img src="${imgMonstruo(m.vuela ? "volador" : m.nivel, false, true)}" alt="monstruo"><b>${m.nivel ?? "?"}</b>
       </button>`).join("");
   };
 
@@ -3554,7 +3554,7 @@ function bloqueTorres(torres, senderos = [], { interactivo = true, marcar = null
       const titulo = marca?.titulo ?? (atacante
         ? `Atacante nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para disparar" : ""}`
         : `${interactivo ? "Tu monstruo" : "Monstruo"} nivel ${nivelFicha} en el peldaño ${numero}${interactivo ? ": toca para avanzar o atacar" : ""}`);
-      return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}${marca ? " objetivo" : ""}"${attrs} title="${titulo}"><img src="${imgMonstruo(nivelFicha, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivelFicha}</b><span class="bw-torre-step">${numero}</span></div>`;
+      return `<div class="bw-box-slot lleno bw-torre-slot ${atacante ? "atacante" : "defensor"}${marca ? " objetivo" : ""}"${attrs} title="${titulo}"><img src="${imgMonstruo(f.vuela ? "volador" : nivelFicha, atacante)}" class="bw-box-img" alt="monstruo"><b class="bw-box-nv">${nivelFicha}</b><span class="bw-torre-step">${numero}</span></div>`;
     };
     const attrsTorre = interactivo
       ? ` data-torre-pos="${i + 1}" title="${n ? `Torre nivel ${n}: toca para mejorar` : "Hueco libre: toca para construir"}"`
@@ -4882,7 +4882,7 @@ function abrirEnvio(mon) {
     <div class="bw-envio-cuerpo">
       <div class="bw-envio-cuadro">
         <div class="bw-box-slot lleno">
-          <img src="${imgMonstruo(mon.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo">
+          <img src="${imgMonstruo(mon.vuela ? "volador" : mon.nivel, false, true)}" class="bw-box-img bw-mon-jaula" alt="monstruo">
           <b class="bw-box-nv">${mon.nivel ?? "?"}</b>
         </div>
       </div>
@@ -4969,6 +4969,7 @@ function abrirMonstruo({ sendero, posicion, id, nivel }) {
   ajustarFondoModal();
   const ficha = posicionesDe(sendero)[Number(posicion)] ?? null;
   const nv = nivel ?? nivelDeFicha(ficha);
+  const vuela = !!ficha?.vuela;
   const plan = planMover(sendero, posicion, id);
   /* El título es la jugada, no el monstruo: «Avanzar» o «Atacar». */
   const tipo = plan?.tipo ?? tipoDeMover(sendero, posicion);
@@ -4984,7 +4985,7 @@ function abrirMonstruo({ sendero, posicion, id, nivel }) {
     <div class="bw-envio-cuerpo">
       <div class="bw-envio-cuadro">
         <div class="bw-box-slot lleno">
-          <img src="${imgMonstruo(nv, false, false)}" class="bw-envio-foto" alt="monstruo">
+          <img src="${imgMonstruo(vuela ? "volador" : nv, false, false)}" class="bw-envio-foto" alt="monstruo">
           <b class="bw-box-nv">${nv ?? "?"}</b>
         </div>
       </div>
