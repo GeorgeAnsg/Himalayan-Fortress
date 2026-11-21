@@ -3350,7 +3350,7 @@ function pintarMapa() {
       s + (sd.posiciones ?? []).filter((f) => f?.tipo === "atacante").length, 0);
     return `<button type="button" class="bw-mapa-rival ${esAliado(p) ? "aliado" : (atacantes > 0 ? "con-atacantes" : "enemigo")}" data-jugador="${esc(p.id)}">
       <span class="bw-mapa-nombre">${esc(nombreMapa(p))}</span>
-      <span class="bw-mapa-vida">Vida <b>${vida}</b>/20</span>
+      <span class="bw-mapa-vida">Vida <b>${vida}</b>/${vidasMesa}</span>
       <span class="bw-lz-calles bw-mapa-calles">${calles}</span>
       <span class="bw-mapa-atac">${atacantes} atacante${atacantes === 1 ? "" : "s"}</span>
     </button>`;
@@ -3378,7 +3378,7 @@ function pintarAliados(aliados, peticiones = [], enviosPendientes = []) {
     const huecos = Math.max(0, 4 - Math.min(4, Number(p.boxOcupados) || 0));
     return `<button type="button" class="bw-aliados-persona" data-aliado="${esc(p.id)}">
       <b>${esc(nombreMesa(p))}</b>
-      <small>Vida ${vida}/20 · ${huecos} hueco${huecos === 1 ? "" : "s"} de jaula</small>
+      <small>Vida ${vida}/${vidasMesa} · ${huecos} hueco${huecos === 1 ? "" : "s"} de jaula</small>
     </button>`;
   }).join("");
 
@@ -3941,7 +3941,7 @@ function pintarManuscritos() {
       ${paso("5. Decretos", "Gastas tus 2 decretos —y los que den las cartas— en lo que explico debajo.")}
       ${paso("6. Descarte", "Tiras 1 o 2 cartas y robas hasta volver a tener 4 en la mano.")}
       ${parrafo("Con cada decreto puedes hacer una cosa: jugar una carta de la mano, disparar con las torres (el daño se paga en monedas), criar un monstruo (1 decreto + sus monedas), construir una torre (1 decreto + 1 moneda), subir una torre de nivel (1 decreto + 2 monedas) o avanzar un monstruo tuyo (1 decreto + 1 moneda).")}
-      ${parrafo("Un monstruo que llega al final de su escalera espera en la lanzadera hasta que lo lances. Si un atacante sube desde el cuarto peldaño, entra en la fortaleza y suma sus puntos: con más de 20, tu fortaleza cae.")}
+      ${parrafo(`Un monstruo que llega al final de su escalera espera en la lanzadera hasta que lo lances. Un atacante que llega al cuarto peldaño se queda allí ese turno y entra en la fortaleza en el avance siguiente, sumando sus puntos: con más de ${vidasMesa}, tu fortaleza cae.`)}
     `)}
 
     ${seccion("Destino", `
@@ -3959,7 +3959,7 @@ function pintarManuscritos() {
       ${fila("Yeti", "Nv 3", "3 ptos · 2 mon.")}
       ${fila("Coloso de hielo", "Nv 5", "5 ptos · 3 mon.")}
       ${fila("Devorador de cumbres", "Nv 7", "7 ptos · no se crea")}
-      ${parrafo("Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de 20, tu fortaleza cae.")}
+      ${parrafo(`Los puntos se suman cuando el monstruo entra en tu fortaleza. Con más de ${vidasMesa}, tu fortaleza cae.`)}
       ${parrafo("El Aves de bruma se mueve igual defendiendo que atacando: en sus dos acciones busca el primer hueco hacia delante, mata a los monstruos de su nivel o menos y sobrevuela a los más fuertes sin pelear. No se deja atacar por monstruos de a pie: solo la destruyen las torres u otra ave de bruma. Si un atacante llega a su casilla, el ave se aparta volando al hueco libre más cercano hacia la entrada y el atacante ocupa esa casilla; si no queda ningún hueco libre delante, se va directa a la lanzadera. Tampoco se despliega en tus escaleras: desde la jaula solo se manda a la lanzadera, porque su papel es la contra.")}
     `)}
 
@@ -3987,7 +3987,7 @@ function pintarManuscritos() {
 
     ${seccion("Las escaleras", `
       ${parrafo("A la fortaleza se sube. Hay tres escaleras: la de la izquierda, la central y la de la derecha, con cuatro peldaños cada una.")}
-      ${parrafo("Los atacantes suben un peldaño al empezar tu turno; al subir desde el cuarto entran en la fortaleza y suman sus puntos.")}
+      ${parrafo("Los atacantes suben un peldaño al empezar tu turno. El que llega al cuarto peldaño se queda allí; en el avance siguiente entra en la fortaleza y suma sus puntos.")}
       ${parrafo("Tus monstruos bajan hacia el primer peldaño y, al llegar, pasan a la lanzadera para lanzarlos el turno siguiente.")}
       ${parrafo("Si el atacante que llega a un peldaño es igual o más fuerte, mata al monstruo que lo defiende.")}
     `)}

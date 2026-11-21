@@ -1046,15 +1046,16 @@ function avanzarAtacantes(j, e, evs, soloVuela = false) {
 function faseAvance(e, jugadorId, evs) {
   const j = e.jugadores[jugadorId];
 
-  /* Paso 1: atacantes en pos 3 (de antes) entran al búnker. */
+  /* Paso 1: entra al búnker el atacante que ya estaba en el cuarto peldaño al
+     empezar la jornada. El que llega al cuarto durante este avance se queda
+     allí y entra en el avance siguiente: al llegar a la puerta no se entra de
+     golpe, hay un turno para dispararle desde las torres. */
   entrarAlBunker(j, e, evs);
   /* Paso 2: todos avanzan 1 acción (voladores pueden entrar al búnker directamente). */
   avanzarAtacantes(j, e, evs);
   /* Paso 3: voladores reciben su segunda acción. No hay entrarAlBunker intermedio
      para que el volador que llegó a pos 3 tenga su segunda acción disponible. */
   avanzarAtacantes(j, e, evs, true);
-  /* Paso 4: recoge los atacantes normales en pos 3 y los voladores que entraron. */
-  entrarAlBunker(j, e, evs);
 
   e.fase = "defensores";
   comprobarFin(e);
