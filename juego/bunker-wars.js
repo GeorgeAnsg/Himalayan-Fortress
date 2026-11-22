@@ -612,6 +612,7 @@ function normalizarBunker(j) {
 
 function sincronizarTorres(e) {
   migrarNombres(e);
+  if (!Array.isArray(e.entregas)) e.entregas = [];
   retirarCartasViejas(e);
   sincronizarTextosCartas(e);
   normalizarIds(e);
@@ -725,6 +726,9 @@ const bunkerWars = {
          último de la mesa; sirve para el puesto de cada uno en el final y para
          la pantalla de «has caído» de quien cae a media partida. */
       eliminados: [],
+      /* Monstruos que un rival ha lanzado y aún no han llegado: entran a tu
+         fortaleza al empezar tu turno, no en el momento de lanzarlos. */
+      entregas: [],
     };
     for (const [i, j] of jugadores.entries()) {
       const equipo = modo === "equipos"
@@ -921,9 +925,13 @@ const bunkerWars = {
     if (e.orden[e.turnoIdx] === jugadorId) {
       const lunaAntes = e.luna;
       avanzarTurno(e);
-      comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
+      entregarLanzamientos(e, e.orden[e.turnoIdx]);
+      comprobarFin(e, {
+        rondaCerrada: e.luna !== lunaAntes,
+        ultimoTurno: e.orden.length <= 2,
+      });
     } else {
-      comprobarFin(e);
+      comprobarFin(e, { ultimoTurno: e.orden.length <= 2 });
     }
     return e;
   },
@@ -1095,9 +1103,19 @@ function faseLanzar(e, jugadorId, accion, evs) {
     const mon = j.lanzaderas[i];
     const rival = e.jugadores[accion.rivalId];
     const s = rival?.senderos.find(s => s.id === accion.sendero);
-    if (mon && mon.bloqueadaEn !== claveLanzar(e) && s && !s.posiciones[0] && rival.vivo) {
-      s.posiciones[0] = { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId, ...(mon.vuela ? { vuela: true } : {}) };
-      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) a la escalera ${accion.sendero} de ${rival.nombre}.`, a: accion.rivalId });
+    /* La escalera queda reservada en cuanto sale la lanzadera, pero el
+       monstruo no se planta allí: se queda en camino y entra al empezar el
+       turno del rival, por esa misma escalera. */
+    const reservado = (e.entregas ?? []).some(x => x.para === accion.rivalId && x.sendero === accion.sendero);
+    if (mon && mon.bloqueadaEn !== claveLanzar(e) && s && !s.posiciones[0]
+        && !reservado && rival.vivo) {
+      e.entregas = e.entregas ?? [];
+      e.entregas.push({
+        id: uid("en"), de: jugadorId, deNombre: j.nombre, para: rival.id,
+        sendero: s.id, luna: e.luna, nivel: mon.nivel, vuela: !!mon.vuela,
+        ficha: { id: uid("e"), tipo: "atacante", nivel: mon.nivel, dueno: jugadorId, ...(mon.vuela ? { vuela: true } : {}) },
+      });
+      evs.push({ tipo: "lanzamiento", texto: `${j.nombre} lanza monstruo ${mon.nivel} (lanzadera ${i + 1}) hacia la escalera ${accion.sendero} de ${rival.nombre}: llegará al empezar su turno.`, a: accion.rivalId });
       /* La reserva entra en el hueco que ha quedado libre, pero no cuenta como
          lanzadera cargada hasta el turno siguiente. */
       const siguiente = j.colaLanzaderas.length > 0 ? j.colaLanzaderas.shift() : null;
@@ -1114,6 +1132,32 @@ function faseLanzar(e, jugadorId, accion, evs) {
      los monstruos propios va después de los atacantes, en faseDefensores. */
   e.fase = "avance";
   return { estado: e, eventos: evs };
+}
+
+/* Los monstruos lanzados no aparecen en la fortaleza del rival en el acto:
+   se quedan en camino y entran al empezar el turno del que los recibe, por la
+   escalera anunciada. Así el que los manda no los ve ya plantados en la base
+   del otro y el que los recibe los ve llegar nada más abrir su turno. */
+function entregarLanzamientos(e, jugadorId, evs = []) {
+  const pendientes = (e.entregas ?? []).filter(x => x.para === jugadorId);
+  if (!pendientes.length) return;
+  e.entregas = (e.entregas ?? []).filter(x => x.para !== jugadorId);
+  const j = e.jugadores[jugadorId];
+  if (!j?.vivo) return;
+  for (const x of pendientes) {
+    const senderos = j.senderos ?? [];
+    const s = senderos.find(sd => sd.id === x.sendero && !sd.posiciones[0])
+      ?? senderos.find(sd => !sd.posiciones[0]);
+    if (!s) {
+      /* Sin hueco al empezar el turno: la ficha espera en la mesa y lo vuelve
+         a intentar en el turno siguiente. No se pierde. */
+      e.entregas.push({ ...x, esperando: true });
+      evs.push({ tipo: "lanzamiento", texto: `El monstruo ${x.nivel} que envió ${x.deNombre ?? "un rival"} espera hueco en las escaleras de ${j.nombre}.`, a: jugadorId });
+      continue;
+    }
+    s.posiciones[0] = { ...x.ficha };
+    evs.push({ tipo: "llegada", texto: `Llega un monstruo ${x.nivel} de ${x.deNombre ?? "un rival"} a la escalera ${s.id} de ${j.nombre}.`, a: jugadorId });
+  }
 }
 
 /* ¿Queda alguna lanzadera con monstruo y algún hueco donde mandarlo? */
@@ -1237,7 +1281,11 @@ function resolverAutomaticas(e, evs) {
       const lunaAntes = e.luna;
       if (avanzarTurno(e)) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
       e.fase = "lanzar";
-      comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
+      entregarLanzamientos(e, e.orden[e.turnoIdx], evs);
+      comprobarFin(e, {
+        rondaCerrada: e.luna !== lunaAntes,
+        ultimoTurno: e.orden.length <= 2,
+      });
       continue;
     }
     if (e.fase === "lanzar") {
@@ -1850,7 +1898,11 @@ function cerrarTurnoYAvanzar(e, jugadorId, evs) {
   const lunaAntes = e.luna;
   const lunaRoja = avanzarTurno(e);
   e.fase = "lanzar";
-  comprobarFin(e, { rondaCerrada: e.luna !== lunaAntes });
+  entregarLanzamientos(e, e.orden[e.turnoIdx], evs);
+  comprobarFin(e, {
+    rondaCerrada: e.luna !== lunaAntes,
+    ultimoTurno: e.orden.length <= 2,
+  });
   if (!e.final) {
     const sigJugador = e.jugadores[e.orden[e.turnoIdx]];
     if (lunaRoja) evs.push({ tipo: "carta_roja", texto: AVISO_LUNA_ROJA });
@@ -1871,8 +1923,11 @@ function legalesLanzar(e, jugadorId) {
     if (!esRival(e, jugadorId, rivalId)) continue;
     const rival = e.jugadores[rivalId];
     if (!rival.vivo) continue;
+    /* Las escaleras con una ficha en camino ya no aceptan otra lanzadera. */
+    const reservados = new Set((e.entregas ?? [])
+      .filter(x => x.para === rivalId).map(x => x.sendero));
     for (const s of rival.senderos) {
-      if (s.posiciones[0]) continue;
+      if (s.posiciones[0] || reservados.has(s.id)) continue;
       for (const { m, i } of cargadas) {
         acc.push({
           tipo: "lanzar", lanzadera: i, rivalId, sendero: s.id,
@@ -2711,6 +2766,8 @@ function esRival(e, a, b) {
    el último de la mesa y el siguiente, el penúltimo. Se apunta una sola vez. */
 function marcarEliminado(e, jugadorId) {
   if (!Array.isArray(e.eliminados)) e.eliminados = [];
+  /* Lo que iba de camino a su fortaleza ya no tiene destino. */
+  if (Array.isArray(e.entregas)) e.entregas = e.entregas.filter(x => x.para !== jugadorId);
   if (e.eliminados.some((x) => x.jugadorId === jugadorId)) return;
   e.eliminados.push({
     jugadorId,
@@ -2809,18 +2866,22 @@ function puestosFinal(e) {
    (también al saltarse el turno de un muerto, si eso cierra la luna). Hasta
    entonces la partida sigue aunque quede un solo búnker: los que aún no han
    jugado pueden caer en esta misma ronda y empatar. Antes la muerte del
-   primero cortaba la ronda y los demás no llegaban a jugarla. */
-function comprobarFin(e, { rondaCerrada = false } = {}) {
+   primero cortaba la ronda y los demás no llegaban a jugarla.
+   `ultimoTurno` es para las mesas de dos: allí no queda nadie más que pueda
+   caer en la ronda, así que la partida acaba en cuanto se cierra el turno del
+   que ha muerto, sin obligar al superviviente a jugar otro entero. */
+function comprobarFin(e, { rondaCerrada = false, ultimoTurno = false } = {}) {
   if (e.final) return;
   const vivos = e.orden.filter(id => e.jugadores[id]?.vivo);
+  const cierra = rondaCerrada || ultimoTurno;
   if (e.modo === "equipos") {
     const equiposVivos = new Set(vivos.map(id => e.jugadores[id].equipo));
-    if (!vivos.length || e.luna > 25 || (equiposVivos.size <= 1 && rondaCerrada)) {
+    if (!vivos.length || e.luna > 25 || (equiposVivos.size <= 1 && cierra)) {
       e.final = { puestos: puestosFinal(e) };
     }
     return;
   }
-  if (!vivos.length || e.luna > 25 || (vivos.length <= 1 && rondaCerrada)) {
+  if (!vivos.length || e.luna > 25 || (vivos.length <= 1 && cierra)) {
     e.final = { puestos: puestosFinal(e) };
   }
 }

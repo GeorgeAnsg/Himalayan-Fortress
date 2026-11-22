@@ -217,10 +217,10 @@ export function pintar(contenedor, opciones) {
   registro(`pintado · ${anim.movidas} movidas (${anim.ataques} atacantes, ${anim.defensores} defensores)`
     + ` · ${anim.entradas} entradas · ${anim.extraLuchas("atacantes") ? "pelea atacantes" : ""}`
     + `${anim.extraLuchas("defensores") ? " pelea defensores" : ""}`);
-  /* Fuera de tu turno no se anima nada de esto: el monstruo que te lanzan se
-     queda en la casilla 1 y se le ve llegar al empezar tu turno, antes del
-     avance (animarLlegadaEnviados). Primero aparecen los enviados, luego se
-     mueven, y el Destino entra después con su carta. */
+  /* Fuera de tu turno no se anima nada de esto: el monstruo que te lanzan
+     llega a tu fortaleza al empezar tu turno y se le ve emerger de la bruma
+     antes del avance (animarLlegadaEnviados). Primero aparecen los enviados,
+     luego se mueven, y el Destino entra después con su carta. */
   /* Las que nacen de una jaula se funden directamente en su lanzadera: solo
      las que vienen del camino se ven viajar (prepararSalidasLanzadera). */
   const lanzaderaDesdeCaja = lanzaderaMovidas.filter((m) => !m.desdePath);
@@ -2074,10 +2074,6 @@ function abrirLanzar(ops) {
   const enviar = async (accion, boton) => {
     if (!accion || !enviarAccion || enviando) return;
     if (boton) boton.disabled = true;
-    /* El nivel se apunta antes de esperar: el repintado que llega con el estado
-       nuevo mete la reserva de la cola en el hueco que deja la lanzadera, así
-       que después ya no está el monstruo que acabas de mandar. */
-    const monLanzado = lanzaderasModal[accion.lanzadera] ?? null;
     enviando = true;
     fondo.classList.add("enviando");
     const r = await enviarAccion(accion);
@@ -2097,34 +2093,7 @@ function abrirLanzar(ops) {
     opsModal = (accionesMesa ?? []).filter(a => a.tipo === "lanzar"
       && a.lanzadera !== accion.lanzadera
       && !(a.rivalId === accion.rivalId && a.sendero === accion.sendero));
-    /* La que acaba de salir se queda a la vista en la calle donde la has
-       dejado: con la segunda en la mano se ve dónde fue la primera. */
-    marcarLanzado(accion.rivalId, accion.sendero, monLanzado);
     actualizarChips();
-  };
-
-  /* Monstruos ya lanzados desde esta hoja, por rival y calle: se vuelven a
-     pintar en la entrada de su calle cada vez que la hoja se monta de nuevo,
-     para no perder de vista dónde has dejado los que ya has mandado. */
-  const lanzados = new Map();
-  const pintarLanzados = (rivalId) => {
-    if (rivalId == null) return;
-    for (const [clave, mon] of lanzados) {
-      const [de, calle] = clave.split(":");
-      if (de !== String(rivalId)) continue;
-      const hueco = fondo.querySelector(
-        `.bw-torre[data-calle="${calle}"] .bw-torre-slots .bw-torre-slot:last-child`);
-      if (!hueco || hueco.classList.contains("atacante")) continue;
-      hueco.className = "bw-box-slot lleno bw-torre-slot atacante";
-      hueco.title = `${mon.vuela ? "Aves de bruma" : `Atacante nivel ${mon.nivel}`} en el peldaño 1`;
-      hueco.innerHTML = `<img src="${imgMonstruo(mon.vuela ? "volador" : mon.nivel, true)}" class="bw-box-img" alt="monstruo">`
-        + `<b class="bw-box-nv">${mon.nivel}</b><span class="bw-torre-step">1</span>`;
-    }
-  };
-  const marcarLanzado = (rivalId, calle, mon) => {
-    if (!mon?.nivel) return;
-    lanzados.set(`${rivalId}:${Number(calle)}`, { nivel: mon.nivel, vuela: !!mon.vuela });
-    pintarLanzados(rivalId);
   };
 
   /* Lo que la hoja puede ofrecer ahora mismo. Va aparte porque la hoja ya no
@@ -2412,13 +2381,12 @@ function abrirLanzar(ops) {
         </div>
         <div class="bw-lz-tablero">${tableroRival(rivalId)}</div>
         <div class="bw-lz-mis${lanzaderasDe.length === 1 ? " sola" : ""}">${lanzaderasDe.map(chipLanzadera).join("")}</div>
-        <p class="bw-lz-ayuda">Arrastra un monstruo a una calle para lanzarlo. Si prefieres, tócalo y luego toca la calle.</p>
+        <p class="bw-lz-ayuda">Arrastra un monstruo a una calle para lanzarlo; llegará al empezar el turno del rival. Si prefieres, tócalo y luego toca la calle.</p>
         <div class="bw-lz-pie">
           <button type="button" class="bw-modal-usar bw-lz-atras">Atrás</button>
         </div>
       </div>`;
     fondo.querySelector(".bw-lz-atras").addEventListener("click", pasoRivales);
-    pintarLanzados(rivalId);
   };
 
   const rivalInicial = rivalLanzarElegido
@@ -2706,14 +2674,18 @@ function abrirDestino(d, { alCerrar } = {}) {
 const MAX_MONEDAS = 14;
 const MAX_MONJES  = 7;
 
-/* Totales del turno, igual que el motor: 3 monedas y 2 monjes de base, más lo
-   que sume cada carta de recursos, más la prima de «Subir recursos». */
+/* Totales del turno, igual que el motor (energiaTotal / accionesTotal): 3
+   monedas y 2 decretos de base, más las cartas instaladas. Cada RECURSOS suma
+   sus monedas (1 o 2), cada DECRETO un decreto y cada RECURSOS 2 una moneda y
+   un decreto. Antes solo miraba `recursos`, se dejaba las de decreto y las
+   mixtas y contaba un decreto de más por cada recursos de nivel 2. */
 function totalesBunker(bunker) {
   const rec = bunker?.recursos ?? [];
-  const monedasCartas = rec.reduce((s, c) =>
-    s + (c.nivel >= 4 ? 4 : c.nivel >= 3 ? 3 : c.nivel >= 2 ? 2 : 1), 0);
-  const monjesCartas = rec.reduce((s, c) =>
-    s + (c.nivel >= 4 ? 2 : c.nivel >= 2 ? 1 : 0), 0);
+  const decretos = bunker?.decretos ?? [];
+  const mix = bunker?.recursos_mix ?? [];
+  const monedasCartas = rec.reduce((s, c) => s + (c.nivel >= 2 ? 2 : 1), 0)
+    + mix.length;
+  const monjesCartas = decretos.length + mix.length;
   return {
     monedas: 3 + monedasCartas + (bunker?.extra?.monedas ?? 0),
     monjes: 2 + monjesCartas + (bunker?.extra?.monjes ?? 0),
@@ -2850,10 +2822,14 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
          cualquier otra fase (o al volver a la mesa) se pinta a la vista,
          porque nadie la va a animar y se quedaba invisible para siempre. */
       const avanceMio = tocaMesa && faseMesa === "avance";
+      /* La ficha que llega al empezar tu turno se queda en la bruma hasta el
+         avance: se la ve emerger al cerrar «Es tu turno» (animarLlegadaEnviados).
+         Por eso en lanzar y avance todavía no se marca como vista. */
+      const enMiJornada = tocaMesa && (faseMesa === "lanzar" || faseMesa === "avance");
       const ocultoHastaAvance = avanceMio && paso === 0 && esAtacante && f.id && !llegadasAnunciadas.has(f.id);
       /* La que no se va a animar ya cuenta como vista: así no se la vuelve a
          esconder en un repintado posterior de la misma jornada. */
-      if (!ocultoHastaAvance && f.id && paso === 0 && esAtacante) llegadasAnunciadas.add(f.id);
+      if (!ocultoHastaAvance && !enMiJornada && f.id && paso === 0 && esAtacante) llegadasAnunciadas.add(f.id);
       return `<div class="ficha ${cls}" data-fid="${esc(f.id ?? "")}" data-sendero="${s[i]?.id ?? i + 1}" data-pos="${paso}" data-nivel="${nivelDe(f)}"${desdeAttr}${rutaAttrs} style="left:${pos.l}%;top:${pos.t}%${ocultoHastaAvance ? ";opacity:0" : ""}"><img src="${img}" alt="monstruo" class="ficha-img"/><b class="ficha-nv">${nivelDe(f)}</b></div>`;
     })
   ).join("");
