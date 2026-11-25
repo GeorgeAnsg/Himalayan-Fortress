@@ -1627,7 +1627,7 @@ export function aplicar(e, pid, accion) {
      pasa. Las acciones libres (coger a mano, indagar) no avanzan el turno aunque
      el jugador tenga 0 PA: ya se avanzó cuando terminó su turno real. */
   const esAccionLibre = (accion.tipo === "coger" && accion.sitio === "mano") || accion.tipo === "indagar";
-  if (!e.fin && !esAccionLibre && (p.pa <= 0 || accion.tipo === "pasar")) pasarTurno(e);
+  if (!e.fin && !esAccionLibre && ((p.pa <= 0 && !p.capa) || accion.tipo === "pasar")) pasarTurno(e);
 
   /* Lo visto hasta aquí ya está contado: cuando vuelva a jugar, «mientras
      esperabas» empieza donde acaba esta acción. */

@@ -184,7 +184,7 @@ export function contar(ev, v, yo, apodoDe, nombreObj = () => "algo") {
 
     case "habilidad":
       if (ev.cual === "capa") {
-        if (mio) return { clase: "yo", texto: `Te pones la capa. Tus movimientos no se verán durante 4 jornadas.` };
+        if (mio) return { clase: "yo", texto: `Te pones la capa.` };
         return enMiSala(ev.sala)
           ? { clase: "neutro", texto: `${quien} se pone una capa y desaparece entre las sombras.` }
           : null;
