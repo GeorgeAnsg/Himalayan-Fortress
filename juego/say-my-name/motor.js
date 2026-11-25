@@ -1240,10 +1240,14 @@ export function aplicar(e, pid, accion) {
           resultado = "propio";
         } else {
           const dueño = e.jugadores[o.dueño];
-          aprender(p, dueño.nombre, o.rasgo, o.valor);
           p.bien[o.id] = p.sala;
           resultado = "bien";
-          dado = { nombre: dueño.nombre, rasgo: o.rasgo, valor: o.valor };
+          const poolDueño = Object.entries(dueño.rasgos)
+            .filter(([rasgo]) => !(rasgo in (p.sabe[dueño.nombre] || {})))
+            .map(([rasgo, valor]) => ({ nombre: dueño.nombre, rasgo, valor }));
+          const rd = poolDueño.length ? elegir(e, poolDueño) : { nombre: dueño.nombre, rasgo: o.rasgo, valor: o.valor };
+          aprender(p, rd.nombre, rd.rasgo, rd.valor);
+          dado = rd;
           /* Respawn: se suelta donde no puedas volver a leerlo. Nunca queda
              en tu mano ni en la sala donde acabas de sacarle el dato. */
           if (p.mano === o.id) p.mano = null; else p.bolsa = null;
