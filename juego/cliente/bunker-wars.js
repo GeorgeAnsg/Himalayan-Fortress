@@ -2943,7 +2943,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
            búnker, y un monstruo mío que sale de la casilla 1 ha subido a la
            lanzadera, no ha muerto. */
         const loQuitaUnaCarta = !suCasilla && !delante && !entraron.has(id)
-          && (esAtacante ? paso !== 3 : paso >= 2);
+          && (esAtacante || paso >= 2);
         if (loQuitaUnaCarta) aniquiladas.push({ calle: antes.calle, paso, nivel: antes.nivel, esAtacante, vuela: !!antes.vuela });
         continue;
       }
