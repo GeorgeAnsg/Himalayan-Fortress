@@ -520,6 +520,7 @@ export function pintar(contenedor, opciones) {
 
   /* Criadero del mapa y huecos libres del box: abren la lista de monstruos. */
   contenedor.querySelectorAll('[data-edif="criadero"]').forEach((el) => el.addEventListener("click", abrirCriadero));
+  contenedor.querySelectorAll('[data-edif="ciencia"]').forEach((el) => el.addEventListener("click", abrirCiencia));
   contenedor.querySelectorAll(".fort-slot").forEach((el) => {
     const idMon = el.dataset.monId;
     if (idMon) {
@@ -3111,7 +3112,7 @@ function pintarMiBunker(j, priv, fase, opciones = {}) {
                 </div>
               </div>
               ${edificioFortaleza("76.2%", "42.47%", lab,  4, `criadero${lab > 0 ? lab : 1}.png`, null, "criadero")}
-              ${edificioFortaleza("49.9%", "50.9%",  cien, 2, "laboratorio.png", "0")}
+              ${edificioFortaleza("49.9%", "50.9%",  cien, 2, "laboratorio.png", "0", "ciencia")}
               ${edificioFortaleza("24.2%", "42.47%", arm,  3, `armeria${arm > 0 ? arm : 1}.png`)}
               ${slotsHtml}
             </div>
@@ -7302,7 +7303,7 @@ function cssAdicional() {
       font-weight:700; font-family:ui-monospace,monospace;
       font-size:calc(2.11 * var(--u)); line-height:1; color:#fff;
     }
-    [data-edif="criadero"] { cursor:pointer; }
+    [data-edif="criadero"], [data-edif="ciencia"] { cursor:pointer; }
     .fort-slot.fort-slot-lleno {
       /* Con monstruo no hay marco: solo la lámina y su pastilla */
       border:0; background:transparent; box-shadow:none;
