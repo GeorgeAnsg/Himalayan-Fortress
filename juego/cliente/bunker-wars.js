@@ -6914,7 +6914,7 @@ function cssAdicional() {
     /* La ciencia es un botón (abre sus cartas): sin borde ni fuente de sistema. */
     .bw-edif-ciencia {
       font: inherit; color: inherit; -webkit-appearance: none; appearance: none;
-      border: 0; cursor: pointer;
+      border: 0; cursor: pointer; pointer-events: auto;
     }
     .bw-edif-ciencia:active { filter: brightness(1.18); }
     .bw-hud-fila.medio .bw-edif-valor  { color: #f4ecdd; }
