@@ -280,9 +280,6 @@ export function pintar(contenedor, opciones) {
         ? `<span class="bw-nav-badge" title="Hay peticiones de otros aliados" aria-label="Hay peticiones de otros aliados">!</span>`
         : ""}</span>
     </button>` : ""}
-    <button class="bw-nav-tab" data-tab="cronica" type="button">
-      <span>Crónica</span>
-    </button>
     <button class="bw-nav-tab" data-tab="manuscritos" type="button">
       <span>Reglas</span>
     </button>`;
