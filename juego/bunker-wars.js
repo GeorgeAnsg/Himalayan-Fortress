@@ -1456,8 +1456,8 @@ function faseCartaEfecto(e, jugadorId, evs) {
 // ── Fase MONEDAS (interna: energia) ───────────────────────────────────────
 function faseEnergia(e, jugadorId, evs) {
   const j = e.jugadores[jugadorId];
-  j.energia = energiaTotal(j);
-  j.accionesRestantes = accionesTotal(j);
+  j.energia += energiaTotal(j);
+  j.accionesRestantes += accionesTotal(j);
   j.cartasJugadasEsteTurno = 0;
   /* Los regalos llegan justo después del reparto del turno y antes de los
      decretos: así las monedas y los decretos enviados no los borra el reset. */
