@@ -2798,13 +2798,8 @@ function avanzarTurno(e) {
     }
   }
   e.turnoIdx = sig;
-  /* Cada jugador arranca su turno con las monedas y los decretos que le tocan. */
   const j = e.jugadores[e.orden[sig]];
-  if (j) {
-    j.energia = energiaTotal(j);
-    j.accionesRestantes = accionesTotal(j);
-    j.cartasJugadasEsteTurno = 0;
-  }
+  if (j) j.cartasJugadasEsteTurno = 0;
   return lunaRoja;
 }
 
