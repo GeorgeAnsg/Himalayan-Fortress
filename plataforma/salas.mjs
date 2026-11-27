@@ -544,7 +544,7 @@ export class Mesas {
        los definitivos de la anterior. */
     delete sala.datos.cuadernos;
     sala.datos.estado = juego.crear({
-      jugadores: jugadores.map(({ id, nombre, avatar }) => ({ id, nombre, avatar })),
+      jugadores: jugadores.map(({ id, nombre, avatar, esBot }) => ({ id, nombre, avatar, esBot })),
       semilla: sala.semilla,
       opciones: { modo: opciones.modo, equipos: { ...opciones.equipos }, personajes: { ...(opciones.personajes ?? {}) }, vidas: opciones.vidas ?? null, registroTotal: opciones.registroTotal, habsConfig: opciones.habsConfig, habsInicio: opciones.habsInicio },
     });
@@ -622,15 +622,7 @@ export class Mesas {
 
     /* Si el siguiente es un bot, juega automáticamente hasta que toque a un humano. */
     if (!fin) {
-      const bots = this.jugarBots(sala, juego);
-      if (bots.fin) { this.guardar(sala); this.difundir(sala); return { sala }; }
-      /* Ya se ha difundido el estado humano antes de los bots. Si ningún bot
-         ha jugado, no se repite la misma vista: el segundo pintado cortaba la
-         animación de las fichas y las colocaba de golpe en su destino. */
-      if (bots.jugó) {
-        this.guardar(sala);
-        this.difundir(sala);
-      }
+      this.jugarBots(sala, juego).catch(() => {});
     }
 
     /* El aviso que de verdad desatasca la mesa: si el turno pasa a alguien que
@@ -656,22 +648,17 @@ export class Mesas {
   }
 
   /* Juega los turnos seguidos de bots hasta que le toque a una persona o
-     acabe la partida. Devuelve si alguno jugó y si se acabó. */
-  jugarBots(sala, juego) {
-    const res = { jugó: false, fin: false };
-    if (!juego?.bot || sala.fase !== "jugando") return res;
+     acabe la partida. Cada bot espera 5 s y difunde antes de jugar para que
+     el cliente vea avanzar las barras del header. */
+  async jugarBots(sala, juego) {
+    if (!juego?.bot || sala.fase !== "jugando") return;
     let sigBot = juego.turno(sala.datos.estado);
     let guard = 0;
-    /* 50 llegaba para un turno suelto, pero con tres bots una ronda entera
-       pasa de esa cifra: al agotarse el margen la mesa se quedaba a medias,
-       con el turno en un bot y nadie que lo moviera («Esperando a Bot 1…»).
-       Ahora se juega por tandas y, si queda turno de bot, lo sigue empujando
-       `empujarBots` cada poco: así ninguna mesa se queda parada. */
-    let sinJugada = false;
     while (sigBot && sala.datos.jugadores.find((j) => j.id === sigBot)?.esBot && guard++ < 80) {
+      await new Promise((r) => setTimeout(r, 5000));
+      if (sala.fase !== "jugando") break;
       const accionBot = juego.bot(sala.datos.estado, sigBot);
-      if (!accionBot) { sinJugada = true; break; }
-      res.jugó = true;
+      if (!accionBot) { console.log(`[mesa ${sala.codigo}] ${sigBot} no tiene jugada legal en ${sala.datos.estado?.fase}`); break; }
       const salidaBot = juego.aplicar(sala.datos.estado, sigBot, accionBot);
       sala.datos.estado = salidaBot.estado ?? sala.datos.estado;
       for (const ev of salidaBot.eventos ?? []) this.anotar(sala, ev.texto, ev.tipo);
@@ -680,13 +667,14 @@ export class Mesas {
         sala.fase = "final";
         sala.datos.final = { puestos: finBot.puestos, cuando: Date.now() };
         this.anotar(sala, "Se acabó la partida.", "fin");
-        res.fin = true;
-        break;
+        this.guardar(sala);
+        this.difundir(sala);
+        return;
       }
+      this.guardar(sala);
+      this.difundir(sala);
       sigBot = juego.turno(sala.datos.estado);
     }
-    if (sinJugada) console.log(`[mesa ${sala.codigo}] ${sigBot} no tiene jugada legal en ${sala.datos.estado?.fase}`);
-    return res;
   }
 
   /* El turno de un bot solo avanza si alguien lo empuja: lo hace la acción de
@@ -701,15 +689,9 @@ export class Mesas {
       if (!juego?.bot) continue;
       const toca = juego.turno(sala.datos.estado);
       if (!sala.datos.jugadores.find((j) => j.id === toca)?.esBot) continue;
-      try {
-        const bots = this.jugarBots(sala, juego);
-        if (bots.jugó) {
-          this.guardar(sala);
-          this.difundir(sala);
-        }
-      } catch (err) {
+      this.jugarBots(sala, juego).catch((err) => {
         console.log(`[mesa ${sala.codigo}] el bot falló: ${err?.message ?? err}`);
-      }
+      });
     }
   }
 
@@ -798,18 +780,6 @@ export class Mesas {
 
     /* Anfitrión heredable, con 20 s de gracia: un refresco de página no cambia
        el mando de la mesa. */
-    if (sala.anfitrion === usuarioId && (sala.fase === "vestibulo" || sala.fase === "final")) {
-      const t = setTimeout(() => {
-        const v = this.vivoDe(sala, usuarioId);
-        if (v.conectado) return;
-        if (this.conectados(sala).length === 0) return; /* mesa vacía: espera */
-        this.heredar(sala);
-        this.guardar(sala);
-        this.difundir(sala);
-      }, ESPERA_ANFITRION);
-      t.unref?.();
-      this.timersAnfitrion.set(sala.codigo, t);
-    }
     return sala;
   }
 
