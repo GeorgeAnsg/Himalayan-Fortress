@@ -78,6 +78,7 @@ async function arrancar() {
   estado.usuario = yo.datos.usuario;
   actualizarBarra();
   conectar();
+  asegurarAvisos();
   /* Si el servidor sabe que estamos en partida activa, no mostramos el lobby:
      el WebSocket llegará solo y alMesa() lo pondrá todo en su sitio. */
   if (yo.datos.sala?.fase === "jugando") {
@@ -97,6 +98,16 @@ function registrarServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.register("./sw.js").catch((err) => {
     console.log("[sw] no se pudo registrar:", err?.message ?? err);
+  });
+}
+
+/* Con la app cerrada solo avisa el servidor, y para eso el móvil tiene que
+   estar suscrito. Se comprueba al arrancar y al entrar: así quien ya tenía el
+   permiso dado queda apuntado sin tener que buscar el botón. */
+function asegurarAvisos() {
+  if (!estado.usuario) return;
+  avisos.asegurarPush().then((r) => {
+    if (r?.error) console.log("[avisos]", r.error);
   });
 }
 
@@ -382,6 +393,7 @@ async function alEnviar({ modo, nombre, contrasena }) {
   estado.usuario = r.datos.usuario;
   actualizarBarra();
   conectar();
+  asegurarAvisos();
   pintarInicio(r.datos.sala ?? null);
 
   const pendiente = sesion.tomarPendiente();
@@ -538,6 +550,9 @@ function abrirAjustes() {
        si hace falta; apagar no pide nada. */
     if (avisos.estadoCampana()) {
       avisos.activar(false);
+      /* Y se suelta la suscripción: si no, el servidor seguía empujando avisos
+         a un móvil que acababa de pedir que no le avisaran. */
+      avisos.apagarPush();
       boton.textContent = "Activar notificaciones";
       actualizarBarra();
       return;
@@ -553,6 +568,10 @@ function abrirAjustes() {
     boton.textContent = "Desactivar notificaciones";
     actualizarBarra();
     aviso("Listo: te avisaremos del turno y del final.");
+    /* Aquí estaba el agujero: solo se encendía el aviso local. La suscripción
+       de push —la única que llega con la app cerrada— no se creaba nunca. */
+    const push = await avisos.activarPush();
+    if (push?.error) aviso(push.error, { error: true });
   });
 
   cerrado.then((r) => { if (r === "cuenta") abrirCuenta(); });

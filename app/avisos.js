@@ -116,6 +116,66 @@ export function pushSoportado() {
   return "serviceWorker" in navigator && "PushManager" in window;
 }
 
+/* ¿La suscripción que ya hay en el móvil se creó con estas mismas claves? Si
+   el servidor cambió las suyas (un despliegue sin volumen persistente), el
+   push de esa suscripción falla para siempre y no hay quien lo arregle desde
+   el servidor: hay que tirarla y pedir otra. */
+function mismaClave(guardada, esperada) {
+  if (!guardada) return false;
+  const bytes = new Uint8Array(guardada);
+  if (bytes.length !== esperada.length) return false;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== esperada[i]) return false;
+  }
+  return true;
+}
+
+let asegurando = null;
+
+/* Deja el móvil apuntado en el servidor. No pide permiso ni molesta: si ya lo
+   hay, esto es una reparación silenciosa. Se llama al activar los avisos y
+   también al arrancar la app, porque quien dio permiso antes de que esto
+   existiera se quedó sin suscripción y no recibía nada. */
+export async function asegurarPush() {
+  if (!pref.on) return { error: "Los avisos están apagados." };
+  if (!pushSoportado()) return { error: "Este navegador no admite avisos con la app cerrada." };
+  if (permiso() !== "granted") return { error: "Sin permiso no se pueden mandar avisos." };
+  if (asegurando) return asegurando;
+
+  asegurando = (async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const { datos } = await api.clavePush();
+      const clave = datos?.clave ? base64aBytes(datos.clave) : null;
+      if (!clave) return { error: "El servidor no tiene las claves de push." };
+
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && !mismaClave(sub.options?.applicationServerKey, clave)) {
+        try { await sub.unsubscribe(); } catch { /* se sigue con una nueva */ }
+        sub = null;
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: clave,
+        });
+      }
+      const r = await api.suscribirPush(sub.toJSON());
+      if (r.error) return { error: r.error };
+      pref.push = true;
+      guardarPref();
+      return { ok: true };
+    } catch (err) {
+      console.log("[avisos] push:", err);
+      return { error: "No se pudo activar el aviso con la app cerrada." };
+    } finally {
+      asegurando = null;
+    }
+  })();
+
+  return asegurando;
+}
+
 /* Solo se puede activar desde un gesto del usuario (un botón) y con la app
    instalada en iOS. Devuelve { ok } o { error } con algo que decir. */
 export async function activarPush() {
@@ -125,27 +185,25 @@ export async function activarPush() {
   const permisoPedido = permiso() === "granted" ? "granted" : await Notification.requestPermission();
   if (permisoPedido !== "granted") return { error: "Sin permiso no se pueden mandar avisos." };
 
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const { datos } = await api.clavePush();
-    if (!datos?.clave) return { error: "El servidor no tiene las claves de push." };
-
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64aBytes(datos.clave),
-      });
-    }
-    const r = await api.suscribirPush(sub.toJSON());
-    if (r.error) return { error: r.error };
-    pref.push = true;
+  /* Pedir el push es también pedir los avisos: si no, la campana se quedaba
+     apagada y el aviso de turno no salía ni con la app delante. */
+  if (!pref.on) {
+    pref.on = true;
     guardarPref();
-    return { ok: true };
-  } catch (err) {
-    console.log("[avisos] push:", err);
-    return { error: "No se pudo activar el aviso con la app cerrada." };
   }
+  return asegurarPush();
+}
+
+/* Apagar los avisos de verdad: se suelta la suscripción del móvil. El servidor
+   la borra en el primer envío que le devuelva 410, así que deja de empujar. */
+export async function apagarPush() {
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    const sub = await reg?.pushManager?.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch { /* sin suscripción no hay nada que soltar */ }
+  pref.push = false;
+  guardarPref();
 }
 
 /* ── Panel de avisos ───────────────────────────────────────────────────── */

@@ -240,7 +240,9 @@ export function guardarSuscripcion(usuarioId, suscripcion) {
     .prepare(
       `INSERT INTO suscripciones (id, usuario_id, endpoint, claves, creada)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET claves = excluded.claves`
+       ON CONFLICT(id) DO UPDATE SET
+         usuario_id = excluded.usuario_id,
+         claves = excluded.claves`
     )
     .run(endpoint, usuarioId, endpoint, JSON.stringify(suscripcion.keys ?? {}), Date.now());
 }

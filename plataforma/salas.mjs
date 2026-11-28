@@ -669,12 +669,34 @@ export class Mesas {
         this.anotar(sala, "Se acabó la partida.", "fin");
         this.guardar(sala);
         this.difundir(sala);
+        this.avisarDesconectados(sala, {
+          titulo: "Partida terminada",
+          cuerpo: `Ya hay resultados en la mesa ${sala.codigo}.`,
+          etiqueta: `fin-${sala.codigo}`,
+        });
         return;
       }
       this.guardar(sala);
       this.difundir(sala);
       sigBot = juego.turno(sala.datos.estado);
     }
+
+    /* El último bot suelta el turno: el aviso tiene que salir igual que
+       cuando lo suelta una persona. Antes solo avisaba la jugada humana, así
+       que si los bots dejaban la mesa en manos de alguien que no estaba
+       mirando, no le llegaba nada y la partida se quedaba parada. */
+    if (sala.fase !== "jugando" || !juego.turno) return;
+    const siguiente = juego.turno(sala.datos.estado);
+    if (!siguiente) return;
+    const jugador = sala.datos.jugadores.find((j) => j.id === siguiente);
+    if (!jugador || jugador.esBot) return;
+    if (this.vivoDe(sala, siguiente).conectado) return;
+    this.avisar(siguiente, {
+      titulo: "Te toca",
+      cuerpo: `${jugador.nombre ? jugador.nombre + ", " : ""}la mesa ${sala.codigo} te espera.`,
+      etiqueta: `turno-${sala.codigo}`,
+      url: `./?sala=${sala.codigo}`,
+    });
   }
 
   /* El turno de un bot solo avanza si alguien lo empuja: lo hace la acción de
